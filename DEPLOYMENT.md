@@ -57,6 +57,24 @@ XERO_CLIENT_ID=
 XERO_CLIENT_SECRET=
 XERO_REFRESH_TOKEN=
 XERO_TENANT_ID=
+XERO_REDIRECT_URI=https://no-a.vercel.app/api/xero/callback
+XERO_OAUTH_STATE=
 ```
 
 Voice and offline wake-word features are intentionally disabled in the Vercel build.
+
+## Xero OAuth Setup
+
+In your Xero developer app, add this exact redirect URI:
+
+```text
+https://no-a.vercel.app/api/xero/callback
+```
+
+After `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` are saved in Vercel and redeployed, open:
+
+```text
+https://no-a.vercel.app/api/xero/start
+```
+
+Approve access in Xero. NoA will show the generated `XERO_REFRESH_TOKEN`, discovered `XERO_TENANT_ID`, and redirect URI to copy back into Vercel Environment Variables. Redeploy once more after saving them.

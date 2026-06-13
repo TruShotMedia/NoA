@@ -307,14 +307,16 @@ const integrationSetups: IntegrationSetup[] = [
     credential: 'Vercel env -> Xero client, refresh token, and tenant id',
     steps: [
       'Create a Xero OAuth2 app in the Xero developer portal.',
-      'Authorize it with offline_access plus the accounting scopes NoA needs.',
-      'Add the client id, secret, refresh token, and tenant id locally before enabling accounting workflows.'
+      'Add https://no-a.vercel.app/api/xero/callback as the exact redirect URI.',
+      'Save XERO_CLIENT_ID and XERO_CLIENT_SECRET in Vercel, redeploy, then open https://no-a.vercel.app/api/xero/start.',
+      'Copy the returned refresh token and tenant id into Vercel environment variables, then redeploy again.'
     ],
     fields: [
       { key: 'XERO_CLIENT_ID', label: 'Client ID', required: true, placeholder: 'Xero app client id' },
       { key: 'XERO_CLIENT_SECRET', label: 'Client secret', type: 'password', required: true, placeholder: 'Xero app client secret' },
       { key: 'XERO_REFRESH_TOKEN', label: 'Refresh token', type: 'password', required: true, placeholder: 'OAuth refresh token with offline_access' },
-      { key: 'XERO_TENANT_ID', label: 'Tenant ID', placeholder: 'Optional: NoA can discover and save this' }
+      { key: 'XERO_TENANT_ID', label: 'Tenant ID', placeholder: 'Returned by /api/xero/callback' },
+      { key: 'XERO_REDIRECT_URI', label: 'Redirect URI', placeholder: 'https://no-a.vercel.app/api/xero/callback' }
     ]
   }
 ];
@@ -2557,7 +2559,8 @@ NOTION_JOBS_DATABASE_ID=36ff2ec220f280da9c3ac1072b0ef022
 XERO_CLIENT_ID=your_xero_client_id
 XERO_CLIENT_SECRET=your_xero_client_secret
 XERO_REFRESH_TOKEN=your_xero_refresh_token
-XERO_TENANT_ID=your_xero_tenant_id_optional`}</pre>
+XERO_TENANT_ID=your_xero_tenant_id_optional
+XERO_REDIRECT_URI=https://no-a.vercel.app/api/xero/callback`}</pre>
       </article>
 
       <article className="glass-card wide">
