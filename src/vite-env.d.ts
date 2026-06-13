@@ -208,6 +208,18 @@ interface Window {
         column: string;
       };
     }>;
+    manageNotionItem?: (payload: {
+      kind: 'task' | 'job';
+      action: 'create' | 'update' | 'archive';
+      id?: string;
+      values?: Record<string, string>;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      archived?: boolean;
+      id?: string;
+      item?: unknown;
+    }>;
     startOfflineWake: () => Promise<{
       ok: boolean;
       message: string;

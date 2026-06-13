@@ -13,6 +13,7 @@ import {
   Database,
   Eye,
   EyeOff,
+  Edit3,
   BriefcaseBusiness,
   Home,
   Kanban,
@@ -22,12 +23,16 @@ import {
   MicOff,
   MessageSquareText,
   MoreHorizontal,
+  Plus,
   Play,
+  Save,
   Send,
   ServerCog,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Volume2,
+  X,
   Zap
 } from 'lucide-react';
 import {
@@ -144,6 +149,9 @@ type NotionTask = {
   column: string;
 };
 
+type NotionItemKind = 'task' | 'job';
+type NotionEditorMode = 'create' | 'view' | 'edit';
+
 type NotionJobsReport = {
   tasks: NotionTask[];
   pipelineTasks: NotionTask[];
@@ -203,6 +211,7 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     revealIntegrationSetting: (payload) => postJson('/api/reveal-integration-setting', payload),
     getNotionJobs: () => fetch('/api/notion-jobs').then((response) => response.json()),
     updateNotionTaskStatus: (payload) => postJson('/api/notion-task-status', payload),
+    manageNotionItem: (payload) => postJson('/api/notion-item', payload),
     startOfflineWake: async () => ({
       ok: false,
       message: 'Offline Hey Noah activation runs on the Windows home base. Tablet mode supports tap-to-talk and spoken replies.'
@@ -1495,6 +1504,7 @@ function PipelineBoard({
   const [draggingTaskId, setDraggingTaskId] = useState('');
   const [savingTaskId, setSavingTaskId] = useState('');
   const [pipelineMessage, setPipelineMessage] = useState('');
+  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null } | null>(null);
 
   useEffect(() => {
     setBoardTasks(pipelineTasks);
@@ -1536,6 +1546,31 @@ function PipelineBoard({
     setSavingTaskId('');
   };
 
+  const handleTaskSave = async (values: Record<string, string>) => {
+    if (!editor || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({
+      kind: 'task',
+      action: editor.mode === 'create' ? 'create' : 'update',
+      id: editor.item?.id,
+      values
+    });
+    setPipelineMessage(result.message);
+    if (result.ok) {
+      setEditor(null);
+      await refreshJobs();
+    }
+  };
+
+  const handleTaskArchive = async () => {
+    if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({ kind: 'task', action: 'archive', id: editor.item.id });
+    setPipelineMessage(result.message);
+    if (result.ok) {
+      setEditor(null);
+      await refreshJobs();
+    }
+  };
+
   return (
     <section className="page-fade jobs-page">
       <article className="glass-card wide jobs-hero">
@@ -1553,6 +1588,10 @@ function PipelineBoard({
           </div>
           <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
             {isLoading ? 'Syncing...' : 'Sync pipeline'}
+          </button>
+          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'task', item: null })}>
+            <Plus size={16} />
+            New task
           </button>
         </div>
       </article>
@@ -1609,6 +1648,8 @@ function PipelineBoard({
                     key={task.id}
                     isDragging={draggingTaskId === task.id}
                     isSaving={savingTaskId === task.id}
+                    onOpen={() => setEditor({ mode: 'view', kind: 'task', item: task })}
+                    onEdit={() => setEditor({ mode: 'edit', kind: 'task', item: task })}
                     onMove={(columnName) => void moveTaskToColumn(task.id, columnName)}
                     onDragStart={(taskId) => setDraggingTaskId(taskId)}
                     onDragEnd={() => setDraggingTaskId('')}
@@ -1619,6 +1660,17 @@ function PipelineBoard({
           </article>
         ))}
       </section>
+      {editor && (
+        <NotionItemModal
+          mode={editor.mode}
+          kind="task"
+          item={editor.item}
+          onClose={() => setEditor(null)}
+          onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
+          onSave={handleTaskSave}
+          onArchive={editor.item ? handleTaskArchive : undefined}
+        />
+      )}
     </section>
   );
 }
@@ -1627,6 +1679,8 @@ function JobCard({
   task,
   isDragging = false,
   isSaving = false,
+  onOpen,
+  onEdit,
   onMove,
   onDragStart,
   onDragEnd
@@ -1634,28 +1688,34 @@ function JobCard({
   task: NotionTask;
   isDragging?: boolean;
   isSaving?: boolean;
+  onOpen?: () => void;
+  onEdit?: () => void;
   onMove?: (column: string) => void;
   onDragStart?: (taskId: string) => void;
   onDragEnd?: () => void;
 }) {
   return (
-    <a
+    <article
       className={`job-card priority-${(task.priority || 'none').toLowerCase()} ${isDragging ? 'dragging' : ''} ${isSaving ? 'saving' : ''}`}
       draggable
-      href={task.url}
-      target="_blank"
-      rel="noreferrer"
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/plain', task.id);
         onDragStart?.(task.id);
       }}
       onDragEnd={onDragEnd}
-      onClick={(event) => {
-        if (isSaving) event.preventDefault();
-      }}
     >
-      <div className="job-card-title">
+      <button className="job-card-main" onClick={onOpen} disabled={isSaving}>
+        <div className="job-card-title">
+          <span className="priority-dot" />
+          <strong>{task.title}</strong>
+        </div>
+      </button>
+      <div className="card-tools">
+        <button onClick={onOpen} aria-label={`View ${task.title}`}>View</button>
+        <button onClick={onEdit} aria-label={`Edit ${task.title}`}><Edit3 size={14} /></button>
+      </div>
+      <div className="job-card-title mobile-title">
         <span className="priority-dot" />
         <strong>{task.title}</strong>
       </div>
@@ -1696,7 +1756,7 @@ function JobCard({
       {task.assignees.length > 0 && (
         <p className="job-assignee">{task.assignees.map((person) => person.name).join(', ')}</p>
       )}
-    </a>
+    </article>
   );
 }
 
@@ -1713,6 +1773,34 @@ function TasksView({
   const highPriorityCount = tasks.filter((task) => task.priority === 'High').length;
   const overdueCount = tasks.filter((task) => task.dueState === 'Overdue').length;
   const noDateCount = tasks.filter((task) => !task.dueDate).length;
+  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null } | null>(null);
+
+  const handleTaskSave = async (values: Record<string, string>) => {
+    if (!editor || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({
+      kind: 'task',
+      action: editor.mode === 'create' ? 'create' : 'update',
+      id: editor.item?.id,
+      values
+    });
+    if (!result.ok) {
+      window.alert(result.message);
+      return;
+    }
+    setEditor(null);
+    await refreshJobs();
+  };
+
+  const handleTaskArchive = async () => {
+    if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({ kind: 'task', action: 'archive', id: editor.item.id });
+    if (!result.ok) {
+      window.alert(result.message);
+      return;
+    }
+    setEditor(null);
+    await refreshJobs();
+  };
 
   return (
     <section className="page-fade jobs-page">
@@ -1730,6 +1818,10 @@ function TasksView({
           </div>
           <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
             {isLoading ? 'Syncing...' : 'Sync tasks'}
+          </button>
+          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'task', item: null })}>
+            <Plus size={16} />
+            New task
           </button>
         </div>
       </article>
@@ -1766,26 +1858,48 @@ function TasksView({
             <p className="empty-state">No tasks are visible in this Notion view.</p>
           </article>
         ) : (
-          tasks.map((task) => <TaskRow task={task} key={task.id} />)
+          tasks.map((task) => (
+            <TaskRow
+              task={task}
+              key={task.id}
+              onOpen={() => setEditor({ mode: 'view', kind: 'task', item: task })}
+              onEdit={() => setEditor({ mode: 'edit', kind: 'task', item: task })}
+            />
+          ))
         )}
       </section>
+      {editor && (
+        <NotionItemModal
+          mode={editor.mode}
+          kind="task"
+          item={editor.item}
+          onClose={() => setEditor(null)}
+          onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
+          onSave={handleTaskSave}
+          onArchive={editor.item ? handleTaskArchive : undefined}
+        />
+      )}
     </section>
   );
 }
 
-function TaskRow({ task }: { task: NotionTask }) {
+function TaskRow({ task, onOpen, onEdit }: { task: NotionTask; onOpen: () => void; onEdit: () => void }) {
   return (
-    <a className={`task-row priority-${(task.priority || 'none').toLowerCase()}`} href={task.url} target="_blank" rel="noreferrer">
+    <article className={`task-row priority-${(task.priority || 'none').toLowerCase()}`}>
       <span className="priority-dot" />
-      <div>
+      <button className="task-row-main" onClick={onOpen}>
         <strong>{task.title}</strong>
         <p>{task.description || task.status || 'No description'}</p>
-      </div>
+      </button>
       <span>{task.status || 'No status'}</span>
       <span className={`due-pill ${task.dueState === 'Overdue' ? 'danger' : task.dueState === 'Due today' ? 'today' : ''}`}>
         {task.dueDate ? `${task.dueState} · ${task.dueDate}` : 'No date'}
       </span>
-    </a>
+      <div className="row-actions">
+        <button onClick={onOpen}>View</button>
+        <button onClick={onEdit} aria-label={`Edit ${task.title}`}><Edit3 size={14} /></button>
+      </div>
+    </article>
   );
 }
 
@@ -1800,6 +1914,34 @@ function UpcomingJobsView({
 }) {
   const jobs = report.upcomingJobs;
   const dueSoonCount = jobs.filter((job) => ['Overdue', 'Due today', 'Tomorrow', 'Due soon'].includes(job.dueState)).length;
+  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionJobsReport['upcomingJobs'][number] | null } | null>(null);
+
+  const handleJobSave = async (values: Record<string, string>) => {
+    if (!editor || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({
+      kind: 'job',
+      action: editor.mode === 'create' ? 'create' : 'update',
+      id: editor.item?.id,
+      values
+    });
+    if (!result.ok) {
+      window.alert(result.message);
+      return;
+    }
+    setEditor(null);
+    await refreshJobs();
+  };
+
+  const handleJobArchive = async () => {
+    if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({ kind: 'job', action: 'archive', id: editor.item.id });
+    if (!result.ok) {
+      window.alert(result.message);
+      return;
+    }
+    setEditor(null);
+    await refreshJobs();
+  };
 
   return (
     <section className="page-fade jobs-page">
@@ -1817,6 +1959,10 @@ function UpcomingJobsView({
           </div>
           <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
             {isLoading ? 'Syncing...' : 'Sync jobs'}
+          </button>
+          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'job', item: null })}>
+            <Plus size={16} />
+            New job
           </button>
         </div>
       </article>
@@ -1853,17 +1999,53 @@ function UpcomingJobsView({
             <p className="empty-state">No upcoming jobs found.</p>
           </article>
         ) : (
-          jobs.map((job) => <UpcomingJobCard job={job} key={job.id} />)
+          jobs.map((job) => (
+            <UpcomingJobCard
+              job={job}
+              key={job.id}
+              onOpen={() => setEditor({ mode: 'view', kind: 'job', item: job })}
+              onEdit={() => setEditor({ mode: 'edit', kind: 'job', item: job })}
+            />
+          ))
         )}
       </section>
+      {editor && (
+        <NotionItemModal
+          mode={editor.mode}
+          kind="job"
+          item={editor.item}
+          onClose={() => setEditor(null)}
+          onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
+          onSave={handleJobSave}
+          onArchive={editor.item ? handleJobArchive : undefined}
+        />
+      )}
     </section>
   );
 }
 
-function UpcomingJobCard({ job }: { job: NotionJobsReport['upcomingJobs'][number] }) {
+function UpcomingJobCard({
+  job,
+  onOpen,
+  onEdit
+}: {
+  job: NotionJobsReport['upcomingJobs'][number];
+  onOpen: () => void;
+  onEdit: () => void;
+}) {
   return (
-    <a className={`job-card upcoming priority-${(job.priority || 'none').toLowerCase()}`} href={job.url} target="_blank" rel="noreferrer">
-      <div className="job-card-title">
+    <article className={`job-card upcoming priority-${(job.priority || 'none').toLowerCase()}`}>
+      <button className="job-card-main" onClick={onOpen}>
+        <div className="job-card-title">
+          <span className="priority-dot" />
+          <strong>{job.title}</strong>
+        </div>
+      </button>
+      <div className="card-tools">
+        <button onClick={onOpen}>View</button>
+        <button onClick={onEdit} aria-label={`Edit ${job.title}`}><Edit3 size={14} /></button>
+      </div>
+      <div className="job-card-title mobile-title">
         <span className="priority-dot" />
         <strong>{job.title}</strong>
       </div>
@@ -1879,8 +2061,205 @@ function UpcomingJobCard({ job }: { job: NotionJobsReport['upcomingJobs'][number
           {job.deliverableTypes.slice(0, 4).map((type) => <span key={type}>{type}</span>)}
         </div>
       )}
-    </a>
+    </article>
   );
+}
+
+function NotionItemModal({
+  mode,
+  kind,
+  item,
+  onClose,
+  onEdit,
+  onSave,
+  onArchive
+}: {
+  mode: NotionEditorMode;
+  kind: NotionItemKind;
+  item?: (NotionTask | NotionJobsReport['upcomingJobs'][number]) | null;
+  onClose: () => void;
+  onEdit: () => void;
+  onSave: (values: Record<string, string>) => Promise<void>;
+  onArchive?: () => Promise<void>;
+}) {
+  const isJob = kind === 'job';
+  const [values, setValues] = useState<Record<string, string>>(() => getInitialNotionValues(kind, item));
+  const [isSaving, setIsSaving] = useState(false);
+  const isReadOnly = mode === 'view';
+  const title = mode === 'create'
+    ? isJob ? 'New job' : 'New task'
+    : values.title || (isJob ? 'Job details' : 'Task details');
+
+  const updateValue = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }));
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isReadOnly || !values.title.trim()) return;
+    setIsSaving(true);
+    try {
+      await onSave(values);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const archive = async () => {
+    if (!onArchive || !window.confirm(`Archive ${values.title || 'this item'} in Notion?`)) return;
+    setIsSaving(true);
+    try {
+      await onArchive();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-shell" role="dialog" aria-modal="true" aria-label={title}>
+      <button className="modal-backdrop" onClick={onClose} aria-label="Close" />
+      <form className="notion-modal" onSubmit={submit}>
+        <div className="modal-head">
+          <div>
+            <p className="eyebrow">{isJob ? 'Notion job' : 'Notion task'}</p>
+            <h3>{title}</h3>
+          </div>
+          <button type="button" className="icon-close" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="notion-form-grid">
+          <label className="notion-field wide">
+            <span>{isJob ? 'Job title' : 'Task title'}</span>
+            <input value={values.title} onChange={(event) => updateValue('title', event.target.value)} readOnly={isReadOnly} required />
+          </label>
+
+          {isJob ? (
+            <>
+              <label className="notion-field">
+                <span>Client</span>
+                <input value={values.client} onChange={(event) => updateValue('client', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field">
+                <span>Job date</span>
+                <input type="date" value={values.jobDate} onChange={(event) => updateValue('jobDate', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field">
+                <span>Priority</span>
+                <select value={values.priority} onChange={(event) => updateValue('priority', event.target.value)} disabled={isReadOnly}>
+                  <option value="">No priority</option>
+                  <option>High</option>
+                  <option>Medium</option>
+                  <option>Low</option>
+                </select>
+              </label>
+              <label className="notion-field">
+                <span>Location</span>
+                <input value={values.location} onChange={(event) => updateValue('location', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field wide">
+                <span>Deliverables</span>
+                <input value={values.deliverableTypes} onChange={(event) => updateValue('deliverableTypes', event.target.value)} readOnly={isReadOnly} placeholder="Video, Photos, Reels" />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="notion-field">
+                <span>Status</span>
+                <select value={values.status} onChange={(event) => updateValue('status', event.target.value)} disabled={isReadOnly}>
+                  <option>Not started</option>
+                  <option>In progress</option>
+                  <option>Ready For Revision</option>
+                  <option>Final Draft/Notes</option>
+                  <option>Done</option>
+                </select>
+              </label>
+              <label className="notion-field">
+                <span>Due date</span>
+                <input type="date" value={values.dueDate} onChange={(event) => updateValue('dueDate', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field">
+                <span>Priority</span>
+                <select value={values.priority} onChange={(event) => updateValue('priority', event.target.value)} disabled={isReadOnly}>
+                  <option value="">No priority</option>
+                  <option>High</option>
+                  <option>Medium</option>
+                  <option>Low</option>
+                </select>
+              </label>
+              <label className="notion-field">
+                <span>Effort</span>
+                <select value={values.effortLevel} onChange={(event) => updateValue('effortLevel', event.target.value)} disabled={isReadOnly}>
+                  <option value="">No effort</option>
+                  <option>Small</option>
+                  <option>Medium</option>
+                  <option>Large</option>
+                </select>
+              </label>
+              <label className="notion-field wide">
+                <span>Task types</span>
+                <input value={values.taskTypes} onChange={(event) => updateValue('taskTypes', event.target.value)} readOnly={isReadOnly} placeholder="Bug, Feature request, Polish" />
+              </label>
+              <label className="notion-field wide">
+                <span>Description</span>
+                <textarea value={values.description} onChange={(event) => updateValue('description', event.target.value)} readOnly={isReadOnly} />
+              </label>
+            </>
+          )}
+        </div>
+
+        <div className="modal-actions">
+          {item?.url && (
+            <a className="secondary-action" href={item.url} target="_blank" rel="noreferrer">
+              <ArrowUpRight size={16} />
+              Open in Notion
+            </a>
+          )}
+          {isReadOnly ? (
+            <button type="button" className="primary-action" onClick={onEdit}>
+              <Edit3 size={16} />
+              Edit
+            </button>
+          ) : (
+            <button type="submit" className="primary-action" disabled={isSaving || !values.title.trim()}>
+              <Save size={16} />
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          )}
+          {onArchive && (
+            <button type="button" className="danger-action" onClick={() => void archive()} disabled={isSaving}>
+              <Trash2 size={16} />
+              Archive
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | NotionJobsReport['upcomingJobs'][number]) | null): Record<string, string> {
+  if (kind === 'job') {
+    const job = item as NotionJobsReport['upcomingJobs'][number] | null | undefined;
+    return {
+      title: job?.title || '',
+      client: job?.client || '',
+      jobDate: job?.jobDate || '',
+      priority: job?.priority || '',
+      location: job?.location || '',
+      deliverableTypes: job?.deliverableTypes?.join(', ') || ''
+    };
+  }
+
+  const task = item as NotionTask | null | undefined;
+  return {
+    title: task?.title || '',
+    status: task?.status || 'Not started',
+    dueDate: task?.dueDate || '',
+    priority: task?.priority || '',
+    effortLevel: task?.effortLevel || '',
+    taskTypes: task?.taskTypes?.join(', ') || '',
+    description: task?.description || ''
+  };
 }
 
 function Today({
