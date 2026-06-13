@@ -1,0 +1,27 @@
+{
+  "name": "noa-core-v2",
+  "version": "0.1.0",
+  "description": "NoA - cloud-deployable personal AI operating system.",
+  "author": "TruShot Media",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5178 --strictPort",
+    "web": "vite --host 127.0.0.1 --port 5178 --strictPort",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4178",
+    "vercel-build": "npm run build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}

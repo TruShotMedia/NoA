@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="120" fill="#05070d"/>
+  <circle cx="160" cy="148" r="136" fill="#60a5fa" opacity=".38"/>
+  <circle cx="352" cy="182" r="146" fill="#a78bfa" opacity=".34"/>
+  <circle cx="260" cy="352" r="144" fill="#34d399" opacity=".22"/>
+  <text x="256" y="310" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="154" font-weight="800" fill="#f8fbff">NoA</text>
+</svg>
