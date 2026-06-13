@@ -1,4 +1,4 @@
-const { getNotionJobs, methodNotAllowed, sendJson } = require('./_shared/noa');
+const { getNotionJobs, methodNotAllowed, sendJson } = require('../lib/noa');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return methodNotAllowed(res);

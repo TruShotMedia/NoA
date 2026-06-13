@@ -1,4 +1,4 @@
-const { sendJson } = require('./_shared/noa');
+const { sendJson } = require('../lib/noa');
 
 module.exports = async function handler(_req, res) {
   return sendJson(res, 200, {

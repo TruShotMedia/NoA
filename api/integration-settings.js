@@ -1,4 +1,4 @@
-const { getIntegrationSettings, methodNotAllowed, saveIntegrationSettings, sendJson } = require('./_shared/noa');
+const { getIntegrationSettings, methodNotAllowed, saveIntegrationSettings, sendJson } = require('../lib/noa');
 
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') return sendJson(res, 200, getIntegrationSettings());

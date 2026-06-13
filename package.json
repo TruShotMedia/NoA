@@ -4,6 +4,9 @@
   "description": "NoA - cloud-deployable personal AI operating system.",
   "author": "TruShot Media",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5178 --strictPort",
     "web": "vite --host 127.0.0.1 --port 5178 --strictPort",

@@ -1,4 +1,4 @@
-const { methodNotAllowed, readBody, sendJson, updateNotionTaskStatus } = require('./_shared/noa');
+const { methodNotAllowed, readBody, sendJson, updateNotionTaskStatus } = require('../lib/noa');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return methodNotAllowed(res);

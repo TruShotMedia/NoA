@@ -1,4 +1,4 @@
-const { methodNotAllowed, sendJson, testAllIntegrations } = require('./_shared/noa');
+const { methodNotAllowed, sendJson, testAllIntegrations } = require('../lib/noa');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return methodNotAllowed(res);
