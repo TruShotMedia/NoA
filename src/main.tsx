@@ -270,6 +270,17 @@ type XeroIntelligenceSignal = {
   action: string;
 };
 
+type DraftInvoiceForm = {
+  contactName: string;
+  reference: string;
+  dueDate: string;
+  description: string;
+  quantity: string;
+  unitAmount: string;
+  accountCode: string;
+  taxType: string;
+};
+
 const emptyJobsReport: NotionJobsReport = {
   tasks: [],
   pipelineTasks: [],
@@ -448,6 +459,7 @@ const integrationSetups: IntegrationSetup[] = [
       'Add https://no-a.vercel.app/api/xero/callback as the exact redirect URI.',
       'Run the Supabase private settings SQL and add SUPABASE_SERVICE_ROLE_KEY so NoA can preserve rotating refresh tokens.',
       'Save XERO_CLIENT_ID and XERO_CLIENT_SECRET in Vercel, redeploy, then open https://no-a.vercel.app/api/xero/start.',
+      'Reconnect Xero after Phase 4 so the OAuth token includes draft-invoice permissions.',
       'NoA will save the returned refresh token automatically when the private token store is configured.'
     ],
     fields: [
@@ -2248,8 +2260,13 @@ function XeroView({
   const topClient = report.analytics.topClients[0];
   const [selectedInvoice, setSelectedInvoice] = useState<XeroInvoice | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState('');
+  const [draftSourceJob, setDraftSourceJob] = useState<NotionJobsReport['upcomingJobs'][number] | null>(null);
   const intelligenceSignals = useMemo(
     () => buildXeroIntelligenceSignals(report, notionReport),
+    [report, notionReport]
+  );
+  const invoiceCandidateJobs = useMemo(
+    () => getInvoiceCandidateJobs(report, notionReport).slice(0, 5),
     [report, notionReport]
   );
 
@@ -2427,6 +2444,31 @@ function XeroView({
         </div>
       </article>
 
+      <article className="glass-card wide xero-panel xero-draft-panel">
+        <div className="panel-row-head">
+          <PanelTitle eyebrow="Approval gated" title="Draft invoice from Notion" />
+          <ReceiptText size={20} />
+        </div>
+        {invoiceCandidateJobs.length === 0 ? (
+          <p className="empty-state">No obvious Notion job candidates found for draft invoicing.</p>
+        ) : (
+          <div className="xero-draft-list">
+            {invoiceCandidateJobs.map((job) => (
+              <article className="xero-draft-job" key={job.id}>
+                <div>
+                  <strong>{job.title}</strong>
+                  <p>{[job.client, job.jobDate, job.location].filter(Boolean).join(' · ') || 'No client/date metadata'}</p>
+                </div>
+                <button className="primary-action" onClick={() => setDraftSourceJob(job)}>
+                  <ReceiptText size={16} />
+                  Review draft
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </article>
+
       <article className="glass-card wide xero-panel">
         <div className="panel-row-head">
           <PanelTitle eyebrow="Invoices" title="Recent invoice activity" />
@@ -2464,6 +2506,18 @@ function XeroView({
           currency={selectedInvoice.currencyCode || currency}
           isLoadingDetails={loadingInvoiceId === selectedInvoice.id}
           onClose={() => setSelectedInvoice(null)}
+        />
+      )}
+      {draftSourceJob && (
+        <XeroDraftInvoiceModal
+          job={draftSourceJob}
+          currency={currency}
+          onClose={() => setDraftSourceJob(null)}
+          onCreated={(invoice) => {
+            setDraftSourceJob(null);
+            setSelectedInvoice(invoice);
+            void refreshXero();
+          }}
         />
       )}
     </section>
@@ -2604,6 +2658,152 @@ function XeroInvoiceDrawer({
           <button type="button" className="secondary-action" onClick={onClose}>Close</button>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function XeroDraftInvoiceModal({
+  job,
+  currency,
+  onClose,
+  onCreated
+}: {
+  job: NotionJobsReport['upcomingJobs'][number];
+  currency: string;
+  onClose: () => void;
+  onCreated: (invoice: XeroInvoice) => void;
+}) {
+  const [form, setForm] = useState<DraftInvoiceForm>(() => ({
+    contactName: job.client || '',
+    reference: job.title || '',
+    dueDate: job.jobDate || '',
+    description: job.deliverableTypes.length ? `${job.title} - ${job.deliverableTypes.join(', ')}` : job.title || 'Service',
+    quantity: '1',
+    unitAmount: '',
+    accountCode: '200',
+    taxType: 'OUTPUT'
+  }));
+  const [notice, setNotice] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const estimatedTotal = Math.max(0, Number(form.quantity || 0) * Number(form.unitAmount || 0));
+
+  const update = (key: keyof DraftInvoiceForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setNotice('');
+    if (!form.contactName.trim()) {
+      setNotice('Add a Xero contact/customer name before creating the draft.');
+      return;
+    }
+    if (!form.description.trim() || Number(form.unitAmount) < 0 || !form.unitAmount.trim()) {
+      setNotice('Add a description and a unit amount before creating the draft.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/xero/draft-invoice', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contactName: form.contactName,
+          reference: form.reference,
+          dueDate: form.dueDate,
+          lineItems: [
+            {
+              description: form.description,
+              quantity: Number(form.quantity) || 1,
+              unitAmount: Number(form.unitAmount) || 0,
+              accountCode: form.accountCode,
+              taxType: form.taxType
+            }
+          ]
+        })
+      });
+      const result = await response.json();
+      if (!result.ok) {
+        setNotice(result.message || 'Xero rejected the draft invoice.');
+        return;
+      }
+      onCreated(result.invoice);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : 'Could not create draft invoice.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-shell" role="dialog" aria-modal="true" aria-label={`Draft invoice for ${job.title}`}>
+      <button className="modal-backdrop" onClick={onClose} aria-label="Close draft invoice" />
+      <form className="notion-modal xero-draft-modal" onSubmit={submit}>
+        <div className="modal-head">
+          <div>
+            <p className="eyebrow">Review before Xero</p>
+            <h3>Create draft invoice</h3>
+          </div>
+          <button type="button" className="icon-close" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <article className="xero-approval-summary">
+          <span>NoA will create a DRAFT invoice only</span>
+          <strong>{job.title}</strong>
+          <p>{[job.client, job.jobDate, job.location].filter(Boolean).join(' · ') || 'Review the invoice details before sending anything externally.'}</p>
+        </article>
+
+        <div className="notion-form-grid">
+          <label className="notion-field">
+            <span>Xero contact</span>
+            <input value={form.contactName} onChange={(event) => update('contactName', event.target.value)} required />
+          </label>
+          <label className="notion-field">
+            <span>Due date</span>
+            <input type="date" value={form.dueDate} onChange={(event) => update('dueDate', event.target.value)} />
+          </label>
+          <label className="notion-field wide">
+            <span>Reference</span>
+            <input value={form.reference} onChange={(event) => update('reference', event.target.value)} />
+          </label>
+          <label className="notion-field wide">
+            <span>Line description</span>
+            <input value={form.description} onChange={(event) => update('description', event.target.value)} required />
+          </label>
+          <label className="notion-field">
+            <span>Quantity</span>
+            <input type="number" min="1" step="0.01" value={form.quantity} onChange={(event) => update('quantity', event.target.value)} />
+          </label>
+          <label className="notion-field">
+            <span>Unit amount</span>
+            <input type="number" min="0" step="0.01" value={form.unitAmount} onChange={(event) => update('unitAmount', event.target.value)} required />
+          </label>
+          <label className="notion-field">
+            <span>Account code</span>
+            <input value={form.accountCode} onChange={(event) => update('accountCode', event.target.value)} />
+          </label>
+          <label className="notion-field">
+            <span>Tax type</span>
+            <input value={form.taxType} onChange={(event) => update('taxType', event.target.value)} />
+          </label>
+        </div>
+
+        <div className="xero-draft-total">
+          <span>Estimated line total</span>
+          <strong>{formatMoney(estimatedTotal, currency)}</strong>
+        </div>
+
+        {notice && <p className="integration-notice">{notice}</p>}
+
+        <div className="modal-actions">
+          <button type="button" className="secondary-action" onClick={onClose}>Cancel</button>
+          <button type="submit" className="primary-action" disabled={isSaving}>
+            <ReceiptText size={16} />
+            {isSaving ? 'Creating...' : 'Create draft in Xero'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -2809,6 +3009,24 @@ function buildXeroIntelligenceSignals(report: XeroReport, notionReport: NotionJo
   }
 
   return signals.slice(0, 4);
+}
+
+function getInvoiceCandidateJobs(report: XeroReport, notionReport: NotionJobsReport) {
+  const invoiceMatchText = report.invoices.map((invoice) => normalizeMatchText([
+    invoice.contact,
+    invoice.reference,
+    invoice.number
+  ].join(' ')));
+
+  return (notionReport.upcomingJobs || [])
+    .filter((job) => job.title && !job.archived)
+    .filter((job) => !['Done', 'Archived'].includes(job.dueState))
+    .filter((job) => !invoiceMatchText.some((text) => textIncludes(text, job.title) || textIncludes(text, job.client)))
+    .sort((a, b) => {
+      if (a.jobDate && !b.jobDate) return -1;
+      if (!a.jobDate && b.jobDate) return 1;
+      return (a.jobDate || '').localeCompare(b.jobDate || '');
+    });
 }
 
 function normalizeMatchText(value: string) {

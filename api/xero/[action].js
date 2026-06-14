@@ -2,7 +2,8 @@ const DEFAULT_SCOPES = [
   'offline_access',
   'accounting.settings.read',
   'accounting.contacts.read',
-  'accounting.invoices.read'
+  'accounting.invoices.read',
+  'accounting.transactions'
 ].join(' ');
 
 module.exports = async function handler(req, res) {
@@ -13,6 +14,7 @@ module.exports = async function handler(req, res) {
   if (action === 'summary') return getXeroSummary(req, res);
   if (action === 'invoice-detail') return getXeroInvoiceDetail(req, res);
   if (action === 'invoice-pdf') return getXeroInvoicePdf(req, res);
+  if (action === 'draft-invoice') return createXeroDraftInvoice(req, res);
 
   return sendJson(res, 404, {
     ok: false,
@@ -171,6 +173,84 @@ async function getXeroInvoicePdf(req, res) {
     return sendJson(res, 500, {
       ok: false,
       message: caught instanceof Error ? caught.message : 'Unknown Xero PDF error.'
+    });
+  }
+}
+
+async function createXeroDraftInvoice(req, res) {
+  if (req.method !== 'POST') {
+    return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  const payload = await readJsonBody(req);
+  const contactName = String(payload.contactName || '').trim();
+  const reference = String(payload.reference || '').trim();
+  const dueDate = String(payload.dueDate || '').trim();
+  const lineItems = Array.isArray(payload.lineItems) ? payload.lineItems : [];
+
+  if (!contactName) return sendJson(res, 400, { ok: false, message: 'A Xero contact/customer name is required.' });
+  if (lineItems.length === 0) return sendJson(res, 400, { ok: false, message: 'At least one invoice line item is required.' });
+
+  const cleanLineItems = lineItems.map((item) => ({
+    Description: String(item.description || '').trim() || 'Service',
+    Quantity: Math.max(1, numberValue(item.quantity) || 1),
+    UnitAmount: Math.max(0, numberValue(item.unitAmount)),
+    AccountCode: String(item.accountCode || process.env.XERO_DEFAULT_SALES_ACCOUNT_CODE || '200').trim(),
+    TaxType: String(item.taxType || process.env.XERO_DEFAULT_TAX_TYPE || 'OUTPUT').trim()
+  })).filter((item) => item.Description && item.UnitAmount >= 0);
+
+  if (cleanLineItems.length === 0) return sendJson(res, 400, { ok: false, message: 'Invoice line items were empty after validation.' });
+
+  try {
+    const context = await getXeroRequestContext();
+    if (!context.ok) return sendJson(res, 400, context);
+
+    const invoiceDate = localDateString();
+    const body = {
+      Invoices: [
+        {
+          Type: 'ACCREC',
+          Status: 'DRAFT',
+          Contact: { Name: contactName },
+          Date: invoiceDate,
+          DueDate: dueDate || addPlainDays(invoiceDate, 14),
+          Reference: reference || undefined,
+          LineAmountTypes: 'Exclusive',
+          LineItems: cleanLineItems
+        }
+      ]
+    };
+
+    const response = await fetch('https://api.xero.com/api.xro/2.0/Invoices', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${context.accessToken}`,
+        'xero-tenant-id': context.tenantId,
+        'content-type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    const text = await safeReadText(response);
+    if (!response.ok) {
+      return sendJson(res, response.status, {
+        ok: false,
+        message: `Xero rejected the draft invoice. ${summariseApiError(text)}`
+      });
+    }
+
+    const data = text ? JSON.parse(text) : {};
+    const invoice = mapInvoice((data.Invoices || [])[0] || {});
+    return sendJson(res, 200, {
+      ok: true,
+      message: `Draft invoice ${invoice.number || invoice.reference || ''} created in Xero.`.trim(),
+      invoice
+    });
+  } catch (caught) {
+    return sendJson(res, 500, {
+      ok: false,
+      message: caught instanceof Error ? caught.message : 'Unknown Xero draft invoice error.'
     });
   }
 }
@@ -700,6 +780,34 @@ function localDateString() {
     month: '2-digit',
     day: '2-digit'
   }).format(new Date());
+}
+
+function addPlainDays(dateString, days) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+async function readJsonBody(req) {
+  if (req.body && typeof req.body === 'object') return req.body;
+  if (typeof req.body === 'string') {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
+  }
+
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const text = Buffer.concat(chunks).toString('utf8');
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
 }
 
 async function exchangeCodeForToken(code, redirectUri) {

@@ -2563,6 +2563,81 @@ h3 {
   box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.85), inset 0 0 0 1px rgba(52, 211, 153, 0.1);
 }
 
+.xero-draft-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.xero-draft-list {
+  display: grid;
+  gap: 10px;
+}
+
+.xero-draft-job {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 18px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.xero-draft-job strong {
+  color: #fff;
+}
+
+.xero-draft-job p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 5px 0 0;
+}
+
+.xero-draft-job .primary-action {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.xero-draft-modal {
+  max-width: 760px;
+}
+
+.xero-approval-summary,
+.xero-draft-total {
+  border-radius: 18px;
+  background: rgba(96, 165, 250, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.14);
+  padding: 15px;
+}
+
+.xero-approval-summary span,
+.xero-draft-total span {
+  color: #bfdbfe;
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 7px;
+  text-transform: uppercase;
+}
+
+.xero-approval-summary strong,
+.xero-draft-total strong {
+  color: #fff;
+}
+
+.xero-approval-summary p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 7px 0 0;
+}
+
+.xero-draft-total {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
 .xero-drawer-shell {
   align-items: stretch;
   justify-content: flex-end;
@@ -3339,6 +3414,16 @@ h3 {
 
   .xero-line-item > div:last-child {
     text-align: left;
+  }
+
+  .xero-draft-job,
+  .xero-draft-total {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .xero-draft-job .primary-action {
+    width: 100%;
   }
 
   .xero-contact-row {
