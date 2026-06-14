@@ -3,7 +3,7 @@ const DEFAULT_SCOPES = [
   'accounting.settings.read',
   'accounting.contacts.read',
   'accounting.invoices.read',
-  'accounting.transactions'
+  'accounting.invoices'
 ].join(' ');
 
 module.exports = async function handler(req, res) {
