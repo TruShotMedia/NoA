@@ -1,4 +1,50 @@
+const DEFAULT_SCOPES = [
+  'offline_access',
+  'accounting.settings.read',
+  'accounting.contacts.read',
+  'accounting.invoices.read'
+].join(' ');
+
 module.exports = async function handler(req, res) {
+  const action = getAction(req);
+
+  if (action === 'start') return startXero(req, res);
+  if (action === 'callback') return handleXeroCallback(req, res);
+
+  return sendJson(res, 404, {
+    ok: false,
+    message: 'Unknown Xero route. Use /api/xero/start or /api/xero/callback.'
+  });
+};
+
+async function startXero(req, res) {
+  if (req.method !== 'GET') {
+    return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!process.env.XERO_CLIENT_ID) {
+    return sendHtml(res, 500, renderMessage('Xero is not ready', [
+      'XERO_CLIENT_ID is missing from Vercel environment variables.',
+      'Add XERO_CLIENT_ID and XERO_CLIENT_SECRET in Vercel, redeploy, then open this URL again.'
+    ]));
+  }
+
+  const redirectUri = getRedirectUri(req);
+  const state = process.env.XERO_OAUTH_STATE || 'noa-xero-setup';
+  const scopes = process.env.XERO_SCOPES || DEFAULT_SCOPES;
+  const url = new URL('https://login.xero.com/identity/connect/authorize');
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', process.env.XERO_CLIENT_ID);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('scope', scopes);
+  url.searchParams.set('state', state);
+
+  res.statusCode = 302;
+  res.setHeader('location', url.toString());
+  res.end();
+}
+
+async function handleXeroCallback(req, res) {
   if (req.method !== 'GET') {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
@@ -60,7 +106,16 @@ module.exports = async function handler(req, res) {
       caught instanceof Error ? caught.message : 'Unknown Xero setup error.'
     ]));
   }
-};
+}
+
+function getAction(req) {
+  const queryAction = req.query?.action;
+  if (Array.isArray(queryAction)) return queryAction[0] || '';
+  if (queryAction) return String(queryAction);
+
+  const pathname = new URL(req.url || '/', `https://${req.headers.host || 'no-a.vercel.app'}`).pathname;
+  return pathname.split('/').filter(Boolean).pop() || '';
+}
 
 async function exchangeCodeForToken(code, redirectUri) {
   const credentials = Buffer.from(`${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`).toString('base64');
