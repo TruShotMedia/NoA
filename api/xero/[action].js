@@ -10,12 +10,82 @@ module.exports = async function handler(req, res) {
 
   if (action === 'start') return startXero(req, res);
   if (action === 'callback') return handleXeroCallback(req, res);
+  if (action === 'summary') return getXeroSummary(req, res);
 
   return sendJson(res, 404, {
     ok: false,
     message: 'Unknown Xero route. Use /api/xero/start or /api/xero/callback.'
   });
 };
+
+async function getXeroSummary(req, res) {
+  if (req.method !== 'GET') {
+    return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  if (!process.env.XERO_CLIENT_ID || !process.env.XERO_CLIENT_SECRET || !process.env.XERO_REFRESH_TOKEN) {
+    return sendJson(res, 200, {
+      ok: false,
+      message: 'Xero needs XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REFRESH_TOKEN in Vercel environment variables.',
+      ...emptySummary()
+    });
+  }
+
+  try {
+    const token = await refreshXeroAccessToken();
+    if (!token.ok) {
+      return sendJson(res, 200, { ok: false, message: token.message, ...emptySummary() });
+    }
+
+    const tenant = await resolveXeroTenant(token.accessToken);
+    if (!tenant.tenantId) {
+      return sendJson(res, 200, {
+        ok: false,
+        message: 'Xero connected, but no tenant was returned for this refresh token.',
+        ...emptySummary()
+      });
+    }
+
+    const [organisationResult, invoicesResult, contactsResult] = await Promise.all([
+      getXeroJson(token.accessToken, tenant.tenantId, '/Organisation'),
+      getXeroJson(token.accessToken, tenant.tenantId, '/Invoices?page=1&order=UpdatedDateUTC%20DESC'),
+      getXeroJson(token.accessToken, tenant.tenantId, '/Contacts?page=1&order=UpdatedDateUTC%20DESC')
+    ]);
+
+    if (!organisationResult.ok && !invoicesResult.ok && !contactsResult.ok) {
+      return sendJson(res, 200, {
+        ok: false,
+        message: organisationResult.message || invoicesResult.message || contactsResult.message || 'Xero did not return account data.',
+        ...emptySummary()
+      });
+    }
+
+    const invoices = (invoicesResult.data?.Invoices || []).map(mapInvoice).filter((invoice) => invoice.id);
+    const contacts = (contactsResult.data?.Contacts || []).map(mapContact).filter((contact) => contact.id);
+    const organisation = mapOrganisation(organisationResult.data?.Organisations?.[0], tenant);
+
+    return sendJson(res, 200, {
+      ok: true,
+      message: 'Xero account summary loaded.',
+      fetchedAt: new Date().toISOString(),
+      organisation,
+      totals: buildInvoiceTotals(invoices),
+      invoices: invoices.slice(0, 18),
+      contacts: contacts.slice(0, 12),
+      warnings: [
+        organisationResult.ok ? '' : organisationResult.message,
+        invoicesResult.ok ? '' : invoicesResult.message,
+        contactsResult.ok ? '' : contactsResult.message
+      ].filter(Boolean)
+    });
+  } catch (caught) {
+    return sendJson(res, 200, {
+      ok: false,
+      message: caught instanceof Error ? caught.message : 'Unknown Xero summary error.',
+      ...emptySummary()
+    });
+  }
+}
 
 async function startXero(req, res) {
   if (req.method !== 'GET') {
@@ -115,6 +185,188 @@ function getAction(req) {
 
   const pathname = new URL(req.url || '/', `https://${req.headers.host || 'no-a.vercel.app'}`).pathname;
   return pathname.split('/').filter(Boolean).pop() || '';
+}
+
+async function refreshXeroAccessToken() {
+  const credentials = Buffer.from(`${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`).toString('base64');
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: process.env.XERO_REFRESH_TOKEN || ''
+  });
+
+  const response = await fetch('https://identity.xero.com/connect/token', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      'content-type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json'
+    },
+    body
+  });
+
+  const text = await safeReadText(response);
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: `Xero token refresh failed with status ${response.status}. ${summariseApiError(text)}`
+    };
+  }
+
+  const data = JSON.parse(text);
+  return {
+    ok: true,
+    accessToken: data.access_token || ''
+  };
+}
+
+async function resolveXeroTenant(accessToken) {
+  if (process.env.XERO_TENANT_ID) {
+    return { tenantId: process.env.XERO_TENANT_ID, tenantName: '' };
+  }
+
+  const tenants = await getXeroTenants(accessToken);
+  return tenants[0] || {};
+}
+
+async function getXeroJson(accessToken, tenantId, path) {
+  const response = await fetch(`https://api.xero.com/api.xro/2.0${path}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'xero-tenant-id': tenantId,
+      Accept: 'application/json'
+    }
+  });
+
+  const text = await safeReadText(response);
+  if (!response.ok) {
+    return {
+      ok: false,
+      data: null,
+      message: `Xero request failed with status ${response.status}. ${summariseApiError(text)}`
+    };
+  }
+
+  return { ok: true, data: text ? JSON.parse(text) : {}, message: '' };
+}
+
+function emptySummary() {
+  return {
+    fetchedAt: '',
+    organisation: null,
+    totals: {
+      invoiceCount: 0,
+      amountDue: 0,
+      overdueAmount: 0,
+      overdueCount: 0,
+      draftCount: 0,
+      awaitingPaymentCount: 0,
+      paidCount: 0
+    },
+    invoices: [],
+    contacts: [],
+    warnings: []
+  };
+}
+
+function mapOrganisation(organisation, tenant) {
+  if (!organisation && !tenant) return null;
+  return {
+    name: organisation?.Name || tenant?.tenantName || 'Xero organisation',
+    legalName: organisation?.LegalName || '',
+    countryCode: organisation?.CountryCode || '',
+    baseCurrency: organisation?.BaseCurrency || '',
+    organisationType: organisation?.OrganisationType || '',
+    shortCode: organisation?.ShortCode || '',
+    tenantId: tenant?.tenantId || ''
+  };
+}
+
+function mapInvoice(invoice) {
+  const dueDate = normalizeXeroDate(invoice.DueDateString || invoice.DueDate);
+  const status = invoice.Status || '';
+  const amountDue = numberValue(invoice.AmountDue);
+  return {
+    id: invoice.InvoiceID || '',
+    number: invoice.InvoiceNumber || invoice.Reference || 'Draft invoice',
+    contact: invoice.Contact?.Name || '',
+    status,
+    type: invoice.Type || '',
+    dueDate,
+    updatedAt: normalizeXeroDate(invoice.UpdatedDateUTC),
+    total: numberValue(invoice.Total),
+    amountDue,
+    currencyCode: invoice.CurrencyCode || '',
+    isOverdue: Boolean(dueDate && amountDue > 0 && dueDate < localDateString()),
+    url: invoice.InvoiceID ? `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoice.InvoiceID}` : ''
+  };
+}
+
+function mapContact(contact) {
+  const balances = contact.Balances || {};
+  const accountsReceivable = balances.AccountsReceivable || {};
+  return {
+    id: contact.ContactID || '',
+    name: contact.Name || '',
+    email: contact.EmailAddress || '',
+    phone: readContactPhone(contact.Phones),
+    isCustomer: Boolean(contact.IsCustomer),
+    isSupplier: Boolean(contact.IsSupplier),
+    outstanding: numberValue(accountsReceivable.Outstanding),
+    overdue: numberValue(accountsReceivable.Overdue),
+    updatedAt: normalizeXeroDate(contact.UpdatedDateUTC)
+  };
+}
+
+function buildInvoiceTotals(invoices) {
+  return invoices.reduce((totals, invoice) => {
+    totals.invoiceCount += 1;
+    totals.amountDue += invoice.amountDue;
+    if (invoice.isOverdue) {
+      totals.overdueAmount += invoice.amountDue;
+      totals.overdueCount += 1;
+    }
+    if (invoice.status === 'DRAFT') totals.draftCount += 1;
+    if (invoice.status === 'AUTHORISED' && invoice.amountDue > 0) totals.awaitingPaymentCount += 1;
+    if (invoice.status === 'PAID') totals.paidCount += 1;
+    return totals;
+  }, {
+    invoiceCount: 0,
+    amountDue: 0,
+    overdueAmount: 0,
+    overdueCount: 0,
+    draftCount: 0,
+    awaitingPaymentCount: 0,
+    paidCount: 0
+  });
+}
+
+function readContactPhone(phones = []) {
+  const preferred = phones.find((phone) => phone.PhoneNumber) || {};
+  return [preferred.PhoneAreaCode, preferred.PhoneNumber].filter(Boolean).join(' ');
+}
+
+function numberValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function normalizeXeroDate(value) {
+  if (!value) return '';
+  const text = String(value);
+  const jsonDateMatch = /\/Date\((\d+)/.exec(text);
+  if (jsonDateMatch) return new Date(Number(jsonDateMatch[1])).toISOString().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
+function localDateString() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Australia/Brisbane',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
 }
 
 async function exchangeCodeForToken(code, redirectUri) {

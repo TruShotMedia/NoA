@@ -5,11 +5,13 @@ import {
   ArrowUpRight,
   Bot,
   BrainCircuit,
+  Building2,
   CheckCircle2,
   ChevronRight,
   CircleAlert,
   Clock3,
   Copy,
+  CreditCard,
   Database,
   Eye,
   EyeOff,
@@ -25,13 +27,17 @@ import {
   MoreHorizontal,
   Plus,
   Play,
+  ReceiptText,
+  RefreshCw,
   Save,
   Send,
   ServerCog,
   ShieldCheck,
   Sparkles,
   Trash2,
+  UsersRound,
   Volume2,
+  WalletCards,
   X,
   Zap
 } from 'lucide-react';
@@ -174,6 +180,60 @@ type NotionJobsReport = {
   upcomingJobsError: string;
 };
 
+type XeroInvoice = {
+  id: string;
+  number: string;
+  contact: string;
+  status: string;
+  type: string;
+  dueDate: string;
+  updatedAt: string;
+  total: number;
+  amountDue: number;
+  currencyCode: string;
+  isOverdue: boolean;
+  url: string;
+};
+
+type XeroContact = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  isCustomer: boolean;
+  isSupplier: boolean;
+  outstanding: number;
+  overdue: number;
+  updatedAt: string;
+};
+
+type XeroReport = {
+  ok: boolean;
+  message: string;
+  fetchedAt: string;
+  organisation: {
+    name: string;
+    legalName: string;
+    countryCode: string;
+    baseCurrency: string;
+    organisationType: string;
+    shortCode: string;
+    tenantId: string;
+  } | null;
+  totals: {
+    invoiceCount: number;
+    amountDue: number;
+    overdueAmount: number;
+    overdueCount: number;
+    draftCount: number;
+    awaitingPaymentCount: number;
+    paidCount: number;
+  };
+  invoices: XeroInvoice[];
+  contacts: XeroContact[];
+  warnings: string[];
+};
+
 const emptyJobsReport: NotionJobsReport = {
   tasks: [],
   pipelineTasks: [],
@@ -183,6 +243,25 @@ const emptyJobsReport: NotionJobsReport = {
   mainJobsError: '',
   tasksError: '',
   upcomingJobsError: ''
+};
+
+const emptyXeroReport: XeroReport = {
+  ok: false,
+  message: '',
+  fetchedAt: '',
+  organisation: null,
+  totals: {
+    invoiceCount: 0,
+    amountDue: 0,
+    overdueAmount: 0,
+    overdueCount: 0,
+    draftCount: 0,
+    awaitingPaymentCount: 0,
+    paidCount: 0
+  },
+  invoices: [],
+  contacts: [],
+  warnings: []
 };
 
 const jobColumns = ['Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes'];
@@ -212,6 +291,7 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     getNotionJobs: () => fetch('/api/notion-jobs').then((response) => response.json()),
     updateNotionTaskStatus: (payload) => postJson('/api/notion-task-status', payload),
     manageNotionItem: (payload) => postJson('/api/notion-item', payload),
+    getXeroSummary: () => fetch('/api/xero/summary').then((response) => response.json()),
     startOfflineWake: async () => ({
       ok: false,
       message: 'Offline Hey Noah activation runs on the Windows home base. Tablet mode supports tap-to-talk and spoken replies.'
@@ -363,6 +443,8 @@ function App() {
   const [isNoahThinking, setIsNoahThinking] = useState(false);
   const [jobsReport, setJobsReport] = useState<NotionJobsReport>(emptyJobsReport);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
+  const [isLoadingXero, setIsLoadingXero] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(() => window.localStorage.getItem('noa.voiceEnabled') !== 'false');
   const [voiceState, setVoiceState] = useState<VoiceState>(() => window.localStorage.getItem('noa.voiceEnabled') === 'false' ? 'off' : 'active');
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -528,9 +610,25 @@ function App() {
     }
   };
 
+  const loadXeroSummary = async () => {
+    if (!window.noa?.getXeroSummary) return emptyXeroReport;
+    setIsLoadingXero(true);
+    try {
+      const report = await window.noa.getXeroSummary();
+      setXeroReport({ ...emptyXeroReport, ...report });
+      setIntegrationStatus((current) => ({ ...current, xero: Boolean(report.ok) }));
+      return report;
+    } finally {
+      setIsLoadingXero(false);
+    }
+  };
+
   useEffect(() => {
     if (screen === 'pipeline' || screen === 'tasks' || screen === 'upcoming-jobs') {
       void loadNotionJobs();
+    }
+    if (screen === 'xero') {
+      void loadXeroSummary();
     }
   }, [screen]);
 
@@ -1229,6 +1327,13 @@ function App() {
             report={jobsReport}
             isLoading={isLoadingJobs}
             refreshJobs={loadNotionJobs}
+          />
+        )}
+        {screen === 'xero' && (
+          <XeroView
+            report={xeroReport}
+            isLoading={isLoadingXero}
+            refreshXero={loadXeroSummary}
           />
         )}
         {screen === 'plan' && <Plan />}
@@ -2062,6 +2167,192 @@ function UpcomingJobCard({
         </div>
       )}
     </article>
+  );
+}
+
+function XeroView({
+  report,
+  isLoading,
+  refreshXero
+}: {
+  report: XeroReport;
+  isLoading: boolean;
+  refreshXero: () => Promise<XeroReport>;
+}) {
+  const currency = report.organisation?.baseCurrency || report.invoices.find((invoice) => invoice.currencyCode)?.currencyCode || 'AUD';
+  const overdueInvoices = report.invoices.filter((invoice) => invoice.isOverdue);
+  const awaitingInvoices = report.invoices.filter((invoice) => invoice.status === 'AUTHORISED' && invoice.amountDue > 0);
+  const activeContacts = report.contacts.filter((contact) => contact.isCustomer || contact.outstanding > 0 || contact.overdue > 0);
+  const topRisk = overdueInvoices[0] || awaitingInvoices[0] || null;
+
+  return (
+    <section className="page-fade xero-page">
+      <article className="glass-card wide xero-hero">
+        <div>
+          <PanelTitle eyebrow="Xero finance workspace" title="Xero" />
+          <p className="section-copy">
+            A read-only finance command surface for invoices, customer balances, and accounting signals that Noah can use before drafting actions for approval.
+          </p>
+        </div>
+        <div className="xero-actions">
+          <div className={`xero-health ${report.ok ? 'online' : 'offline'}`}>
+            <span />
+            {report.ok ? 'Connected' : 'Needs setup'}
+          </div>
+          <button className="secondary-action" onClick={() => void refreshXero()} disabled={isLoading}>
+            <RefreshCw size={16} />
+            {isLoading ? 'Syncing...' : 'Sync Xero'}
+          </button>
+        </div>
+      </article>
+
+      {!report.ok && (
+        <article className="glass-card wide xero-alert">
+          <CircleAlert size={20} />
+          <div>
+            <strong>{report.message || 'Xero is not connected yet.'}</strong>
+            <p>Open Integrations, confirm the Xero credentials are configured, then sync this page again.</p>
+          </div>
+        </article>
+      )}
+
+      {report.warnings.length > 0 && (
+        <article className="glass-card wide xero-alert">
+          <CircleAlert size={20} />
+          <div>
+            <strong>Xero returned partial data</strong>
+            {report.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+          </div>
+        </article>
+      )}
+
+      <section className="xero-overview">
+        <article className="xero-org-card">
+          <div className="xero-card-icon"><Building2 size={22} /></div>
+          <span>Organisation</span>
+          <strong>{report.organisation?.name || 'Not loaded'}</strong>
+          <p>{[report.organisation?.countryCode, report.organisation?.baseCurrency].filter(Boolean).join(' · ') || 'Connect Xero to see company details.'}</p>
+        </article>
+        <XeroMetric icon={WalletCards} label="Amount due" value={formatMoney(report.totals.amountDue, currency)} detail={`${report.totals.awaitingPaymentCount} awaiting payment`} />
+        <XeroMetric icon={CircleAlert} label="Overdue" value={formatMoney(report.totals.overdueAmount, currency)} detail={`${report.totals.overdueCount} overdue invoice(s)`} danger={report.totals.overdueCount > 0} />
+        <XeroMetric icon={ReceiptText} label="Drafts" value={String(report.totals.draftCount)} detail={`${report.totals.invoiceCount} recent invoices loaded`} />
+      </section>
+
+      <section className="xero-grid">
+        <article className="glass-card xero-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Cash attention" title="What needs attention" />
+            <span>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleString()}` : 'Not synced'}</span>
+          </div>
+          <div className="xero-focus-list">
+            <XeroFocusItem
+              tone={report.totals.overdueCount > 0 ? 'danger' : 'calm'}
+              title={report.totals.overdueCount > 0 ? 'Follow up overdue invoices' : 'No overdue invoices in this snapshot'}
+              detail={report.totals.overdueCount > 0 ? `${report.totals.overdueCount} invoice(s) are overdue, totalling ${formatMoney(report.totals.overdueAmount, currency)}.` : 'The recent invoice set does not show overdue receivables.'}
+            />
+            <XeroFocusItem
+              tone={report.totals.awaitingPaymentCount > 0 ? 'warn' : 'calm'}
+              title="Awaiting payment"
+              detail={`${report.totals.awaitingPaymentCount} authorised invoice(s) still have a balance due.`}
+            />
+            <XeroFocusItem
+              tone={topRisk ? 'warn' : 'calm'}
+              title={topRisk ? `Review ${topRisk.number}` : 'Ready for deeper finance automation'}
+              detail={topRisk ? `${topRisk.contact || 'A customer'} has ${formatMoney(topRisk.amountDue, currency)} due${topRisk.dueDate ? ` since ${topRisk.dueDate}` : ''}.` : 'Next useful step: connect invoice follow-up drafts through Noah with approval.'}
+            />
+          </div>
+        </article>
+
+        <article className="glass-card xero-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Customers" title="Customer balances" />
+            <UsersRound size={20} />
+          </div>
+          <div className="xero-contact-list">
+            {activeContacts.length === 0 ? (
+              <p className="empty-state">No customer balances found in the latest Xero contact snapshot.</p>
+            ) : (
+              activeContacts.slice(0, 7).map((contact) => (
+                <div className="xero-contact-row" key={contact.id}>
+                  <div>
+                    <strong>{contact.name}</strong>
+                    <p>{contact.email || contact.phone || 'No contact details in this snapshot'}</p>
+                  </div>
+                  <span className={contact.overdue > 0 ? 'danger' : ''}>{formatMoney(contact.overdue || contact.outstanding, currency)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+      </section>
+
+      <article className="glass-card wide xero-panel">
+        <div className="panel-row-head">
+          <PanelTitle eyebrow="Invoices" title="Recent invoice activity" />
+          <CreditCard size={20} />
+        </div>
+        <div className="xero-table">
+          <div className="xero-table-head">
+            <span>Invoice</span>
+            <span>Customer</span>
+            <span>Status</span>
+            <span>Due</span>
+            <span>Balance</span>
+          </div>
+          {report.invoices.length === 0 ? (
+            <p className="empty-state">No invoices returned yet.</p>
+          ) : (
+            report.invoices.map((invoice) => (
+              <a className={`xero-invoice-row ${invoice.isOverdue ? 'overdue' : ''}`} href={invoice.url || undefined} target="_blank" rel="noreferrer" key={invoice.id}>
+                <span>
+                  <strong>{invoice.number}</strong>
+                  <small>{invoice.type || 'Invoice'}</small>
+                </span>
+                <span>{invoice.contact || 'Unknown customer'}</span>
+                <span><i>{invoice.status || 'Unknown'}</i></span>
+                <span>{invoice.dueDate || 'No date'}</span>
+                <span>{formatMoney(invoice.amountDue, invoice.currencyCode || currency)}</span>
+              </a>
+            ))
+          )}
+        </div>
+      </article>
+    </section>
+  );
+}
+
+function XeroMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  danger = false
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  detail: string;
+  danger?: boolean;
+}) {
+  return (
+    <article className={`xero-metric ${danger ? 'danger' : ''}`}>
+      <div className="xero-card-icon"><Icon size={22} /></div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </article>
+  );
+}
+
+function XeroFocusItem({ tone, title, detail }: { tone: 'danger' | 'warn' | 'calm'; title: string; detail: string }) {
+  return (
+    <div className={`xero-focus ${tone}`}>
+      <span />
+      <div>
+        <strong>{title}</strong>
+        <p>{detail}</p>
+      </div>
+    </div>
   );
 }
 
@@ -3074,6 +3365,7 @@ function screenTitle(screen: Screen) {
     pipeline: 'Pipeline',
     tasks: 'Tasks',
     'upcoming-jobs': 'Upcoming Jobs',
+    xero: 'Xero',
     plan: 'Build Plan',
     memory: 'Memory',
     automations: 'Automations',
@@ -3081,6 +3373,14 @@ function screenTitle(screen: Screen) {
     integrations: 'Integrations',
     settings: 'Settings'
   }[screen];
+}
+
+function formatMoney(value: number, currency = 'AUD') {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: currency || 'AUD',
+    maximumFractionDigits: 2
+  }).format(Number.isFinite(value) ? value : 0);
 }
 
 function statusForColumn(column: string) {

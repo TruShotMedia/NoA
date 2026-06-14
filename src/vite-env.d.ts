@@ -220,6 +220,55 @@ interface Window {
       id?: string;
       item?: unknown;
     }>;
+    getXeroSummary?: () => Promise<{
+      ok: boolean;
+      message: string;
+      fetchedAt: string;
+      organisation: {
+        name: string;
+        legalName: string;
+        countryCode: string;
+        baseCurrency: string;
+        organisationType: string;
+        shortCode: string;
+        tenantId: string;
+      } | null;
+      totals: {
+        invoiceCount: number;
+        amountDue: number;
+        overdueAmount: number;
+        overdueCount: number;
+        draftCount: number;
+        awaitingPaymentCount: number;
+        paidCount: number;
+      };
+      invoices: Array<{
+        id: string;
+        number: string;
+        contact: string;
+        status: string;
+        type: string;
+        dueDate: string;
+        updatedAt: string;
+        total: number;
+        amountDue: number;
+        currencyCode: string;
+        isOverdue: boolean;
+        url: string;
+      }>;
+      contacts: Array<{
+        id: string;
+        name: string;
+        email: string;
+        phone: string;
+        isCustomer: boolean;
+        isSupplier: boolean;
+        outstanding: number;
+        overdue: number;
+        updatedAt: string;
+      }>;
+      warnings: string[];
+    }>;
     startOfflineWake: () => Promise<{
       ok: boolean;
       message: string;

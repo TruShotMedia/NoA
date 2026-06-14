@@ -2225,6 +2225,269 @@ h3 {
   min-height: 156px;
 }
 
+.xero-page {
+  display: grid;
+  gap: 18px;
+}
+
+.xero-hero,
+.xero-actions,
+.panel-row-head {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.xero-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.xero-health {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.78);
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  padding: 9px 12px;
+}
+
+.xero-health span {
+  background: var(--danger);
+  border-radius: 999px;
+  height: 9px;
+  width: 9px;
+}
+
+.xero-health.online span {
+  background: var(--green);
+  box-shadow: 0 0 18px rgba(52, 211, 153, 0.42);
+}
+
+.xero-alert {
+  align-items: flex-start;
+  color: rgba(255, 255, 255, 0.82);
+  display: flex;
+  gap: 12px;
+}
+
+.xero-alert svg {
+  color: #fde68a;
+  flex: 0 0 auto;
+}
+
+.xero-alert strong {
+  color: #fff;
+}
+
+.xero-alert p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.xero-overview {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
+}
+
+.xero-org-card,
+.xero-metric,
+.xero-panel {
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
+  padding: 22px;
+}
+
+.xero-card-icon {
+  align-items: center;
+  background: rgba(96, 165, 250, 0.12);
+  border-radius: 16px;
+  color: #bfdbfe;
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  margin-bottom: 16px;
+  width: 42px;
+}
+
+.xero-org-card span,
+.xero-metric span {
+  color: var(--faint);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.xero-org-card strong,
+.xero-metric strong {
+  color: #fff;
+  display: block;
+  font-size: clamp(24px, 3vw, 36px);
+  line-height: 1.05;
+}
+
+.xero-metric strong {
+  overflow-wrap: anywhere;
+}
+
+.xero-org-card p,
+.xero-metric p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+
+.xero-metric.danger .xero-card-icon {
+  background: rgba(251, 113, 133, 0.12);
+  color: #fecdd3;
+}
+
+.xero-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 1.2fr 0.8fr;
+}
+
+.panel-row-head {
+  margin-bottom: 18px;
+}
+
+.panel-row-head > span {
+  color: var(--faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.xero-focus-list,
+.xero-contact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.xero-focus {
+  align-items: flex-start;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto 1fr;
+  padding: 14px;
+}
+
+.xero-focus > span {
+  background: var(--green);
+  border-radius: 999px;
+  height: 10px;
+  margin-top: 5px;
+  width: 10px;
+}
+
+.xero-focus.warn > span {
+  background: var(--amber);
+}
+
+.xero-focus.danger > span {
+  background: var(--danger);
+}
+
+.xero-focus strong,
+.xero-contact-row strong,
+.xero-invoice-row strong {
+  color: #fff;
+}
+
+.xero-focus p,
+.xero-contact-row p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 5px 0 0;
+}
+
+.xero-contact-row {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 18px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.xero-contact-row span {
+  color: #dbeafe;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.xero-contact-row span.danger {
+  color: #fecdd3;
+}
+
+.xero-table {
+  display: grid;
+  gap: 8px;
+}
+
+.xero-table-head,
+.xero-invoice-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1.1fr 0.7fr 0.7fr 0.8fr;
+}
+
+.xero-table-head {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.xero-invoice-row {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 18px;
+  color: rgba(255, 255, 255, 0.78);
+  padding: 14px;
+  text-decoration: none;
+}
+
+.xero-invoice-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.xero-invoice-row.overdue {
+  box-shadow: inset 3px 0 0 rgba(251, 113, 133, 0.9), inset 0 0 0 1px rgba(251, 113, 133, 0.12);
+}
+
+.xero-invoice-row small {
+  color: var(--faint);
+  display: block;
+  margin-top: 4px;
+}
+
+.xero-invoice-row i {
+  background: rgba(96, 165, 250, 0.12);
+  border-radius: 999px;
+  color: #bfdbfe;
+  display: inline-flex;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 6px 9px;
+}
+
 @media (max-width: 1180px) {
   body {
     min-width: 0;
@@ -2262,7 +2525,9 @@ h3 {
     .integrations-grid,
     .jobs-metrics,
     .jobs-board,
-    .upcoming-grid {
+    .upcoming-grid,
+    .xero-overview,
+    .xero-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2283,6 +2548,13 @@ h3 {
 
   .jobs-sync {
     text-align: left;
+  }
+
+  .xero-hero,
+  .xero-actions,
+  .panel-row-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .topbar {
@@ -2559,7 +2831,9 @@ h3 {
   .memory-columns,
   .jobs-metrics,
   .jobs-board,
-  .upcoming-grid {
+  .upcoming-grid,
+  .xero-overview,
+  .xero-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2615,6 +2889,32 @@ h3 {
 
   .jobs-actions {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .xero-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .xero-actions button,
+  .xero-health {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .xero-table-head {
+    display: none;
+  }
+
+  .xero-invoice-row {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+
+  .xero-contact-row {
+    align-items: flex-start;
     flex-direction: column;
   }
 
