@@ -67,6 +67,8 @@ async function getXeroSummary(req, res) {
     }
 
     const invoices = (invoicesResult.data?.Invoices || []).map(mapInvoice).filter((invoice) => invoice.id);
+    const customerInvoices = invoices.filter((invoice) => invoice.direction === 'income');
+    const supplierBills = invoices.filter((invoice) => invoice.direction === 'expense');
     const contacts = (contactsResult.data?.Contacts || []).map(mapContact).filter((contact) => contact.id);
     const organisation = mapOrganisation(organisationResult.data?.Organisations?.[0], tenant);
     const analytics = buildXeroAnalytics(invoices);
@@ -79,6 +81,14 @@ async function getXeroSummary(req, res) {
       totals: buildInvoiceTotals(invoices),
       analytics,
       invoices: invoices
+        .slice()
+        .sort((a, b) => (b.updatedAt || b.invoiceDate || '').localeCompare(a.updatedAt || a.invoiceDate || ''))
+        .slice(0, 30),
+      customerInvoices: customerInvoices
+        .slice()
+        .sort((a, b) => (b.updatedAt || b.invoiceDate || '').localeCompare(a.updatedAt || a.invoiceDate || ''))
+        .slice(0, 30),
+      supplierBills: supplierBills
         .slice()
         .sort((a, b) => (b.updatedAt || b.invoiceDate || '').localeCompare(a.updatedAt || a.invoiceDate || ''))
         .slice(0, 30),
@@ -541,15 +551,23 @@ function emptySummary() {
     organisation: null,
     totals: {
       invoiceCount: 0,
+      billCount: 0,
       amountDue: 0,
+      billsDue: 0,
       overdueAmount: 0,
+      overdueBillsAmount: 0,
       overdueCount: 0,
+      overdueBillsCount: 0,
       draftCount: 0,
+      draftBillsCount: 0,
       awaitingPaymentCount: 0,
+      awaitingPaymentBillsCount: 0,
       paidCount: 0
     },
     analytics: emptyAnalytics(),
     invoices: [],
+    customerInvoices: [],
+    supplierBills: [],
     contacts: [],
     warnings: []
   };
@@ -574,14 +592,23 @@ function mapInvoice(invoice) {
   const status = invoice.Status || '';
   const amountDue = numberValue(invoice.AmountDue);
   const contact = invoice.Contact || {};
+  const type = String(invoice.Type || '').toUpperCase();
+  const isBill = type === 'ACCPAY';
+  const isCustomerInvoice = type === 'ACCREC';
   return {
     id: invoice.InvoiceID || '',
-    number: invoice.InvoiceNumber || invoice.Reference || 'Draft invoice',
+    number: invoice.InvoiceNumber || invoice.Reference || (isBill ? 'Draft bill' : 'Draft invoice'),
     reference: invoice.Reference || '',
     contact: contact.Name || '',
     contactId: contact.ContactID || '',
     status,
-    type: invoice.Type || '',
+    type,
+    direction: isBill ? 'expense' : 'income',
+    recordKind: isBill ? 'bill' : 'invoice',
+    counterpartyRole: isBill ? 'supplier' : 'client',
+    counterpartyLabel: isBill ? 'Supplier' : 'Client',
+    isBill,
+    isCustomerInvoice,
     invoiceDate,
     dueDate,
     updatedAt: normalizeXeroDate(invoice.UpdatedDateUTC),
@@ -595,7 +622,11 @@ function mapInvoice(invoice) {
     fullyPaidOnDate: normalizeXeroDate(invoice.FullyPaidOnDate),
     isOverdue: Boolean(dueDate && amountDue > 0 && dueDate < localDateString()),
     lineItems: (invoice.LineItems || []).map(mapInvoiceLineItem).filter((item) => item.description || item.itemCode),
-    url: invoice.InvoiceID ? `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoice.InvoiceID}` : ''
+    url: invoice.InvoiceID
+      ? isBill
+        ? `https://go.xero.com/AccountsPayable/View.aspx?InvoiceID=${invoice.InvoiceID}`
+        : `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoice.InvoiceID}`
+      : ''
   };
 }
 
@@ -631,6 +662,18 @@ function mapContact(contact) {
 
 function buildInvoiceTotals(invoices) {
   return invoices.reduce((totals, invoice) => {
+    if (invoice.direction === 'expense') {
+      totals.billCount += 1;
+      totals.billsDue += invoice.amountDue;
+      if (invoice.isOverdue) {
+        totals.overdueBillsAmount += invoice.amountDue;
+        totals.overdueBillsCount += 1;
+      }
+      if (invoice.status === 'DRAFT') totals.draftBillsCount += 1;
+      if (invoice.status === 'AUTHORISED' && invoice.amountDue > 0) totals.awaitingPaymentBillsCount += 1;
+      return totals;
+    }
+
     totals.invoiceCount += 1;
     totals.amountDue += invoice.amountDue;
     if (invoice.isOverdue) {
@@ -643,11 +686,17 @@ function buildInvoiceTotals(invoices) {
     return totals;
   }, {
     invoiceCount: 0,
+    billCount: 0,
     amountDue: 0,
+    billsDue: 0,
     overdueAmount: 0,
+    overdueBillsAmount: 0,
     overdueCount: 0,
+    overdueBillsCount: 0,
     draftCount: 0,
+    draftBillsCount: 0,
     awaitingPaymentCount: 0,
+    awaitingPaymentBillsCount: 0,
     paidCount: 0
   });
 }
@@ -655,8 +704,11 @@ function buildInvoiceTotals(invoices) {
 function emptyAnalytics() {
   return {
     monthlyRevenue: [],
+    monthlyBills: [],
     statusBreakdown: [],
+    billStatusBreakdown: [],
     topClients: [],
+    topSuppliers: [],
     overdueAging: [
       { label: '1-30 days', count: 0, amount: 0 },
       { label: '31-60 days', count: 0, amount: 0 },
@@ -667,11 +719,16 @@ function emptyAnalytics() {
 }
 
 function buildXeroAnalytics(invoices) {
-  const invoiceSet = invoices.filter((invoice) => !['VOIDED', 'DELETED'].includes(invoice.status));
+  const activeSet = invoices.filter((invoice) => !['VOIDED', 'DELETED'].includes(invoice.status));
+  const invoiceSet = activeSet.filter((invoice) => invoice.direction !== 'expense');
+  const billSet = activeSet.filter((invoice) => invoice.direction === 'expense');
   return {
     monthlyRevenue: buildMonthlyRevenue(invoiceSet),
+    monthlyBills: buildMonthlyRevenue(billSet),
     statusBreakdown: buildStatusBreakdown(invoiceSet),
+    billStatusBreakdown: buildStatusBreakdown(billSet),
     topClients: buildTopClients(invoiceSet),
+    topSuppliers: buildTopClients(billSet),
     overdueAging: buildOverdueAging(invoiceSet)
   };
 }

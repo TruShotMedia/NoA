@@ -22,8 +22,6 @@ import {
   Kanban,
   LockKeyhole,
   ListTodo,
-  Mic,
-  MicOff,
   MessageSquareText,
   MoreHorizontal,
   Plus,
@@ -38,7 +36,6 @@ import {
   Sparkles,
   Trash2,
   UsersRound,
-  Volume2,
   WalletCards,
   X,
   Zap
@@ -190,6 +187,12 @@ type XeroInvoice = {
   contactId: string;
   status: string;
   type: string;
+  direction: 'income' | 'expense';
+  recordKind: 'invoice' | 'bill';
+  counterpartyRole: 'client' | 'supplier';
+  counterpartyLabel: string;
+  isBill: boolean;
+  isCustomerInvoice: boolean;
   invoiceDate: string;
   dueDate: string;
   updatedAt: string;
@@ -243,20 +246,31 @@ type XeroReport = {
   } | null;
   totals: {
     invoiceCount: number;
+    billCount: number;
     amountDue: number;
+    billsDue: number;
     overdueAmount: number;
+    overdueBillsAmount: number;
     overdueCount: number;
+    overdueBillsCount: number;
     draftCount: number;
+    draftBillsCount: number;
     awaitingPaymentCount: number;
+    awaitingPaymentBillsCount: number;
     paidCount: number;
   };
   analytics: {
     monthlyRevenue: Array<{ key: string; label: string; total: number; paid: number; outstanding: number }>;
+    monthlyBills: Array<{ key: string; label: string; total: number; paid: number; outstanding: number }>;
     statusBreakdown: Array<{ status: string; count: number; amount: number }>;
+    billStatusBreakdown: Array<{ status: string; count: number; amount: number }>;
     topClients: Array<{ name: string; revenue: number; outstanding: number; overdue: number; invoiceCount: number }>;
+    topSuppliers: Array<{ name: string; revenue: number; outstanding: number; overdue: number; invoiceCount: number }>;
     overdueAging: Array<{ label: string; count: number; amount: number }>;
   };
   invoices: XeroInvoice[];
+  customerInvoices: XeroInvoice[];
+  supplierBills: XeroInvoice[];
   contacts: XeroContact[];
   warnings: string[];
 };
@@ -299,17 +313,26 @@ const emptyXeroReport: XeroReport = {
   organisation: null,
   totals: {
     invoiceCount: 0,
+    billCount: 0,
     amountDue: 0,
+    billsDue: 0,
     overdueAmount: 0,
+    overdueBillsAmount: 0,
     overdueCount: 0,
+    overdueBillsCount: 0,
     draftCount: 0,
+    draftBillsCount: 0,
     awaitingPaymentCount: 0,
+    awaitingPaymentBillsCount: 0,
     paidCount: 0
   },
   analytics: {
     monthlyRevenue: [],
+    monthlyBills: [],
     statusBreakdown: [],
+    billStatusBreakdown: [],
     topClients: [],
+    topSuppliers: [],
     overdueAging: [
       { label: '1-30 days', count: 0, amount: 0 },
       { label: '31-60 days', count: 0, amount: 0 },
@@ -318,6 +341,8 @@ const emptyXeroReport: XeroReport = {
     ]
   },
   invoices: [],
+  customerInvoices: [],
+  supplierBills: [],
   contacts: [],
   warnings: []
 };
@@ -507,8 +532,8 @@ function App() {
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
   const [isLoadingXero, setIsLoadingXero] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(() => window.localStorage.getItem('noa.voiceEnabled') !== 'false');
-  const [voiceState, setVoiceState] = useState<VoiceState>(() => window.localStorage.getItem('noa.voiceEnabled') === 'false' ? 'off' : 'active');
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceState>('off');
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [voiceError, setVoiceError] = useState('');
   const [voiceFallbackMode, setVoiceFallbackMode] = useState(false);
@@ -585,12 +610,6 @@ function App() {
       window.speechSynthesis?.cancel();
     };
   }, []);
-
-  useEffect(() => {
-    if (!voiceEnabled || voiceActivationEnabledRef.current || !window.noa?.startOfflineWake) return;
-    setVoiceFallbackMode(true);
-    void enableOfflineActivation();
-  }, [voiceEnabled]);
 
   const addCapture = () => {
     const value = capture.trim();
@@ -677,9 +696,10 @@ function App() {
     setIsLoadingXero(true);
     try {
       const report = await window.noa.getXeroSummary();
-      setXeroReport({ ...emptyXeroReport, ...report });
+      const mergedReport = mergeXeroReport(report as Partial<XeroReport>);
+      setXeroReport(mergedReport);
       setIntegrationStatus((current) => ({ ...current, xero: Boolean(report.ok) }));
-      return report;
+      return mergedReport;
     } finally {
       setIsLoadingXero(false);
     }
@@ -1368,7 +1388,6 @@ function App() {
             notes={notes}
             smartBriefing={smartBriefing}
             isNoahThinking={isNoahThinking}
-            speakNoahReply={speakNoahReply}
           />
         )}
         {screen === 'pipeline' && (
@@ -1551,113 +1570,6 @@ function Plan() {
         </div>
       </article>
     </section>
-  );
-}
-
-function VoicePanel({
-  enabled,
-  state,
-  transcript,
-  error,
-  supported,
-  fallbackMode,
-  recordingSupported,
-  isRecording,
-  activationEnabled,
-  offlineWakeReady,
-  toggleVoice,
-  toggleRecording,
-  toggleActivation,
-  interruptVoice
-}: {
-  enabled: boolean;
-  state: VoiceState;
-  transcript: string;
-  error: string;
-  supported: boolean;
-  fallbackMode: boolean;
-  recordingSupported: boolean;
-  isRecording: boolean;
-  activationEnabled: boolean;
-  offlineWakeReady: boolean;
-  toggleVoice: () => void;
-  toggleRecording: () => void;
-  toggleActivation: () => void | Promise<void>;
-  interruptVoice: () => void;
-}) {
-  if (!enabled && state !== 'error') return null;
-
-  const stateLabel = {
-    off: 'Voice off',
-    wake: 'Say "Hey Noah"',
-    active: 'Listening',
-    thinking: 'Thinking',
-    speaking: 'Speaking',
-    error: 'Voice unavailable'
-  }[state];
-  const voiceMode: VoiceMode = state === 'speaking'
-    ? 'speaking'
-    : state === 'thinking'
-      ? 'thinking'
-      : isRecording || state === 'active'
-        ? 'listening'
-        : state === 'error'
-          ? 'error'
-          : 'idle';
-  const status = error
-    || transcript
-    || (activationEnabled
-      ? offlineWakeReady ? 'Say "Hey Noah" whenever you need me.' : 'Starting local wake listening...'
-      : 'Tap the mic or say Hey Noah once activation is ready.');
-
-  return (
-    <section className={`voice-panel ${state} ${voiceMode}`}>
-      <div className="siri-orb" aria-hidden="true">
-        <div className="siri-core">
-          <span className="voice-wave w1" />
-          <span className="voice-wave w2" />
-          <span className="voice-wave w3" />
-          <span className="voice-wave w4" />
-          <span className="voice-wave w5" />
-        </div>
-      </div>
-      <div className="voice-copy">
-        <strong>{activationEnabled ? offlineWakeReady ? 'Noah is listening' : 'Starting Noah' : fallbackMode ? 'Noah voice is ready' : supported ? stateLabel : 'Voice assistant ready'}</strong>
-        <p>{status}</p>
-      </div>
-      <div className="voice-actions">
-        {state === 'speaking' && <button onClick={interruptVoice} aria-label="Stop Noah speaking">Stop</button>}
-        {fallbackMode && recordingSupported && (
-          <button className={isRecording ? 'recording icon-button' : 'icon-button'} onClick={() => void toggleRecording()} aria-label={isRecording ? 'Stop listening' : 'Talk to Noah'}>
-            {isRecording ? <MicOff size={17} /> : <Mic size={17} />}
-          </button>
-        )}
-        {window.noa?.startOfflineWake && (
-          <button className={activationEnabled ? 'active' : ''} onClick={toggleActivation}>
-            {activationEnabled ? 'Wake on' : window.noa?.isBrowserLanMode ? 'Tablet wake' : 'Wake'}
-          </button>
-        )}
-        <button onClick={toggleVoice}>{enabled ? 'Off' : 'On'}</button>
-      </div>
-    </section>
-  );
-}
-
-function VolumeControl({ volume, setVolume }: { volume: number; setVolume: (value: number) => void }) {
-  return (
-    <div className="volume-control">
-      <Volume2 size={16} />
-      <input
-        aria-label="Noah voice volume"
-        min="0"
-        max="1"
-        step="0.01"
-        type="range"
-        value={volume}
-        onChange={(event) => setVolume(Number(event.target.value))}
-      />
-      <span>{Math.round(volume * 100)}</span>
-    </div>
   );
 }
 
@@ -2251,13 +2163,22 @@ function XeroView({
   refreshXero: () => Promise<XeroReport>;
   refreshNotion: () => Promise<NotionJobsReport>;
 }) {
+  const customerInvoices = report.customerInvoices.length > 0
+    ? report.customerInvoices
+    : report.invoices.filter((invoice) => invoice.direction !== 'expense' && invoice.type !== 'ACCPAY');
+  const supplierBills = report.supplierBills.length > 0
+    ? report.supplierBills
+    : report.invoices.filter((invoice) => invoice.direction === 'expense' || invoice.type === 'ACCPAY');
   const currency = report.organisation?.baseCurrency || report.invoices.find((invoice) => invoice.currencyCode)?.currencyCode || 'AUD';
-  const overdueInvoices = report.invoices.filter((invoice) => invoice.isOverdue);
-  const awaitingInvoices = report.invoices.filter((invoice) => invoice.status === 'AUTHORISED' && invoice.amountDue > 0);
-  const activeContacts = report.contacts.filter((contact) => contact.isCustomer || contact.outstanding > 0 || contact.overdue > 0);
+  const overdueInvoices = customerInvoices.filter((invoice) => invoice.isOverdue);
+  const overdueBills = supplierBills.filter((bill) => bill.isOverdue);
+  const awaitingInvoices = customerInvoices.filter((invoice) => invoice.status === 'AUTHORISED' && invoice.amountDue > 0);
+  const activeContacts = report.contacts.filter((contact) => contact.isCustomer && !contact.isSupplier && (contact.outstanding > 0 || contact.overdue > 0));
   const topRisk = overdueInvoices[0] || awaitingInvoices[0] || null;
   const monthlyTotal = report.analytics.monthlyRevenue.reduce((sum, month) => sum + month.total, 0);
+  const monthlyBillsTotal = report.analytics.monthlyBills.reduce((sum, month) => sum + month.total, 0);
   const topClient = report.analytics.topClients[0];
+  const topSupplier = report.analytics.topSuppliers[0];
   const [selectedInvoice, setSelectedInvoice] = useState<XeroInvoice | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState('');
   const [draftSourceJob, setDraftSourceJob] = useState<NotionJobsReport['upcomingJobs'][number] | null>(null);
@@ -2290,7 +2211,7 @@ function XeroView({
         <div>
           <PanelTitle eyebrow="Xero finance workspace" title="Xero" />
           <p className="section-copy">
-            A read-only finance command surface for invoices, customer balances, and accounting signals that Noah can use before drafting actions for approval.
+            A finance command surface that separates client invoices from supplier bills so Noah can reason about income, expenses, and approval-gated actions clearly.
           </p>
         </div>
         <div className="xero-actions">
@@ -2336,9 +2257,9 @@ function XeroView({
           <strong>{report.organisation?.name || 'Not loaded'}</strong>
           <p>{[report.organisation?.countryCode, report.organisation?.baseCurrency].filter(Boolean).join(' · ') || 'Connect Xero to see company details.'}</p>
         </article>
-        <XeroMetric icon={WalletCards} label="Amount due" value={formatMoney(report.totals.amountDue, currency)} detail={`${report.totals.awaitingPaymentCount} awaiting payment`} />
+        <XeroMetric icon={WalletCards} label="Client invoices due" value={formatMoney(report.totals.amountDue, currency)} detail={`${report.totals.awaitingPaymentCount} awaiting payment`} />
         <XeroMetric icon={CircleAlert} label="Overdue" value={formatMoney(report.totals.overdueAmount, currency)} detail={`${report.totals.overdueCount} overdue invoice(s)`} danger={report.totals.overdueCount > 0} />
-        <XeroMetric icon={BarChart3} label="6 month invoiced" value={formatMoney(monthlyTotal, currency)} detail={topClient ? `Top client: ${topClient.name}` : `${report.totals.invoiceCount} recent invoices loaded`} />
+        <XeroMetric icon={ReceiptText} label="Supplier bills due" value={formatMoney(report.totals.billsDue, currency)} detail={`${report.totals.awaitingPaymentBillsCount} bill(s) awaiting payment`} danger={report.totals.overdueBillsCount > 0} />
       </section>
 
       <section className="xero-analytics-grid">
@@ -2352,10 +2273,10 @@ function XeroView({
 
         <article className="glass-card xero-panel xero-chart-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Invoice mix" title="Status breakdown" />
-            <PieChart size={20} />
+            <PanelTitle eyebrow="Expenses" title="Monthly bills" />
+            <BarChart3 size={20} />
           </div>
-          <XeroStatusChart data={report.analytics.statusBreakdown} currency={currency} />
+          <XeroRevenueChart data={report.analytics.monthlyBills} currency={currency} emptyLabel="No supplier bill trend returned yet." />
         </article>
 
         <article className="glass-card xero-panel xero-chart-panel">
@@ -2363,15 +2284,15 @@ function XeroView({
             <PanelTitle eyebrow="Client value" title="Top clients" />
             <UsersRound size={20} />
           </div>
-          <XeroClientChart data={report.analytics.topClients} currency={currency} />
+          <XeroClientChart data={report.analytics.topClients} currency={currency} emptyLabel="No customer invoice revenue data returned yet." />
         </article>
 
         <article className="glass-card xero-panel xero-chart-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Collections" title="Overdue aging" />
-            <Clock3 size={20} />
+            <PanelTitle eyebrow="Suppliers" title="Top billers" />
+            <Building2 size={20} />
           </div>
-          <XeroAgingChart data={report.analytics.overdueAging} currency={currency} />
+          <XeroClientChart data={report.analytics.topSuppliers} currency={currency} valueLabel="billed" emptyLabel="No supplier bill data returned yet." />
         </article>
       </section>
 
@@ -2391,6 +2312,11 @@ function XeroView({
               tone={report.totals.awaitingPaymentCount > 0 ? 'warn' : 'calm'}
               title="Awaiting payment"
               detail={`${report.totals.awaitingPaymentCount} authorised invoice(s) still have a balance due.`}
+            />
+            <XeroFocusItem
+              tone={report.totals.overdueBillsCount > 0 ? 'danger' : report.totals.awaitingPaymentBillsCount > 0 ? 'warn' : 'calm'}
+              title={report.totals.overdueBillsCount > 0 ? 'Bills need payment attention' : 'Supplier bills separated'}
+              detail={supplierBills.length > 0 ? `${report.totals.awaitingPaymentBillsCount} bill(s) have a balance due, totalling ${formatMoney(report.totals.billsDue, currency)}.` : 'No supplier bills were returned in this Xero snapshot.'}
             />
             <XeroFocusItem
               tone={topRisk ? 'warn' : 'calm'}
@@ -2419,6 +2345,40 @@ function XeroView({
                 </div>
               ))
             )}
+          </div>
+        </article>
+      </section>
+
+      <section className="xero-grid">
+        <article className="glass-card xero-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Collections" title="Overdue invoice aging" />
+            <Clock3 size={20} />
+          </div>
+          <XeroAgingChart data={report.analytics.overdueAging} currency={currency} />
+        </article>
+
+        <article className="glass-card xero-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Payables" title="Bill pressure" />
+            <ReceiptText size={20} />
+          </div>
+          <div className="xero-focus-list">
+            <XeroFocusItem
+              tone={overdueBills.length > 0 ? 'danger' : 'calm'}
+              title={overdueBills.length > 0 ? `${overdueBills.length} overdue bill(s)` : 'No overdue supplier bills'}
+              detail={overdueBills.length > 0 ? `Overdue supplier balances total ${formatMoney(report.totals.overdueBillsAmount, currency)}.` : 'Supplier bills are separated from client invoice follow-up.'}
+            />
+            <XeroFocusItem
+              tone={monthlyBillsTotal > monthlyTotal && monthlyTotal > 0 ? 'warn' : 'calm'}
+              title="Income vs bills snapshot"
+              detail={`Six-month invoiced: ${formatMoney(monthlyTotal, currency)}. Six-month bills: ${formatMoney(monthlyBillsTotal, currency)}.`}
+            />
+            <XeroFocusItem
+              tone={topSupplier ? 'warn' : 'calm'}
+              title={topSupplier ? `Top supplier: ${topSupplier.name}` : 'No top supplier yet'}
+              detail={topSupplier ? `${formatMoney(topSupplier.revenue, currency)} in recent bills${topSupplier.outstanding > 0 ? `, with ${formatMoney(topSupplier.outstanding, currency)} due` : ''}.` : 'Sync Xero to identify recurring supplier/subscription pressure.'}
+            />
           </div>
         </article>
       </section>
@@ -2482,10 +2442,10 @@ function XeroView({
             <span>Due</span>
             <span>Balance</span>
           </div>
-          {report.invoices.length === 0 ? (
+          {customerInvoices.length === 0 ? (
             <p className="empty-state">No invoices returned yet.</p>
           ) : (
-            report.invoices.map((invoice) => (
+            customerInvoices.map((invoice) => (
               <button className={`xero-invoice-row ${invoice.isOverdue ? 'overdue' : ''}`} onClick={() => void openInvoiceDetails(invoice)} key={invoice.id}>
                 <span>
                   <strong>{invoice.number}</strong>
@@ -2495,6 +2455,38 @@ function XeroView({
                 <span><i>{invoice.status || 'Unknown'}</i></span>
                 <span>{invoice.dueDate || 'No date'}</span>
                 <span>{loadingInvoiceId === invoice.id ? 'Loading...' : formatMoney(invoice.amountDue, invoice.currencyCode || currency)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </article>
+
+      <article className="glass-card wide xero-panel">
+        <div className="panel-row-head">
+          <PanelTitle eyebrow="Bills" title="Supplier bill activity" />
+          <ReceiptText size={20} />
+        </div>
+        <div className="xero-table">
+          <div className="xero-table-head">
+            <span>Bill</span>
+            <span>Supplier</span>
+            <span>Status</span>
+            <span>Due</span>
+            <span>Balance</span>
+          </div>
+          {supplierBills.length === 0 ? (
+            <p className="empty-state">No supplier bills returned yet.</p>
+          ) : (
+            supplierBills.map((bill) => (
+              <button className={`xero-invoice-row bill ${bill.isOverdue ? 'overdue' : ''}`} onClick={() => void openInvoiceDetails(bill)} key={bill.id}>
+                <span>
+                  <strong>{bill.number}</strong>
+                  <small>{bill.invoiceDate || bill.type || 'Bill'}</small>
+                </span>
+                <span>{bill.contact || 'Unknown supplier'}</span>
+                <span><i>{bill.status || 'Unknown'}</i></span>
+                <span>{bill.dueDate || 'No date'}</span>
+                <span>{loadingInvoiceId === bill.id ? 'Loading...' : formatMoney(bill.amountDue, bill.currencyCode || currency)}</span>
               </button>
             ))
           )}
@@ -2547,6 +2539,30 @@ function XeroMetric({
   );
 }
 
+function mergeXeroReport(report: Partial<XeroReport>): XeroReport {
+  const invoices = report.invoices || [];
+  const customerInvoices = report.customerInvoices || invoices.filter((invoice) => invoice.direction !== 'expense' && invoice.type !== 'ACCPAY');
+  const supplierBills = report.supplierBills || invoices.filter((invoice) => invoice.direction === 'expense' || invoice.type === 'ACCPAY');
+
+  return {
+    ...emptyXeroReport,
+    ...report,
+    totals: {
+      ...emptyXeroReport.totals,
+      ...(report.totals || {})
+    },
+    analytics: {
+      ...emptyXeroReport.analytics,
+      ...(report.analytics || {})
+    },
+    invoices,
+    customerInvoices,
+    supplierBills,
+    contacts: report.contacts || [],
+    warnings: report.warnings || []
+  };
+}
+
 function XeroInvoiceDrawer({
   invoice,
   currency,
@@ -2558,17 +2574,19 @@ function XeroInvoiceDrawer({
   isLoadingDetails: boolean;
   onClose: () => void;
 }) {
+  const recordLabel = invoice.recordKind === 'bill' ? 'bill' : 'invoice';
+  const counterpartyLabel = invoice.counterpartyLabel || (invoice.recordKind === 'bill' ? 'Supplier' : 'Customer');
   const pdfUrl = `/api/xero/invoice-pdf?id=${encodeURIComponent(invoice.id)}`;
   const paidPercent = invoice.total > 0 ? Math.min(100, Math.round((invoice.amountPaid / invoice.total) * 100)) : 0;
   const balanceTone = invoice.isOverdue ? 'danger' : invoice.amountDue > 0 ? 'warn' : 'calm';
 
   return (
-    <div className="modal-shell xero-drawer-shell" role="dialog" aria-modal="true" aria-label={`Invoice ${invoice.number}`}>
+    <div className="modal-shell xero-drawer-shell" role="dialog" aria-modal="true" aria-label={`${recordLabel} ${invoice.number}`}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Close invoice details" />
       <aside className="xero-invoice-drawer">
         <div className="modal-head">
           <div>
-            <p className="eyebrow">Xero invoice</p>
+            <p className="eyebrow">Xero {recordLabel}</p>
             <h3>{invoice.number}</h3>
           </div>
           <button type="button" className="icon-close" onClick={onClose} aria-label="Close">
@@ -2584,11 +2602,11 @@ function XeroInvoiceDrawer({
 
         <section className="xero-detail-grid">
           <div>
-            <span>Customer</span>
-            <strong>{invoice.contact || 'Unknown customer'}</strong>
+            <span>{counterpartyLabel}</span>
+            <strong>{invoice.contact || `Unknown ${counterpartyLabel.toLowerCase()}`}</strong>
           </div>
           <div>
-            <span>Invoice date</span>
+            <span>{recordLabel === 'bill' ? 'Bill date' : 'Invoice date'}</span>
             <strong>{invoice.invoiceDate || 'No date'}</strong>
           </div>
           <div>
@@ -2621,13 +2639,13 @@ function XeroInvoiceDrawer({
 
         <section className="xero-line-items">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Invoice lines" title="Line items" />
+            <PanelTitle eyebrow={`${recordLabel} lines`} title="Line items" />
             <span>{isLoadingDetails ? 'Loading...' : `${invoice.lineItems.length} line(s)`}</span>
           </div>
           {isLoadingDetails ? (
-            <p className="empty-state">Loading full invoice detail from Xero...</p>
+            <p className="empty-state">Loading full {recordLabel} detail from Xero...</p>
           ) : invoice.lineItems.length === 0 ? (
-            <p className="empty-state">No line items were returned for this invoice snapshot.</p>
+            <p className="empty-state">No line items were returned for this {recordLabel} snapshot.</p>
           ) : (
             invoice.lineItems.map((item, index) => (
               <article className="xero-line-item" key={item.id || `${item.description}-${index}`}>
@@ -2808,24 +2826,32 @@ function XeroDraftInvoiceModal({
   );
 }
 
-function XeroRevenueChart({ data, currency }: { data: XeroReport['analytics']['monthlyRevenue']; currency: string }) {
+function XeroRevenueChart({
+  data,
+  currency,
+  emptyLabel = 'Sync Xero to build revenue trend analytics.'
+}: {
+  data: XeroReport['analytics']['monthlyRevenue'];
+  currency: string;
+  emptyLabel?: string;
+}) {
   const maxValue = Math.max(1, ...data.map((month) => month.total));
 
   if (data.length === 0) {
-    return <p className="empty-state">Sync Xero to build revenue trend analytics.</p>;
+    return <p className="empty-state">{emptyLabel}</p>;
   }
 
   return (
     <div className="xero-bars" aria-label="Monthly invoiced revenue chart">
       {data.map((month) => {
         const height = Math.max(6, Math.round((month.total / maxValue) * 100));
-        const outstandingHeight = month.total > 0 ? Math.round((month.outstanding / month.total) * height) : 0;
+        const outstandingPercent = month.total > 0 ? Math.round((month.outstanding / month.total) * 100) : 0;
         return (
           <div className="xero-bar-column" key={month.key}>
             <div className="xero-bar-value">{formatCompactMoney(month.total, currency)}</div>
             <div className="xero-bar-track">
               <span className="xero-bar-fill" style={{ height: `${height}%` }}>
-                {outstandingHeight > 0 && <i style={{ height: `${Math.min(100, outstandingHeight)}%` }} />}
+                {outstandingPercent > 0 && <i style={{ height: `${Math.min(100, outstandingPercent)}%` }} />}
               </span>
             </div>
             <strong>{month.label}</strong>
@@ -2860,11 +2886,21 @@ function XeroStatusChart({ data, currency }: { data: XeroReport['analytics']['st
   );
 }
 
-function XeroClientChart({ data, currency }: { data: XeroReport['analytics']['topClients']; currency: string }) {
+function XeroClientChart({
+  data,
+  currency,
+  valueLabel = 'invoice(s)',
+  emptyLabel = 'No client revenue data returned yet.'
+}: {
+  data: XeroReport['analytics']['topClients'];
+  currency: string;
+  valueLabel?: string;
+  emptyLabel?: string;
+}) {
   const maxRevenue = Math.max(1, ...data.map((client) => client.revenue));
 
   if (data.length === 0) {
-    return <p className="empty-state">No client revenue data returned yet.</p>;
+    return <p className="empty-state">{emptyLabel}</p>;
   }
 
   return (
@@ -2880,7 +2916,7 @@ function XeroClientChart({ data, currency }: { data: XeroReport['analytics']['to
             <div className="xero-progress-track">
               <i style={{ width: `${Math.max(5, Math.round((client.revenue / maxRevenue) * 100))}%` }} />
             </div>
-            <p>{client.invoiceCount} invoice(s){client.outstanding > 0 ? ` · ${formatMoney(client.outstanding, currency)} outstanding` : ''}</p>
+            <p>{client.invoiceCount} {valueLabel}{client.outstanding > 0 ? ` · ${formatMoney(client.outstanding, currency)} outstanding` : ''}</p>
           </div>
         </div>
       ))}
@@ -2925,13 +2961,16 @@ function buildXeroIntelligenceSignals(report: XeroReport, notionReport: NotionJo
   const tasks = [...(notionReport.pipelineTasks || []), ...(notionReport.taskList || [])];
   const activeJobs = jobs.filter((job) => job.title && !job.archived);
   const xeroContactNames = new Set(report.contacts.map((contact) => normalizeMatchText(contact.name)).filter(Boolean));
-  const invoiceMatchText = report.invoices.map((invoice) => normalizeMatchText([
+  const clientInvoices = report.customerInvoices.length > 0
+    ? report.customerInvoices
+    : report.invoices.filter((invoice) => invoice.direction !== 'expense' && invoice.type !== 'ACCPAY');
+  const invoiceMatchText = clientInvoices.map((invoice) => normalizeMatchText([
     invoice.contact,
     invoice.reference,
     invoice.number
   ].join(' ')));
 
-  const overdueClientsWithWork = report.invoices
+  const overdueClientsWithWork = clientInvoices
     .filter((invoice) => invoice.isOverdue)
     .filter((invoice) => activeJobs.some((job) => namesLikelyMatch(invoice.contact, job.client) || textIncludes(invoice.contact, job.title)));
 
@@ -3012,7 +3051,10 @@ function buildXeroIntelligenceSignals(report: XeroReport, notionReport: NotionJo
 }
 
 function getInvoiceCandidateJobs(report: XeroReport, notionReport: NotionJobsReport) {
-  const invoiceMatchText = report.invoices.map((invoice) => normalizeMatchText([
+  const clientInvoices = report.customerInvoices.length > 0
+    ? report.customerInvoices
+    : report.invoices.filter((invoice) => invoice.direction !== 'expense' && invoice.type !== 'ACCPAY');
+  const invoiceMatchText = clientInvoices.map((invoice) => normalizeMatchText([
     invoice.contact,
     invoice.reference,
     invoice.number
@@ -3288,8 +3330,8 @@ function Today({
           <div className="orb">
             <BrainCircuit size={58} />
           </div>
-          <h3>Noah is listening</h3>
-          <p>Your workspace is private. Drafts, recommendations, and workflows stay review-first.</p>
+          <h3>Noah is ready</h3>
+          <p>Your workspace is private. Typed requests, drafts, recommendations, and workflows stay review-first.</p>
           <button className="secondary-action">
             <Play size={16} />
             Start briefing
@@ -3425,8 +3467,7 @@ function Noah({
   sendCommand,
   notes,
   smartBriefing,
-  isNoahThinking,
-  speakNoahReply
+  isNoahThinking
 }: {
   messages: ChatMessage[];
   command: string;
@@ -3435,7 +3476,6 @@ function Noah({
   notes: CaptureNote[];
   smartBriefing: SmartBriefing;
   isNoahThinking: boolean;
-  speakNoahReply: (text: string) => Promise<void>;
 }) {
   const counts = countByCategory(notes);
   const copyMessage = async (text: string) => {
@@ -3460,9 +3500,6 @@ function Noah({
                 <MarkdownText text={message.text} />
                 {message.role === 'noah' && (
                   <div className="bubble-actions">
-                    <button aria-label="Read aloud" title="Read aloud" onClick={() => void speakNoahReply(message.text)}>
-                      <Volume2 size={15} />
-                    </button>
                     <button aria-label="Copy text" title="Copy text" onClick={() => void copyMessage(message.text)}>
                       <Copy size={15} />
                     </button>
@@ -4382,3 +4419,4 @@ function preferredAudioMimeType() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+
