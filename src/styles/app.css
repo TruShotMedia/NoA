@@ -2357,6 +2357,16 @@ h3 {
   grid-template-columns: 1.2fr 0.8fr;
 }
 
+.xero-analytics-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.xero-chart-panel {
+  min-height: 310px;
+}
+
 .panel-row-head {
   margin-bottom: 18px;
 }
@@ -2488,6 +2498,195 @@ h3 {
   padding: 6px 9px;
 }
 
+.xero-bars {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  min-height: 220px;
+}
+
+.xero-bar-column {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-rows: auto 1fr auto;
+  height: 220px;
+  min-width: 0;
+}
+
+.xero-bar-value {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 18px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.xero-bar-track {
+  align-items: end;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  padding: 4px;
+  width: 100%;
+}
+
+.xero-bar-fill {
+  background: linear-gradient(180deg, #dff3ff, #60a5fa);
+  border-radius: 999px;
+  display: block;
+  margin-top: auto;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.xero-bar-fill i {
+  background: rgba(251, 191, 36, 0.64);
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.xero-bar-column strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.xero-progress-list,
+.xero-client-chart {
+  display: grid;
+  gap: 12px;
+}
+
+.xero-progress-row {
+  display: grid;
+  gap: 9px;
+}
+
+.xero-progress-row > div:first-child,
+.xero-client-head {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.xero-progress-row strong,
+.xero-client-head strong {
+  color: #fff;
+}
+
+.xero-progress-row span,
+.xero-client-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.xero-progress-track {
+  background: rgba(0, 0, 0, 0.24);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  height: 10px;
+  overflow: hidden;
+}
+
+.xero-progress-track i {
+  background: linear-gradient(90deg, #60a5fa, #a78bfa);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.xero-client-bar {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto 1fr;
+}
+
+.xero-client-rank {
+  align-items: center;
+  background: rgba(96, 165, 250, 0.14);
+  border-radius: 999px;
+  color: #dbeafe;
+  display: inline-flex;
+  font-weight: 900;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.xero-client-bar p {
+  color: var(--faint);
+  font-size: 12px;
+  margin: 7px 0 0;
+}
+
+.xero-aging-grid {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 220px;
+}
+
+.xero-aging-bucket {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+  grid-template-rows: auto auto 1fr auto;
+  min-height: 220px;
+  padding: 12px;
+  text-align: center;
+}
+
+.xero-aging-bucket span {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.xero-aging-bucket strong {
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.xero-aging-track {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  display: flex;
+  height: 100%;
+  justify-self: center;
+  overflow: hidden;
+  width: 28px;
+}
+
+.xero-aging-track i {
+  background: linear-gradient(180deg, #fda4af, #fb7185);
+  border-radius: inherit;
+  display: block;
+  margin-top: auto;
+  width: 100%;
+}
+
+.xero-aging-bucket p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
 @media (max-width: 1180px) {
   body {
     min-width: 0;
@@ -2527,6 +2726,7 @@ h3 {
     .jobs-board,
     .upcoming-grid,
     .xero-overview,
+    .xero-analytics-grid,
     .xero-grid {
     grid-template-columns: 1fr;
   }
@@ -2833,6 +3033,7 @@ h3 {
   .jobs-board,
   .upcoming-grid,
   .xero-overview,
+  .xero-analytics-grid,
   .xero-grid {
     grid-template-columns: 1fr;
   }
@@ -2916,6 +3117,28 @@ h3 {
   .xero-contact-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .xero-chart-panel {
+    min-height: 0;
+  }
+
+  .xero-bars {
+    gap: 8px;
+    min-height: 190px;
+  }
+
+  .xero-bar-column {
+    height: 190px;
+  }
+
+  .xero-bar-value,
+  .xero-bar-column strong {
+    font-size: 10px;
+  }
+
+  .xero-aging-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .task-row {

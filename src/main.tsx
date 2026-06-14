@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Bot,
   BrainCircuit,
+  BarChart3,
   Building2,
   CheckCircle2,
   ChevronRight,
@@ -26,6 +27,7 @@ import {
   MessageSquareText,
   MoreHorizontal,
   Plus,
+  PieChart,
   Play,
   ReceiptText,
   RefreshCw,
@@ -186,6 +188,7 @@ type XeroInvoice = {
   contact: string;
   status: string;
   type: string;
+  invoiceDate: string;
   dueDate: string;
   updatedAt: string;
   total: number;
@@ -229,6 +232,12 @@ type XeroReport = {
     awaitingPaymentCount: number;
     paidCount: number;
   };
+  analytics: {
+    monthlyRevenue: Array<{ key: string; label: string; total: number; paid: number; outstanding: number }>;
+    statusBreakdown: Array<{ status: string; count: number; amount: number }>;
+    topClients: Array<{ name: string; revenue: number; outstanding: number; overdue: number; invoiceCount: number }>;
+    overdueAging: Array<{ label: string; count: number; amount: number }>;
+  };
   invoices: XeroInvoice[];
   contacts: XeroContact[];
   warnings: string[];
@@ -258,6 +267,17 @@ const emptyXeroReport: XeroReport = {
     draftCount: 0,
     awaitingPaymentCount: 0,
     paidCount: 0
+  },
+  analytics: {
+    monthlyRevenue: [],
+    statusBreakdown: [],
+    topClients: [],
+    overdueAging: [
+      { label: '1-30 days', count: 0, amount: 0 },
+      { label: '31-60 days', count: 0, amount: 0 },
+      { label: '61-90 days', count: 0, amount: 0 },
+      { label: '90+ days', count: 0, amount: 0 }
+    ]
   },
   invoices: [],
   contacts: [],
@@ -2187,6 +2207,8 @@ function XeroView({
   const awaitingInvoices = report.invoices.filter((invoice) => invoice.status === 'AUTHORISED' && invoice.amountDue > 0);
   const activeContacts = report.contacts.filter((contact) => contact.isCustomer || contact.outstanding > 0 || contact.overdue > 0);
   const topRisk = overdueInvoices[0] || awaitingInvoices[0] || null;
+  const monthlyTotal = report.analytics.monthlyRevenue.reduce((sum, month) => sum + month.total, 0);
+  const topClient = report.analytics.topClients[0];
 
   return (
     <section className="page-fade xero-page">
@@ -2238,7 +2260,41 @@ function XeroView({
         </article>
         <XeroMetric icon={WalletCards} label="Amount due" value={formatMoney(report.totals.amountDue, currency)} detail={`${report.totals.awaitingPaymentCount} awaiting payment`} />
         <XeroMetric icon={CircleAlert} label="Overdue" value={formatMoney(report.totals.overdueAmount, currency)} detail={`${report.totals.overdueCount} overdue invoice(s)`} danger={report.totals.overdueCount > 0} />
-        <XeroMetric icon={ReceiptText} label="Drafts" value={String(report.totals.draftCount)} detail={`${report.totals.invoiceCount} recent invoices loaded`} />
+        <XeroMetric icon={BarChart3} label="6 month invoiced" value={formatMoney(monthlyTotal, currency)} detail={topClient ? `Top client: ${topClient.name}` : `${report.totals.invoiceCount} recent invoices loaded`} />
+      </section>
+
+      <section className="xero-analytics-grid">
+        <article className="glass-card xero-panel xero-chart-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Revenue trend" title="Monthly invoiced" />
+            <BarChart3 size={20} />
+          </div>
+          <XeroRevenueChart data={report.analytics.monthlyRevenue} currency={currency} />
+        </article>
+
+        <article className="glass-card xero-panel xero-chart-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Invoice mix" title="Status breakdown" />
+            <PieChart size={20} />
+          </div>
+          <XeroStatusChart data={report.analytics.statusBreakdown} currency={currency} />
+        </article>
+
+        <article className="glass-card xero-panel xero-chart-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Client value" title="Top clients" />
+            <UsersRound size={20} />
+          </div>
+          <XeroClientChart data={report.analytics.topClients} currency={currency} />
+        </article>
+
+        <article className="glass-card xero-panel xero-chart-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Collections" title="Overdue aging" />
+            <Clock3 size={20} />
+          </div>
+          <XeroAgingChart data={report.analytics.overdueAging} currency={currency} />
+        </article>
       </section>
 
       <section className="xero-grid">
@@ -2309,7 +2365,7 @@ function XeroView({
               <a className={`xero-invoice-row ${invoice.isOverdue ? 'overdue' : ''}`} href={invoice.url || undefined} target="_blank" rel="noreferrer" key={invoice.id}>
                 <span>
                   <strong>{invoice.number}</strong>
-                  <small>{invoice.type || 'Invoice'}</small>
+                  <small>{invoice.invoiceDate || invoice.type || 'Invoice'}</small>
                 </span>
                 <span>{invoice.contact || 'Unknown customer'}</span>
                 <span><i>{invoice.status || 'Unknown'}</i></span>
@@ -2344,6 +2400,105 @@ function XeroMetric({
       <strong>{value}</strong>
       <p>{detail}</p>
     </article>
+  );
+}
+
+function XeroRevenueChart({ data, currency }: { data: XeroReport['analytics']['monthlyRevenue']; currency: string }) {
+  const maxValue = Math.max(1, ...data.map((month) => month.total));
+
+  if (data.length === 0) {
+    return <p className="empty-state">Sync Xero to build revenue trend analytics.</p>;
+  }
+
+  return (
+    <div className="xero-bars" aria-label="Monthly invoiced revenue chart">
+      {data.map((month) => {
+        const height = Math.max(6, Math.round((month.total / maxValue) * 100));
+        const outstandingHeight = month.total > 0 ? Math.round((month.outstanding / month.total) * height) : 0;
+        return (
+          <div className="xero-bar-column" key={month.key}>
+            <div className="xero-bar-value">{formatCompactMoney(month.total, currency)}</div>
+            <div className="xero-bar-track">
+              <span className="xero-bar-fill" style={{ height: `${height}%` }}>
+                {outstandingHeight > 0 && <i style={{ height: `${Math.min(100, outstandingHeight)}%` }} />}
+              </span>
+            </div>
+            <strong>{month.label}</strong>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function XeroStatusChart({ data, currency }: { data: XeroReport['analytics']['statusBreakdown']; currency: string }) {
+  const maxAmount = Math.max(1, ...data.map((item) => item.amount));
+
+  if (data.length === 0) {
+    return <p className="empty-state">No invoice status data returned yet.</p>;
+  }
+
+  return (
+    <div className="xero-progress-list">
+      {data.map((item) => (
+        <div className="xero-progress-row" key={item.status}>
+          <div>
+            <strong>{formatXeroStatus(item.status)}</strong>
+            <span>{item.count} invoice(s) · {formatMoney(item.amount, currency)}</span>
+          </div>
+          <div className="xero-progress-track">
+            <i style={{ width: `${Math.max(4, Math.round((item.amount / maxAmount) * 100))}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function XeroClientChart({ data, currency }: { data: XeroReport['analytics']['topClients']; currency: string }) {
+  const maxRevenue = Math.max(1, ...data.map((client) => client.revenue));
+
+  if (data.length === 0) {
+    return <p className="empty-state">No client revenue data returned yet.</p>;
+  }
+
+  return (
+    <div className="xero-client-chart">
+      {data.slice(0, 6).map((client, index) => (
+        <div className="xero-client-bar" key={client.name}>
+          <div className="xero-client-rank">{index + 1}</div>
+          <div>
+            <div className="xero-client-head">
+              <strong>{client.name}</strong>
+              <span>{formatMoney(client.revenue, currency)}</span>
+            </div>
+            <div className="xero-progress-track">
+              <i style={{ width: `${Math.max(5, Math.round((client.revenue / maxRevenue) * 100))}%` }} />
+            </div>
+            <p>{client.invoiceCount} invoice(s){client.outstanding > 0 ? ` · ${formatMoney(client.outstanding, currency)} outstanding` : ''}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function XeroAgingChart({ data, currency }: { data: XeroReport['analytics']['overdueAging']; currency: string }) {
+  const maxAmount = Math.max(1, ...data.map((bucket) => bucket.amount));
+
+  return (
+    <div className="xero-aging-grid">
+      {data.map((bucket) => (
+        <div className={`xero-aging-bucket ${bucket.amount > 0 ? 'active' : ''}`} key={bucket.label}>
+          <span>{bucket.label}</span>
+          <strong>{formatMoney(bucket.amount, currency)}</strong>
+          <div className="xero-aging-track">
+            <i style={{ height: `${bucket.amount > 0 ? Math.max(8, Math.round((bucket.amount / maxAmount) * 100)) : 0}%` }} />
+          </div>
+          <p>{bucket.count} invoice(s)</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -3384,6 +3539,21 @@ function formatMoney(value: number, currency = 'AUD') {
     currency: currency || 'AUD',
     maximumFractionDigits: 2
   }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatCompactMoney(value: number, currency = 'AUD') {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: currency || 'AUD',
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatXeroStatus(status: string) {
+  return status
+    ? status.toLowerCase().replace(/(^|\s|_)\w/g, (match) => match.toUpperCase()).replace(/_/g, ' ')
+    : 'Unknown';
 }
 
 function statusForColumn(column: string) {

@@ -242,12 +242,19 @@ interface Window {
         awaitingPaymentCount: number;
         paidCount: number;
       };
+      analytics: {
+        monthlyRevenue: Array<{ key: string; label: string; total: number; paid: number; outstanding: number }>;
+        statusBreakdown: Array<{ status: string; count: number; amount: number }>;
+        topClients: Array<{ name: string; revenue: number; outstanding: number; overdue: number; invoiceCount: number }>;
+        overdueAging: Array<{ label: string; count: number; amount: number }>;
+      };
       invoices: Array<{
         id: string;
         number: string;
         contact: string;
         status: string;
         type: string;
+        invoiceDate: string;
         dueDate: string;
         updatedAt: string;
         total: number;

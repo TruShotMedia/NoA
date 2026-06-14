@@ -50,7 +50,7 @@ async function getXeroSummary(req, res) {
 
     const [organisationResult, invoicesResult, contactsResult] = await Promise.all([
       getXeroJson(token.accessToken, tenant.tenantId, '/Organisation'),
-      getXeroJson(token.accessToken, tenant.tenantId, '/Invoices?page=1&order=UpdatedDateUTC%20DESC'),
+      getXeroInvoices(token.accessToken, tenant.tenantId),
       getXeroJson(token.accessToken, tenant.tenantId, '/Contacts?page=1&order=UpdatedDateUTC%20DESC')
     ]);
 
@@ -65,6 +65,7 @@ async function getXeroSummary(req, res) {
     const invoices = (invoicesResult.data?.Invoices || []).map(mapInvoice).filter((invoice) => invoice.id);
     const contacts = (contactsResult.data?.Contacts || []).map(mapContact).filter((contact) => contact.id);
     const organisation = mapOrganisation(organisationResult.data?.Organisations?.[0], tenant);
+    const analytics = buildXeroAnalytics(invoices);
 
     return sendJson(res, 200, {
       ok: true,
@@ -72,7 +73,11 @@ async function getXeroSummary(req, res) {
       fetchedAt: new Date().toISOString(),
       organisation,
       totals: buildInvoiceTotals(invoices),
-      invoices: invoices.slice(0, 18),
+      analytics,
+      invoices: invoices
+        .slice()
+        .sort((a, b) => (b.updatedAt || b.invoiceDate || '').localeCompare(a.updatedAt || a.invoiceDate || ''))
+        .slice(0, 30),
       contacts: contacts.slice(0, 12),
       warnings: [
         tokenSave.ok ? '' : tokenSave.message,
@@ -332,6 +337,29 @@ async function getXeroJson(accessToken, tenantId, path) {
   return { ok: true, data: text ? JSON.parse(text) : {}, message: '' };
 }
 
+async function getXeroInvoices(accessToken, tenantId) {
+  const invoices = [];
+  const errors = [];
+
+  for (let page = 1; page <= 4; page += 1) {
+    const result = await getXeroJson(accessToken, tenantId, `/Invoices?page=${page}&order=UpdatedDateUTC%20DESC`);
+    if (!result.ok) {
+      errors.push(result.message);
+      break;
+    }
+
+    const pageInvoices = result.data?.Invoices || [];
+    invoices.push(...pageInvoices);
+    if (pageInvoices.length < 100) break;
+  }
+
+  return {
+    ok: errors.length === 0 || invoices.length > 0,
+    data: { Invoices: invoices },
+    message: errors[0] || ''
+  };
+}
+
 function emptySummary() {
   return {
     fetchedAt: '',
@@ -345,6 +373,7 @@ function emptySummary() {
       awaitingPaymentCount: 0,
       paidCount: 0
     },
+    analytics: emptyAnalytics(),
     invoices: [],
     contacts: [],
     warnings: []
@@ -365,6 +394,7 @@ function mapOrganisation(organisation, tenant) {
 }
 
 function mapInvoice(invoice) {
+  const invoiceDate = normalizeXeroDate(invoice.DateString || invoice.Date);
   const dueDate = normalizeXeroDate(invoice.DueDateString || invoice.DueDate);
   const status = invoice.Status || '';
   const amountDue = numberValue(invoice.AmountDue);
@@ -374,6 +404,7 @@ function mapInvoice(invoice) {
     contact: invoice.Contact?.Name || '',
     status,
     type: invoice.Type || '',
+    invoiceDate,
     dueDate,
     updatedAt: normalizeXeroDate(invoice.UpdatedDateUTC),
     total: numberValue(invoice.Total),
@@ -421,6 +452,107 @@ function buildInvoiceTotals(invoices) {
     awaitingPaymentCount: 0,
     paidCount: 0
   });
+}
+
+function emptyAnalytics() {
+  return {
+    monthlyRevenue: [],
+    statusBreakdown: [],
+    topClients: [],
+    overdueAging: [
+      { label: '1-30 days', count: 0, amount: 0 },
+      { label: '31-60 days', count: 0, amount: 0 },
+      { label: '61-90 days', count: 0, amount: 0 },
+      { label: '90+ days', count: 0, amount: 0 }
+    ]
+  };
+}
+
+function buildXeroAnalytics(invoices) {
+  const invoiceSet = invoices.filter((invoice) => !['VOIDED', 'DELETED'].includes(invoice.status));
+  return {
+    monthlyRevenue: buildMonthlyRevenue(invoiceSet),
+    statusBreakdown: buildStatusBreakdown(invoiceSet),
+    topClients: buildTopClients(invoiceSet),
+    overdueAging: buildOverdueAging(invoiceSet)
+  };
+}
+
+function buildMonthlyRevenue(invoices) {
+  const months = [];
+  const now = new Date();
+  for (let index = 5; index >= 0; index -= 1) {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - index, 1));
+    const key = date.toISOString().slice(0, 7);
+    months.push({
+      key,
+      label: date.toLocaleString('en-AU', { month: 'short', timeZone: 'UTC' }),
+      total: 0,
+      paid: 0,
+      outstanding: 0
+    });
+  }
+
+  const byKey = new Map(months.map((month) => [month.key, month]));
+  for (const invoice of invoices) {
+    const key = (invoice.invoiceDate || '').slice(0, 7);
+    const month = byKey.get(key);
+    if (!month) continue;
+    month.total += invoice.total;
+    if (invoice.status === 'PAID') month.paid += invoice.total;
+    month.outstanding += invoice.amountDue;
+  }
+
+  return months;
+}
+
+function buildStatusBreakdown(invoices) {
+  const totals = new Map();
+  for (const invoice of invoices) {
+    const key = invoice.status || 'UNKNOWN';
+    const current = totals.get(key) || { status: key, count: 0, amount: 0 };
+    current.count += 1;
+    current.amount += invoice.total;
+    totals.set(key, current);
+  }
+
+  return Array.from(totals.values()).sort((a, b) => b.amount - a.amount).slice(0, 8);
+}
+
+function buildTopClients(invoices) {
+  const totals = new Map();
+  for (const invoice of invoices) {
+    const key = invoice.contact || 'Unknown customer';
+    const current = totals.get(key) || { name: key, revenue: 0, outstanding: 0, overdue: 0, invoiceCount: 0 };
+    current.revenue += invoice.total;
+    current.outstanding += invoice.amountDue;
+    if (invoice.isOverdue) current.overdue += invoice.amountDue;
+    current.invoiceCount += 1;
+    totals.set(key, current);
+  }
+
+  return Array.from(totals.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+}
+
+function buildOverdueAging(invoices) {
+  const buckets = emptyAnalytics().overdueAging;
+  const today = localDateString();
+  for (const invoice of invoices) {
+    if (!invoice.isOverdue || !invoice.dueDate) continue;
+    const days = daysBetween(invoice.dueDate, today);
+    const bucket = days <= 30 ? buckets[0] : days <= 60 ? buckets[1] : days <= 90 ? buckets[2] : buckets[3];
+    bucket.count += 1;
+    bucket.amount += invoice.amountDue;
+  }
+  return buckets;
+}
+
+function daysBetween(start, end) {
+  const [startYear, startMonth, startDay] = start.split('-').map(Number);
+  const [endYear, endMonth, endDay] = end.split('-').map(Number);
+  const startDate = Date.UTC(startYear, startMonth - 1, startDay);
+  const endDate = Date.UTC(endYear, endMonth - 1, endDay);
+  return Math.max(0, Math.floor((endDate - startDate) / 86400000));
 }
 
 function readContactPhone(phones = []) {
