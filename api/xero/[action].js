@@ -23,19 +23,21 @@ async function getXeroSummary(req, res) {
     return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
   }
 
-  if (!process.env.XERO_CLIENT_ID || !process.env.XERO_CLIENT_SECRET || !process.env.XERO_REFRESH_TOKEN) {
+  const storedRefreshToken = await getStoredXeroRefreshToken();
+  if (!process.env.XERO_CLIENT_ID || !process.env.XERO_CLIENT_SECRET || !storedRefreshToken) {
     return sendJson(res, 200, {
       ok: false,
-      message: 'Xero needs XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REFRESH_TOKEN in Vercel environment variables.',
+      message: 'Xero needs XERO_CLIENT_ID, XERO_CLIENT_SECRET, and a valid refresh token. Reconnect Xero from /api/xero/start if the previous token was consumed.',
       ...emptySummary()
     });
   }
 
   try {
-    const token = await refreshXeroAccessToken();
+    const token = await refreshXeroAccessToken(storedRefreshToken);
     if (!token.ok) {
       return sendJson(res, 200, { ok: false, message: token.message, ...emptySummary() });
     }
+    const tokenSave = token.refreshToken ? await saveStoredXeroRefreshToken(token.refreshToken) : { ok: true, message: '' };
 
     const tenant = await resolveXeroTenant(token.accessToken);
     if (!tenant.tenantId) {
@@ -73,6 +75,7 @@ async function getXeroSummary(req, res) {
       invoices: invoices.slice(0, 18),
       contacts: contacts.slice(0, 12),
       warnings: [
+        tokenSave.ok ? '' : tokenSave.message,
         organisationResult.ok ? '' : organisationResult.message,
         invoicesResult.ok ? '' : invoicesResult.message,
         contactsResult.ok ? '' : contactsResult.message
@@ -164,12 +167,14 @@ async function handleXeroCallback(req, res) {
 
     const tenants = await getXeroTenants(token.accessToken);
     const preferredTenant = tenants[0] || {};
+    const tokenSave = token.refreshToken ? await saveStoredXeroRefreshToken(token.refreshToken) : { ok: false, message: 'No refresh token was returned by Xero.' };
 
     return sendHtml(res, 200, renderSuccess({
       refreshToken: token.refreshToken,
       tenantId: preferredTenant.tenantId || '',
       tenantName: preferredTenant.tenantName || preferredTenant.tenantId || 'Xero tenant',
-      redirectUri
+      redirectUri,
+      tokenSave
     }));
   } catch (caught) {
     return sendHtml(res, 500, renderMessage('Xero setup failed', [
@@ -187,11 +192,11 @@ function getAction(req) {
   return pathname.split('/').filter(Boolean).pop() || '';
 }
 
-async function refreshXeroAccessToken() {
+async function refreshXeroAccessToken(refreshToken) {
   const credentials = Buffer.from(`${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`).toString('base64');
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
-    refresh_token: process.env.XERO_REFRESH_TOKEN || ''
+    refresh_token: refreshToken || ''
   });
 
   const response = await fetch('https://identity.xero.com/connect/token', {
@@ -208,15 +213,93 @@ async function refreshXeroAccessToken() {
   if (!response.ok) {
     return {
       ok: false,
-      message: `Xero token refresh failed with status ${response.status}. ${summariseApiError(text)}`
+      message: `Xero token refresh failed with status ${response.status}. ${summariseApiError(text)} If the message says the refresh token was consumed, open /api/xero/start and approve Xero again.`
     };
   }
 
   const data = JSON.parse(text);
   return {
     ok: true,
-    accessToken: data.access_token || ''
+    accessToken: data.access_token || '',
+    refreshToken: data.refresh_token || ''
   };
+}
+
+async function getStoredXeroRefreshToken() {
+  const stored = await readPrivateSetting('xero_refresh_token');
+  return stored || process.env.XERO_REFRESH_TOKEN || '';
+}
+
+async function saveStoredXeroRefreshToken(refreshToken) {
+  if (!refreshToken) return { ok: false, message: 'Xero did not return a replacement refresh token.' };
+  if (!canUsePrivateSettingsStore()) {
+    return {
+      ok: false,
+      message: 'Xero returned a replacement refresh token, but NoA cannot save it automatically until SUPABASE_SERVICE_ROLE_KEY and the noa_private_settings table are configured.'
+    };
+  }
+
+  return writePrivateSetting('xero_refresh_token', refreshToken);
+}
+
+function canUsePrivateSettingsStore() {
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+async function readPrivateSetting(key) {
+  if (!canUsePrivateSettingsStore()) return '';
+
+  try {
+    const baseUrl = new URL(process.env.SUPABASE_URL).origin;
+    const response = await fetch(`${baseUrl}/rest/v1/noa_private_settings?key=eq.${encodeURIComponent(key)}&select=value&limit=1`, {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Accept: 'application/json'
+      }
+    });
+
+    if (!response.ok) return '';
+    const rows = await response.json();
+    return rows[0]?.value || '';
+  } catch {
+    return '';
+  }
+}
+
+async function writePrivateSetting(key, value) {
+  try {
+    const baseUrl = new URL(process.env.SUPABASE_URL).origin;
+    const response = await fetch(`${baseUrl}/rest/v1/noa_private_settings?on_conflict=key`, {
+      method: 'POST',
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'content-type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({
+        key,
+        value,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      const body = await safeReadText(response);
+      return {
+        ok: false,
+        message: `NoA refreshed Xero for this request, but could not save the replacement refresh token. ${summariseApiError(body)}`
+      };
+    }
+
+    return { ok: true, message: 'Saved rotating Xero refresh token.' };
+  } catch (caught) {
+    return {
+      ok: false,
+      message: caught instanceof Error ? caught.message : 'Could not save the replacement Xero refresh token.'
+    };
+  }
 }
 
 async function resolveXeroTenant(accessToken) {
@@ -457,7 +540,7 @@ function renderMessage(title, lines) {
   return page(title, `<div class="panel"><h1>${escapeHtml(title)}</h1>${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}</div>`);
 }
 
-function renderSuccess({ refreshToken, tenantId, tenantName, redirectUri }) {
+function renderSuccess({ refreshToken, tenantId, tenantName, redirectUri, tokenSave }) {
   const envBlock = [
     `XERO_REFRESH_TOKEN=${refreshToken}`,
     tenantId ? `XERO_TENANT_ID=${tenantId}` : '',
@@ -469,6 +552,7 @@ function renderSuccess({ refreshToken, tenantId, tenantName, redirectUri }) {
       <p class="eyebrow">NoA Xero setup</p>
       <h1>Xero connected</h1>
       <p>NoA received a refresh token for <strong>${escapeHtml(tenantName)}</strong>. Copy these values into Vercel Environment Variables, then redeploy NoA.</p>
+      ${tokenSave?.ok ? '<p class="success">NoA also saved the rotating refresh token to Supabase for future syncs.</p>' : `<p class="warning">${escapeHtml(tokenSave?.message || 'NoA could not save the rotating refresh token automatically yet.')}</p>`}
       <label>Vercel env values</label>
       <textarea readonly>${escapeHtml(envBlock)}</textarea>
       <div class="actions">
@@ -501,6 +585,7 @@ function page(title, body) {
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
     a { border-radius: 999px; background: #dff3ff; color: #061018; display: inline-flex; font-weight: 800; padding: 12px 16px; text-decoration: none; }
     a + a { background: rgba(255,255,255,.1); color: #eef4ff; }
+    .success { border-radius: 16px; background: rgba(52,211,153,.12); color: #bbf7d0; padding: 12px 14px; }
     .warning { border-radius: 16px; background: rgba(251,191,36,.12); color: #fde68a; padding: 12px 14px; }
     strong { color: #fff; }
   </style>

@@ -342,15 +342,17 @@ const integrationSetups: IntegrationSetup[] = [
     name: 'Supabase',
     role: 'Stores durable memory, approvals, events, tasks, projects, clients, and conversations.',
     statusLabel: 'Schema next',
-    credential: 'Vercel env -> Supabase URL and anon key',
+    credential: 'Vercel env -> Supabase URL, anon key, and private service role key',
     steps: [
       'Create a Supabase project.',
       'Add the project URL and anon key locally.',
-      'Run the NoA memory schema before syncing local captures.'
+      'Run the NoA memory schema before syncing local captures.',
+      'Add the service role key in Vercel if you want NoA to store private rotating tokens such as Xero.'
     ],
     fields: [
       { key: 'SUPABASE_URL', label: 'Project URL', type: 'url', required: true, placeholder: 'https://your-project.supabase.co' },
-      { key: 'SUPABASE_ANON_KEY', label: 'Anon key', type: 'password', required: true, placeholder: 'eyJ...' }
+      { key: 'SUPABASE_ANON_KEY', label: 'Anon key', type: 'password', required: true, placeholder: 'eyJ...' },
+      { key: 'SUPABASE_SERVICE_ROLE_KEY', label: 'Service role key', type: 'password', placeholder: 'Keeps private rotating tokens server-side' }
     ]
   },
   {
@@ -397,13 +399,14 @@ const integrationSetups: IntegrationSetup[] = [
     steps: [
       'Create a Xero OAuth2 app in the Xero developer portal.',
       'Add https://no-a.vercel.app/api/xero/callback as the exact redirect URI.',
+      'Run the Supabase private settings SQL and add SUPABASE_SERVICE_ROLE_KEY so NoA can preserve rotating refresh tokens.',
       'Save XERO_CLIENT_ID and XERO_CLIENT_SECRET in Vercel, redeploy, then open https://no-a.vercel.app/api/xero/start.',
-      'Copy the returned refresh token and tenant id into Vercel environment variables, then redeploy again.'
+      'NoA will save the returned refresh token automatically when the private token store is configured.'
     ],
     fields: [
       { key: 'XERO_CLIENT_ID', label: 'Client ID', required: true, placeholder: 'Xero app client id' },
       { key: 'XERO_CLIENT_SECRET', label: 'Client secret', type: 'password', required: true, placeholder: 'Xero app client secret' },
-      { key: 'XERO_REFRESH_TOKEN', label: 'Refresh token', type: 'password', required: true, placeholder: 'OAuth refresh token with offline_access' },
+      { key: 'XERO_REFRESH_TOKEN', label: 'Refresh token fallback', type: 'password', placeholder: 'Used once before Supabase stores the rotating token' },
       { key: 'XERO_TENANT_ID', label: 'Tenant ID', placeholder: 'Returned by /api/xero/callback' },
       { key: 'XERO_REDIRECT_URI', label: 'Redirect URI', placeholder: 'https://no-a.vercel.app/api/xero/callback' }
     ]

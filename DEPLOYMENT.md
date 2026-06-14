@@ -43,6 +43,7 @@ OPENAI_MODEL=gpt-4.1-mini
 
 SUPABASE_URL=
 SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
 N8N_WEBHOOK_URL=
 N8N_SHARED_SECRET=
@@ -65,6 +66,12 @@ Voice and offline wake-word features are intentionally disabled in the Vercel bu
 
 ## Xero OAuth Setup
 
+Xero refresh tokens rotate. Each refresh returns a replacement refresh token, and the old token can become invalid. To keep Xero working after the first sync, NoA needs a private server-side place to save the latest token.
+
+1. Run `docs/supabase-xero-token-store.sql` in the Supabase SQL editor.
+2. Add `SUPABASE_SERVICE_ROLE_KEY` to Vercel Production environment variables. Keep it server-side only.
+3. Redeploy NoA.
+
 In your Xero developer app, add this exact redirect URI:
 
 ```text
@@ -77,4 +84,4 @@ After `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` are saved in Vercel and redeploy
 https://no-a.vercel.app/api/xero/start
 ```
 
-Approve access in Xero. NoA will show the generated `XERO_REFRESH_TOKEN`, discovered `XERO_TENANT_ID`, and redirect URI to copy back into Vercel Environment Variables. Redeploy once more after saving them.
+Approve access in Xero. NoA will save the generated rotating `XERO_REFRESH_TOKEN` into Supabase when the private token store is configured. It will also show the token and discovered `XERO_TENANT_ID` as a manual fallback.
