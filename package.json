@@ -5,7 +5,7 @@
   "author": "TruShot Media",
   "private": true,
   "engines": {
-    "node": "22.x"
+    "node": ">=22 <25"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5178 --strictPort",
