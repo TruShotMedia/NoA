@@ -261,6 +261,15 @@ type XeroReport = {
   warnings: string[];
 };
 
+type XeroIntelligenceSignal = {
+  id: string;
+  tone: 'danger' | 'warn' | 'calm';
+  label: string;
+  title: string;
+  detail: string;
+  action: string;
+};
+
 const emptyJobsReport: NotionJobsReport = {
   tasks: [],
   pipelineTasks: [],
@@ -670,6 +679,7 @@ function App() {
     }
     if (screen === 'xero') {
       void loadXeroSummary();
+      void loadNotionJobs();
     }
   }, [screen]);
 
@@ -1373,8 +1383,11 @@ function App() {
         {screen === 'xero' && (
           <XeroView
             report={xeroReport}
+            notionReport={jobsReport}
             isLoading={isLoadingXero}
+            isLoadingNotion={isLoadingJobs}
             refreshXero={loadXeroSummary}
+            refreshNotion={loadNotionJobs}
           />
         )}
         {screen === 'plan' && <Plan />}
@@ -2213,12 +2226,18 @@ function UpcomingJobCard({
 
 function XeroView({
   report,
+  notionReport,
   isLoading,
-  refreshXero
+  isLoadingNotion,
+  refreshXero,
+  refreshNotion
 }: {
   report: XeroReport;
+  notionReport: NotionJobsReport;
   isLoading: boolean;
+  isLoadingNotion: boolean;
   refreshXero: () => Promise<XeroReport>;
+  refreshNotion: () => Promise<NotionJobsReport>;
 }) {
   const currency = report.organisation?.baseCurrency || report.invoices.find((invoice) => invoice.currencyCode)?.currencyCode || 'AUD';
   const overdueInvoices = report.invoices.filter((invoice) => invoice.isOverdue);
@@ -2229,6 +2248,10 @@ function XeroView({
   const topClient = report.analytics.topClients[0];
   const [selectedInvoice, setSelectedInvoice] = useState<XeroInvoice | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState('');
+  const intelligenceSignals = useMemo(
+    () => buildXeroIntelligenceSignals(report, notionReport),
+    [report, notionReport]
+  );
 
   const openInvoiceDetails = async (invoice: XeroInvoice) => {
     setSelectedInvoice(invoice);
@@ -2261,6 +2284,10 @@ function XeroView({
           <button className="secondary-action" onClick={() => void refreshXero()} disabled={isLoading}>
             <RefreshCw size={16} />
             {isLoading ? 'Syncing...' : 'Sync Xero'}
+          </button>
+          <button className="secondary-action" onClick={() => void refreshNotion()} disabled={isLoadingNotion}>
+            <RefreshCw size={16} />
+            {isLoadingNotion ? 'Syncing...' : 'Sync Notion'}
           </button>
         </div>
       </article>
@@ -2378,6 +2405,27 @@ function XeroView({
           </div>
         </article>
       </section>
+
+      <article className="glass-card wide xero-panel xero-intelligence-panel">
+        <div className="panel-row-head">
+          <PanelTitle eyebrow="NoA cross-check" title="Finance intelligence" />
+          <Sparkles size={20} />
+        </div>
+        <div className="xero-intelligence-grid">
+          {intelligenceSignals.length === 0 ? (
+            <p className="empty-state">Sync Xero and Notion to surface cross-system finance signals.</p>
+          ) : (
+            intelligenceSignals.map((signal) => (
+              <article className={`xero-signal ${signal.tone}`} key={signal.id}>
+                <span>{signal.label}</span>
+                <strong>{signal.title}</strong>
+                <p>{signal.detail}</p>
+                <small>{signal.action}</small>
+              </article>
+            ))
+          )}
+        </div>
+      </article>
 
       <article className="glass-card wide xero-panel">
         <div className="panel-row-head">
@@ -2669,6 +2717,120 @@ function XeroFocusItem({ tone, title, detail }: { tone: 'danger' | 'warn' | 'cal
       </div>
     </div>
   );
+}
+
+function buildXeroIntelligenceSignals(report: XeroReport, notionReport: NotionJobsReport): XeroIntelligenceSignal[] {
+  const signals: XeroIntelligenceSignal[] = [];
+  const jobs = notionReport.upcomingJobs || [];
+  const tasks = [...(notionReport.pipelineTasks || []), ...(notionReport.taskList || [])];
+  const activeJobs = jobs.filter((job) => job.title && !job.archived);
+  const xeroContactNames = new Set(report.contacts.map((contact) => normalizeMatchText(contact.name)).filter(Boolean));
+  const invoiceMatchText = report.invoices.map((invoice) => normalizeMatchText([
+    invoice.contact,
+    invoice.reference,
+    invoice.number
+  ].join(' ')));
+
+  const overdueClientsWithWork = report.invoices
+    .filter((invoice) => invoice.isOverdue)
+    .filter((invoice) => activeJobs.some((job) => namesLikelyMatch(invoice.contact, job.client) || textIncludes(invoice.contact, job.title)));
+
+  if (overdueClientsWithWork.length > 0) {
+    const invoice = overdueClientsWithWork[0];
+    signals.push({
+      id: `overdue-active-${invoice.id}`,
+      tone: 'danger',
+      label: 'Client risk',
+      title: `${invoice.contact || 'A client'} has overdue money and active work`,
+      detail: `${invoice.number} has ${formatMoney(invoice.amountDue, invoice.currencyCode || report.organisation?.baseCurrency || 'AUD')} outstanding while Notion shows related active job context.`,
+      action: 'Review the job context before doing more delivery work or draft a follow-up for approval.'
+    });
+  }
+
+  const possibleUninvoicedJobs = activeJobs
+    .filter((job) => ['Overdue', 'Due today', 'Tomorrow', 'Due soon', 'Scheduled'].includes(job.dueState))
+    .filter((job) => !invoiceMatchText.some((text) => textIncludes(text, job.title) || textIncludes(text, job.client)))
+    .slice(0, 3);
+
+  if (possibleUninvoicedJobs.length > 0) {
+    const job = possibleUninvoicedJobs[0];
+    signals.push({
+      id: `uninvoiced-${job.id}`,
+      tone: 'warn',
+      label: 'Possible invoice gap',
+      title: `${job.title} may not be represented in recent Xero invoices`,
+      detail: `${job.client || 'This job'} appears in Notion, but I could not find a recent invoice match by job/client text.`,
+      action: 'Check whether this job has been invoiced, then create a draft invoice workflow in Phase 4.'
+    });
+  }
+
+  const unmappedJobs = activeJobs
+    .filter((job) => job.client)
+    .filter((job) => !xeroContactNames.has(normalizeMatchText(job.client)))
+    .slice(0, 3);
+
+  if (unmappedJobs.length > 0) {
+    const job = unmappedJobs[0];
+    signals.push({
+      id: `unmapped-${job.id}`,
+      tone: 'warn',
+      label: 'Contact mapping',
+      title: `${job.client} is not an obvious Xero contact match`,
+      detail: `${job.title} has a Notion client name that does not exactly match the Xero contact snapshot.`,
+      action: 'Confirm the Xero contact or add a client mapping so invoices and jobs connect cleanly.'
+    });
+  }
+
+  const financeTasks = tasks
+    .filter((task) => /invoice|payment|xero|deposit|quote|paid|overdue/i.test(`${task.title} ${task.description}`))
+    .slice(0, 3);
+
+  if (financeTasks.length > 0) {
+    const task = financeTasks[0];
+    signals.push({
+      id: `finance-task-${task.id}`,
+      tone: task.priority === 'High' ? 'danger' : 'calm',
+      label: 'Finance task',
+      title: task.title,
+      detail: `${task.status || 'Active'}${task.dueDate ? ` · ${task.dueState} ${task.dueDate}` : ''}`,
+      action: 'Keep this visible while reviewing Xero so accounting work does not detach from delivery work.'
+    });
+  }
+
+  if (signals.length === 0 && (report.ok || activeJobs.length > 0)) {
+    signals.push({
+      id: 'all-clear',
+      tone: 'calm',
+      label: 'No obvious gaps',
+      title: 'NoA did not find a strong Xero/Notion mismatch',
+      detail: 'Recent invoices, contacts, and active Notion jobs did not produce an obvious warning-level signal.',
+      action: 'Next useful step is approval-gated draft invoice creation from a Notion job.'
+    });
+  }
+
+  return signals.slice(0, 4);
+}
+
+function normalizeMatchText(value: string) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(pty|ltd|limited|the|and|media|co|company)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function namesLikelyMatch(a: string, b: string) {
+  const left = normalizeMatchText(a);
+  const right = normalizeMatchText(b);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function textIncludes(haystack: string, needle: string) {
+  const normalizedHaystack = normalizeMatchText(haystack);
+  const normalizedNeedle = normalizeMatchText(needle);
+  return Boolean(normalizedHaystack && normalizedNeedle && normalizedHaystack.includes(normalizedNeedle));
 }
 
 function NotionItemModal({

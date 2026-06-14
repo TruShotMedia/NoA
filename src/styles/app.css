@@ -2502,6 +2502,67 @@ h3 {
   padding: 6px 9px;
 }
 
+.xero-intelligence-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.xero-intelligence-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.xero-signal {
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: grid;
+  gap: 8px;
+  min-height: 178px;
+  padding: 16px;
+}
+
+.xero-signal span {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.xero-signal strong {
+  color: #fff;
+  line-height: 1.25;
+}
+
+.xero-signal p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.xero-signal small {
+  align-self: end;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.35;
+  padding: 10px;
+}
+
+.xero-signal.danger {
+  box-shadow: inset 3px 0 0 rgba(251, 113, 133, 0.9), inset 0 0 0 1px rgba(251, 113, 133, 0.12);
+}
+
+.xero-signal.warn {
+  box-shadow: inset 3px 0 0 rgba(251, 191, 36, 0.9), inset 0 0 0 1px rgba(251, 191, 36, 0.12);
+}
+
+.xero-signal.calm {
+  box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.85), inset 0 0 0 1px rgba(52, 211, 153, 0.1);
+}
+
 .xero-drawer-shell {
   align-items: stretch;
   justify-content: flex-end;
@@ -2874,6 +2935,7 @@ h3 {
     .upcoming-grid,
     .xero-overview,
     .xero-analytics-grid,
+    .xero-intelligence-grid,
     .xero-grid {
     grid-template-columns: 1fr;
   }
@@ -3181,6 +3243,7 @@ h3 {
   .upcoming-grid,
   .xero-overview,
   .xero-analytics-grid,
+  .xero-intelligence-grid,
   .xero-grid {
     grid-template-columns: 1fr;
   }
