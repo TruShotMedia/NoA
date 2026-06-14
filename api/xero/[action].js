@@ -11,6 +11,7 @@ module.exports = async function handler(req, res) {
   if (action === 'start') return startXero(req, res);
   if (action === 'callback') return handleXeroCallback(req, res);
   if (action === 'summary') return getXeroSummary(req, res);
+  if (action === 'invoice-pdf') return getXeroInvoicePdf(req, res);
 
   return sendJson(res, 404, {
     ok: false,
@@ -120,6 +121,57 @@ async function startXero(req, res) {
   res.statusCode = 302;
   res.setHeader('location', url.toString());
   res.end();
+}
+
+async function getXeroInvoicePdf(req, res) {
+  if (req.method !== 'GET') {
+    return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  const requestUrl = new URL(req.url || '/', `https://${req.headers.host || 'no-a.vercel.app'}`);
+  const invoiceId = requestUrl.searchParams.get('id') || '';
+  if (!invoiceId) return sendJson(res, 400, { ok: false, message: 'No invoice id was provided.' });
+
+  const storedRefreshToken = await getStoredXeroRefreshToken();
+  if (!process.env.XERO_CLIENT_ID || !process.env.XERO_CLIENT_SECRET || !storedRefreshToken) {
+    return sendJson(res, 400, { ok: false, message: 'Xero is not connected.' });
+  }
+
+  try {
+    const token = await refreshXeroAccessToken(storedRefreshToken);
+    if (!token.ok) return sendJson(res, 400, { ok: false, message: token.message });
+    if (token.refreshToken) await saveStoredXeroRefreshToken(token.refreshToken);
+
+    const tenant = await resolveXeroTenant(token.accessToken);
+    if (!tenant.tenantId) return sendJson(res, 400, { ok: false, message: 'No Xero tenant was returned.' });
+
+    const response = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${encodeURIComponent(invoiceId)}`, {
+      headers: {
+        Authorization: `Bearer ${token.accessToken}`,
+        'xero-tenant-id': tenant.tenantId,
+        Accept: 'application/pdf'
+      }
+    });
+
+    if (!response.ok) {
+      const text = await safeReadText(response);
+      return sendJson(res, response.status, {
+        ok: false,
+        message: `Xero could not return the invoice PDF. ${summariseApiError(text)}`
+      });
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/pdf');
+    res.setHeader('content-disposition', `inline; filename="xero-invoice-${invoiceId}.pdf"`);
+    res.end(bytes);
+  } catch (caught) {
+    return sendJson(res, 500, {
+      ok: false,
+      message: caught instanceof Error ? caught.message : 'Unknown Xero PDF error.'
+    });
+  }
 }
 
 async function handleXeroCallback(req, res) {
@@ -398,20 +450,43 @@ function mapInvoice(invoice) {
   const dueDate = normalizeXeroDate(invoice.DueDateString || invoice.DueDate);
   const status = invoice.Status || '';
   const amountDue = numberValue(invoice.AmountDue);
+  const contact = invoice.Contact || {};
   return {
     id: invoice.InvoiceID || '',
     number: invoice.InvoiceNumber || invoice.Reference || 'Draft invoice',
-    contact: invoice.Contact?.Name || '',
+    reference: invoice.Reference || '',
+    contact: contact.Name || '',
+    contactId: contact.ContactID || '',
     status,
     type: invoice.Type || '',
     invoiceDate,
     dueDate,
     updatedAt: normalizeXeroDate(invoice.UpdatedDateUTC),
+    subTotal: numberValue(invoice.SubTotal),
+    totalTax: numberValue(invoice.TotalTax),
     total: numberValue(invoice.Total),
     amountDue,
+    amountPaid: numberValue(invoice.AmountPaid),
+    amountCredited: numberValue(invoice.AmountCredited),
     currencyCode: invoice.CurrencyCode || '',
+    fullyPaidOnDate: normalizeXeroDate(invoice.FullyPaidOnDate),
     isOverdue: Boolean(dueDate && amountDue > 0 && dueDate < localDateString()),
+    lineItems: (invoice.LineItems || []).map(mapInvoiceLineItem).filter((item) => item.description || item.itemCode),
     url: invoice.InvoiceID ? `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${invoice.InvoiceID}` : ''
+  };
+}
+
+function mapInvoiceLineItem(lineItem) {
+  return {
+    id: lineItem.LineItemID || '',
+    description: lineItem.Description || '',
+    itemCode: lineItem.ItemCode || '',
+    quantity: numberValue(lineItem.Quantity),
+    unitAmount: numberValue(lineItem.UnitAmount),
+    taxAmount: numberValue(lineItem.TaxAmount),
+    lineAmount: numberValue(lineItem.LineAmount),
+    accountCode: lineItem.AccountCode || '',
+    taxType: lineItem.TaxType || ''
   };
 }
 

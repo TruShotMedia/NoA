@@ -185,16 +185,34 @@ type NotionJobsReport = {
 type XeroInvoice = {
   id: string;
   number: string;
+  reference: string;
   contact: string;
+  contactId: string;
   status: string;
   type: string;
   invoiceDate: string;
   dueDate: string;
   updatedAt: string;
+  subTotal: number;
+  totalTax: number;
   total: number;
   amountDue: number;
+  amountPaid: number;
+  amountCredited: number;
   currencyCode: string;
+  fullyPaidOnDate: string;
   isOverdue: boolean;
+  lineItems: Array<{
+    id: string;
+    description: string;
+    itemCode: string;
+    quantity: number;
+    unitAmount: number;
+    taxAmount: number;
+    lineAmount: number;
+    accountCode: string;
+    taxType: string;
+  }>;
   url: string;
 };
 
@@ -2209,6 +2227,7 @@ function XeroView({
   const topRisk = overdueInvoices[0] || awaitingInvoices[0] || null;
   const monthlyTotal = report.analytics.monthlyRevenue.reduce((sum, month) => sum + month.total, 0);
   const topClient = report.analytics.topClients[0];
+  const [selectedInvoice, setSelectedInvoice] = useState<XeroInvoice | null>(null);
 
   return (
     <section className="page-fade xero-page">
@@ -2362,7 +2381,7 @@ function XeroView({
             <p className="empty-state">No invoices returned yet.</p>
           ) : (
             report.invoices.map((invoice) => (
-              <a className={`xero-invoice-row ${invoice.isOverdue ? 'overdue' : ''}`} href={invoice.url || undefined} target="_blank" rel="noreferrer" key={invoice.id}>
+              <button className={`xero-invoice-row ${invoice.isOverdue ? 'overdue' : ''}`} onClick={() => setSelectedInvoice(invoice)} key={invoice.id}>
                 <span>
                   <strong>{invoice.number}</strong>
                   <small>{invoice.invoiceDate || invoice.type || 'Invoice'}</small>
@@ -2371,11 +2390,18 @@ function XeroView({
                 <span><i>{invoice.status || 'Unknown'}</i></span>
                 <span>{invoice.dueDate || 'No date'}</span>
                 <span>{formatMoney(invoice.amountDue, invoice.currencyCode || currency)}</span>
-              </a>
+              </button>
             ))
           )}
         </div>
       </article>
+      {selectedInvoice && (
+        <XeroInvoiceDrawer
+          invoice={selectedInvoice}
+          currency={selectedInvoice.currencyCode || currency}
+          onClose={() => setSelectedInvoice(null)}
+        />
+      )}
     </section>
   );
 }
@@ -2400,6 +2426,117 @@ function XeroMetric({
       <strong>{value}</strong>
       <p>{detail}</p>
     </article>
+  );
+}
+
+function XeroInvoiceDrawer({
+  invoice,
+  currency,
+  onClose
+}: {
+  invoice: XeroInvoice;
+  currency: string;
+  onClose: () => void;
+}) {
+  const pdfUrl = `/api/xero/invoice-pdf?id=${encodeURIComponent(invoice.id)}`;
+  const paidPercent = invoice.total > 0 ? Math.min(100, Math.round((invoice.amountPaid / invoice.total) * 100)) : 0;
+  const balanceTone = invoice.isOverdue ? 'danger' : invoice.amountDue > 0 ? 'warn' : 'calm';
+
+  return (
+    <div className="modal-shell xero-drawer-shell" role="dialog" aria-modal="true" aria-label={`Invoice ${invoice.number}`}>
+      <button className="modal-backdrop" onClick={onClose} aria-label="Close invoice details" />
+      <aside className="xero-invoice-drawer">
+        <div className="modal-head">
+          <div>
+            <p className="eyebrow">Xero invoice</p>
+            <h3>{invoice.number}</h3>
+          </div>
+          <button type="button" className="icon-close" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className={`xero-invoice-status ${balanceTone}`}>
+          <span>{formatXeroStatus(invoice.status)}</span>
+          <strong>{invoice.amountDue > 0 ? `${formatMoney(invoice.amountDue, currency)} due` : 'No balance due'}</strong>
+          <p>{invoice.isOverdue ? `Overdue since ${invoice.dueDate}` : invoice.dueDate ? `Due ${invoice.dueDate}` : 'No due date recorded'}</p>
+        </div>
+
+        <section className="xero-detail-grid">
+          <div>
+            <span>Customer</span>
+            <strong>{invoice.contact || 'Unknown customer'}</strong>
+          </div>
+          <div>
+            <span>Invoice date</span>
+            <strong>{invoice.invoiceDate || 'No date'}</strong>
+          </div>
+          <div>
+            <span>Reference</span>
+            <strong>{invoice.reference || 'None'}</strong>
+          </div>
+          <div>
+            <span>Paid on</span>
+            <strong>{invoice.fullyPaidOnDate || 'Not fully paid'}</strong>
+          </div>
+        </section>
+
+        <section className="xero-payment-card">
+          <div className="xero-payment-head">
+            <span>Payment progress</span>
+            <strong>{paidPercent}%</strong>
+          </div>
+          <div className="xero-progress-track">
+            <i style={{ width: `${paidPercent}%` }} />
+          </div>
+          <div className="xero-total-grid">
+            <div><span>Subtotal</span><strong>{formatMoney(invoice.subTotal, currency)}</strong></div>
+            <div><span>Tax</span><strong>{formatMoney(invoice.totalTax, currency)}</strong></div>
+            <div><span>Total</span><strong>{formatMoney(invoice.total, currency)}</strong></div>
+            <div><span>Paid</span><strong>{formatMoney(invoice.amountPaid, currency)}</strong></div>
+            <div><span>Credited</span><strong>{formatMoney(invoice.amountCredited, currency)}</strong></div>
+            <div><span>Balance</span><strong>{formatMoney(invoice.amountDue, currency)}</strong></div>
+          </div>
+        </section>
+
+        <section className="xero-line-items">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Invoice lines" title="Line items" />
+            <span>{invoice.lineItems.length} line(s)</span>
+          </div>
+          {invoice.lineItems.length === 0 ? (
+            <p className="empty-state">No line items were returned for this invoice snapshot.</p>
+          ) : (
+            invoice.lineItems.map((item, index) => (
+              <article className="xero-line-item" key={item.id || `${item.description}-${index}`}>
+                <div>
+                  <strong>{item.description || item.itemCode || 'Line item'}</strong>
+                  <p>{[item.itemCode, item.accountCode, item.taxType].filter(Boolean).join(' · ') || 'No item metadata'}</p>
+                </div>
+                <div>
+                  <span>{formatQuantity(item.quantity)} x {formatMoney(item.unitAmount, currency)}</span>
+                  <strong>{formatMoney(item.lineAmount, currency)}</strong>
+                </div>
+              </article>
+            ))
+          )}
+        </section>
+
+        <div className="modal-actions">
+          {invoice.url && (
+            <a className="secondary-action" href={invoice.url} target="_blank" rel="noreferrer">
+              <ArrowUpRight size={16} />
+              Open in Xero
+            </a>
+          )}
+          <a className="primary-action" href={pdfUrl} target="_blank" rel="noreferrer">
+            <ReceiptText size={16} />
+            View PDF
+          </a>
+          <button type="button" className="secondary-action" onClick={onClose}>Close</button>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -3554,6 +3691,12 @@ function formatXeroStatus(status: string) {
   return status
     ? status.toLowerCase().replace(/(^|\s|_)\w/g, (match) => match.toUpperCase()).replace(/_/g, ' ')
     : 'Unknown';
+}
+
+function formatQuantity(value: number) {
+  return new Intl.NumberFormat('en-AU', {
+    maximumFractionDigits: 2
+  }).format(Number.isFinite(value) ? value : 0);
 }
 
 function statusForColumn(column: string) {

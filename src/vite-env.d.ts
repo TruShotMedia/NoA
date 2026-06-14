@@ -251,16 +251,34 @@ interface Window {
       invoices: Array<{
         id: string;
         number: string;
+        reference: string;
         contact: string;
+        contactId: string;
         status: string;
         type: string;
         invoiceDate: string;
         dueDate: string;
         updatedAt: string;
+        subTotal: number;
+        totalTax: number;
         total: number;
         amountDue: number;
+        amountPaid: number;
+        amountCredited: number;
         currencyCode: string;
+        fullyPaidOnDate: string;
         isOverdue: boolean;
+        lineItems: Array<{
+          id: string;
+          description: string;
+          itemCode: string;
+          quantity: number;
+          unitAmount: number;
+          taxAmount: number;
+          lineAmount: number;
+          accountCode: string;
+          taxType: string;
+        }>;
         url: string;
       }>;
       contacts: Array<{
