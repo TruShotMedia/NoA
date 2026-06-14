@@ -2228,6 +2228,21 @@ function XeroView({
   const monthlyTotal = report.analytics.monthlyRevenue.reduce((sum, month) => sum + month.total, 0);
   const topClient = report.analytics.topClients[0];
   const [selectedInvoice, setSelectedInvoice] = useState<XeroInvoice | null>(null);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState('');
+
+  const openInvoiceDetails = async (invoice: XeroInvoice) => {
+    setSelectedInvoice(invoice);
+    setLoadingInvoiceId(invoice.id);
+    try {
+      const response = await fetch(`/api/xero/invoice-detail?id=${encodeURIComponent(invoice.id)}`);
+      const detail = await response.json();
+      if (detail.ok && detail.invoice) setSelectedInvoice(detail.invoice);
+    } catch {
+      // Keep the list invoice visible if the detail request cannot load.
+    } finally {
+      setLoadingInvoiceId('');
+    }
+  };
 
   return (
     <section className="page-fade xero-page">
@@ -2381,7 +2396,7 @@ function XeroView({
             <p className="empty-state">No invoices returned yet.</p>
           ) : (
             report.invoices.map((invoice) => (
-              <button className={`xero-invoice-row ${invoice.isOverdue ? 'overdue' : ''}`} onClick={() => setSelectedInvoice(invoice)} key={invoice.id}>
+              <button className={`xero-invoice-row ${invoice.isOverdue ? 'overdue' : ''}`} onClick={() => void openInvoiceDetails(invoice)} key={invoice.id}>
                 <span>
                   <strong>{invoice.number}</strong>
                   <small>{invoice.invoiceDate || invoice.type || 'Invoice'}</small>
@@ -2389,7 +2404,7 @@ function XeroView({
                 <span>{invoice.contact || 'Unknown customer'}</span>
                 <span><i>{invoice.status || 'Unknown'}</i></span>
                 <span>{invoice.dueDate || 'No date'}</span>
-                <span>{formatMoney(invoice.amountDue, invoice.currencyCode || currency)}</span>
+                <span>{loadingInvoiceId === invoice.id ? 'Loading...' : formatMoney(invoice.amountDue, invoice.currencyCode || currency)}</span>
               </button>
             ))
           )}
@@ -2399,6 +2414,7 @@ function XeroView({
         <XeroInvoiceDrawer
           invoice={selectedInvoice}
           currency={selectedInvoice.currencyCode || currency}
+          isLoadingDetails={loadingInvoiceId === selectedInvoice.id}
           onClose={() => setSelectedInvoice(null)}
         />
       )}
@@ -2432,10 +2448,12 @@ function XeroMetric({
 function XeroInvoiceDrawer({
   invoice,
   currency,
+  isLoadingDetails,
   onClose
 }: {
   invoice: XeroInvoice;
   currency: string;
+  isLoadingDetails: boolean;
   onClose: () => void;
 }) {
   const pdfUrl = `/api/xero/invoice-pdf?id=${encodeURIComponent(invoice.id)}`;
@@ -2502,9 +2520,11 @@ function XeroInvoiceDrawer({
         <section className="xero-line-items">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Invoice lines" title="Line items" />
-            <span>{invoice.lineItems.length} line(s)</span>
+            <span>{isLoadingDetails ? 'Loading...' : `${invoice.lineItems.length} line(s)`}</span>
           </div>
-          {invoice.lineItems.length === 0 ? (
+          {isLoadingDetails ? (
+            <p className="empty-state">Loading full invoice detail from Xero...</p>
+          ) : invoice.lineItems.length === 0 ? (
             <p className="empty-state">No line items were returned for this invoice snapshot.</p>
           ) : (
             invoice.lineItems.map((item, index) => (

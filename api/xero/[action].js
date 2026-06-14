@@ -11,6 +11,7 @@ module.exports = async function handler(req, res) {
   if (action === 'start') return startXero(req, res);
   if (action === 'callback') return handleXeroCallback(req, res);
   if (action === 'summary') return getXeroSummary(req, res);
+  if (action === 'invoice-detail') return getXeroInvoiceDetail(req, res);
   if (action === 'invoice-pdf') return getXeroInvoicePdf(req, res);
 
   return sendJson(res, 404, {
@@ -172,6 +173,48 @@ async function getXeroInvoicePdf(req, res) {
       message: caught instanceof Error ? caught.message : 'Unknown Xero PDF error.'
     });
   }
+}
+
+async function getXeroInvoiceDetail(req, res) {
+  if (req.method !== 'GET') {
+    return sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+  }
+
+  const requestUrl = new URL(req.url || '/', `https://${req.headers.host || 'no-a.vercel.app'}`);
+  const invoiceId = requestUrl.searchParams.get('id') || '';
+  if (!invoiceId) return sendJson(res, 400, { ok: false, message: 'No invoice id was provided.' });
+
+  try {
+    const context = await getXeroRequestContext();
+    if (!context.ok) return sendJson(res, 400, context);
+
+    const result = await getXeroJson(context.accessToken, context.tenantId, `/Invoices/${encodeURIComponent(invoiceId)}`);
+    if (!result.ok) return sendJson(res, 400, { ok: false, message: result.message });
+
+    const invoice = mapInvoice((result.data?.Invoices || [])[0] || {});
+    return sendJson(res, 200, { ok: true, invoice });
+  } catch (caught) {
+    return sendJson(res, 500, {
+      ok: false,
+      message: caught instanceof Error ? caught.message : 'Unknown Xero invoice detail error.'
+    });
+  }
+}
+
+async function getXeroRequestContext() {
+  const storedRefreshToken = await getStoredXeroRefreshToken();
+  if (!process.env.XERO_CLIENT_ID || !process.env.XERO_CLIENT_SECRET || !storedRefreshToken) {
+    return { ok: false, message: 'Xero is not connected.' };
+  }
+
+  const token = await refreshXeroAccessToken(storedRefreshToken);
+  if (!token.ok) return { ok: false, message: token.message };
+  if (token.refreshToken) await saveStoredXeroRefreshToken(token.refreshToken);
+
+  const tenant = await resolveXeroTenant(token.accessToken);
+  if (!tenant.tenantId) return { ok: false, message: 'No Xero tenant was returned.' };
+
+  return { ok: true, accessToken: token.accessToken, tenantId: tenant.tenantId };
 }
 
 async function handleXeroCallback(req, res) {
