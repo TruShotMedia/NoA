@@ -148,6 +148,7 @@ type NotionTask = {
   taskTypes: string[];
   assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
   description: string;
+  attachments: Array<{ name: string; url: string }>;
   url: string;
   archived: boolean;
   complete: boolean;
@@ -170,6 +171,8 @@ type NotionJobsReport = {
     priority: string;
     deliverableTypes: string[];
     location: string;
+    notes: string;
+    attachments: Array<{ name: string; url: string }>;
     url: string;
     archived: boolean;
   }>;
@@ -1377,6 +1380,9 @@ function App() {
             notes={notes}
             smartBriefing={smartBriefing}
             inboxSummary={inboxSummary}
+            jobsReport={jobsReport}
+            xeroReport={xeroReport}
+            setScreen={setScreen}
           />
         )}
         {screen === 'noah' && (
@@ -1445,6 +1451,7 @@ function App() {
           setIsMoreMenuOpen(false);
         }}
         isMoreMenuOpen={isMoreMenuOpen}
+        toggleMoreMenu={() => setIsMoreMenuOpen((current) => !current)}
         closeMoreMenu={() => setIsMoreMenuOpen(false)}
       />
     </main>
@@ -1455,11 +1462,13 @@ function MobileNav({
   screen,
   setScreen,
   isMoreMenuOpen,
+  toggleMoreMenu,
   closeMoreMenu,
 }: {
   screen: Screen;
   setScreen: (screen: Screen) => void;
   isMoreMenuOpen: boolean;
+  toggleMoreMenu: () => void;
   closeMoreMenu: () => void;
 }) {
   const primaryItems: Array<{ id: Screen; label: string; icon: React.ElementType }> = [
@@ -1500,7 +1509,7 @@ function MobileNav({
       )}
 
       <nav className="mobile-dock" aria-label="Primary mobile navigation">
-        {primaryItems.slice(0, 2).map((item) => {
+        {primaryItems.map((item) => {
           const Icon = item.icon;
           return (
             <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => setScreen(item.id)}>
@@ -1509,24 +1518,10 @@ function MobileNav({
             </button>
           );
         })}
-        <button
-          className={`mobile-speak ${screen === 'noah' ? 'active' : ''}`}
-          onClick={() => setScreen('noah')}
-          aria-label="Open Noah"
-        >
-          <span className="speak-ring" />
-          <Bot size={22} />
-          <small>Noah</small>
+        <button className={isMoreMenuOpen ? 'active' : ''} onClick={toggleMoreMenu} aria-label="Open more pages">
+          <MoreHorizontal size={18} />
+          <span>More</span>
         </button>
-        {primaryItems.slice(2).map((item) => {
-          const Icon = item.icon;
-          return (
-            <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => setScreen(item.id)}>
-              <Icon size={18} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
       </nav>
     </>
   );
@@ -1836,6 +1831,16 @@ function JobCard({
           {task.taskTypes.slice(0, 3).map((type) => <span key={type}>{type}</span>)}
         </div>
       )}
+      {(task.attachments || []).length > 0 && (
+        <div className="attachment-chip-row">
+          {(task.attachments || []).slice(0, 2).map((attachment) => (
+            <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
+              <ArrowUpRight size={12} />
+              {attachment.name}
+            </a>
+          ))}
+        </div>
+      )}
       {task.assignees.length > 0 && (
         <p className="job-assignee">{task.assignees.map((person) => person.name).join(', ')}</p>
       )}
@@ -1972,7 +1977,7 @@ function TaskRow({ task, onOpen, onEdit }: { task: NotionTask; onOpen: () => voi
       <span className="priority-dot" />
       <button className="task-row-main" onClick={onOpen}>
         <strong>{task.title}</strong>
-        <p>{task.description || task.status || 'No description'}</p>
+        <p>{task.description || task.attachments?.[0]?.name || task.status || 'No description'}</p>
       </button>
       <span>{task.status || 'No status'}</span>
       <span className={`due-pill ${task.dueState === 'Overdue' ? 'danger' : task.dueState === 'Due today' ? 'today' : ''}`}>
@@ -1998,6 +2003,10 @@ function UpcomingJobsView({
   const jobs = report.upcomingJobs;
   const dueSoonCount = jobs.filter((job) => ['Overdue', 'Due today', 'Tomorrow', 'Due soon'].includes(job.dueState)).length;
   const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionJobsReport['upcomingJobs'][number] | null } | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => brisbaneToday().slice(0, 7));
+  const calendarDays = useMemo(() => buildJobsCalendarDays(jobs, calendarMonth), [jobs, calendarMonth]);
+  const jobsThisMonth = jobs.filter((job) => job.jobDate?.startsWith(calendarMonth));
+  const featuredJobs = jobsThisMonth.length ? jobsThisMonth.slice(0, 5) : jobs.slice(0, 5);
 
   const handleJobSave = async (values: Record<string, string>) => {
     if (!editor || !window.noa?.manageNotionItem) return;
@@ -2076,13 +2085,54 @@ function UpcomingJobsView({
         </article>
       </section>
 
-      <section className="upcoming-grid">
+      <article className="glass-card wide jobs-calendar-shell">
+        <div className="calendar-toolbar">
+          <div>
+            <p className="eyebrow">Job calendar</p>
+            <h3>{formatCalendarMonth(calendarMonth)}</h3>
+          </div>
+          <div className="calendar-actions">
+            <button className="secondary-action" onClick={() => setCalendarMonth(shiftMonth(calendarMonth, -1))}>Previous</button>
+            <button className="secondary-action" onClick={() => setCalendarMonth(brisbaneToday().slice(0, 7))}>Today</button>
+            <button className="secondary-action" onClick={() => setCalendarMonth(shiftMonth(calendarMonth, 1))}>Next</button>
+          </div>
+        </div>
+
+        <div className="jobs-calendar">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+            <span className="calendar-weekday" key={day}>{day}</span>
+          ))}
+          {calendarDays.map((day) => (
+            <div className={`calendar-day ${day.inMonth ? '' : 'muted'} ${day.date === brisbaneToday() ? 'today' : ''}`} key={day.date}>
+              <div className="calendar-day-head">
+                <span>{Number(day.date.slice(-2))}</span>
+                {day.jobs.length > 0 && <strong>{day.jobs.length}</strong>}
+              </div>
+              <div className="calendar-day-jobs">
+                {day.jobs.slice(0, 3).map((job) => (
+                  <button className={`calendar-job priority-${(job.priority || 'none').toLowerCase()}`} onClick={() => setEditor({ mode: 'view', kind: 'job', item: job })} key={job.id}>
+                    <span>{job.title}</span>
+                    {job.client && <small>{job.client}</small>}
+                  </button>
+                ))}
+                {day.jobs.length > 3 && <em>+{day.jobs.length - 3} more</em>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <section className="mobile-agenda">
+        <div className="panel-row-head">
+          <PanelTitle eyebrow="Agenda" title={jobsThisMonth.length ? 'This month' : 'Next jobs'} />
+          <span>{featuredJobs.length} shown</span>
+        </div>
         {jobs.length === 0 ? (
           <article className="glass-card wide">
             <p className="empty-state">No upcoming jobs found.</p>
           </article>
         ) : (
-          jobs.map((job) => (
+          featuredJobs.map((job) => (
             <UpcomingJobCard
               job={job}
               key={job.id}
@@ -2142,6 +2192,16 @@ function UpcomingJobCard({
       {job.deliverableTypes.length > 0 && (
         <div className="job-chip-row">
           {job.deliverableTypes.slice(0, 4).map((type) => <span key={type}>{type}</span>)}
+        </div>
+      )}
+      {(job.attachments || []).length > 0 && (
+        <div className="attachment-chip-row">
+          {(job.attachments || []).slice(0, 2).map((attachment) => (
+            <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
+              <ArrowUpRight size={12} />
+              {attachment.name}
+            </a>
+          ))}
         </div>
       )}
     </article>
@@ -3188,6 +3248,14 @@ function NotionItemModal({
                 <span>Deliverables</span>
                 <input value={values.deliverableTypes} onChange={(event) => updateValue('deliverableTypes', event.target.value)} readOnly={isReadOnly} placeholder="Video, Photos, Reels" />
               </label>
+              <label className="notion-field wide">
+                <span>Notes</span>
+                <textarea value={values.notes} onChange={(event) => updateValue('notes', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field wide">
+                <span>Attachments</span>
+                <textarea value={values.attachments} onChange={(event) => updateValue('attachments', event.target.value)} readOnly={isReadOnly} placeholder={'Contract: https://...\nRun sheet: https://...'} />
+              </label>
             </>
           ) : (
             <>
@@ -3231,9 +3299,24 @@ function NotionItemModal({
                 <span>Description</span>
                 <textarea value={values.description} onChange={(event) => updateValue('description', event.target.value)} readOnly={isReadOnly} />
               </label>
+              <label className="notion-field wide">
+                <span>Attachments</span>
+                <textarea value={values.attachments} onChange={(event) => updateValue('attachments', event.target.value)} readOnly={isReadOnly} placeholder={'Brief: https://...\nReference: https://...'} />
+              </label>
             </>
           )}
         </div>
+
+        {parseAttachmentValue(values.attachments).length > 0 && (
+          <div className="attachment-list">
+            {parseAttachmentValue(values.attachments).map((attachment) => (
+              <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
+                <ArrowUpRight size={14} />
+                {attachment.name}
+              </a>
+            ))}
+          </div>
+        )}
 
         <div className="modal-actions">
           {item?.url && (
@@ -3274,7 +3357,9 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
       jobDate: job?.jobDate || '',
       priority: job?.priority || '',
       location: job?.location || '',
-      deliverableTypes: job?.deliverableTypes?.join(', ') || ''
+      deliverableTypes: job?.deliverableTypes?.join(', ') || '',
+      notes: job?.notes || '',
+      attachments: formatAttachmentValue(job?.attachments || [])
     };
   }
 
@@ -3286,8 +3371,76 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
     priority: task?.priority || '',
     effortLevel: task?.effortLevel || '',
     taskTypes: task?.taskTypes?.join(', ') || '',
-    description: task?.description || ''
+    description: task?.description || '',
+    attachments: formatAttachmentValue(task?.attachments || [])
   };
+}
+
+function formatAttachmentValue(attachments: Array<{ name: string; url: string }>) {
+  return attachments.map((attachment) => `${attachment.name}: ${attachment.url}`).join('\n');
+}
+
+function parseAttachmentValue(value: string) {
+  return String(value || '')
+    .split(/\r?\n|,\s*(?=https?:\/\/)/)
+    .map((line, index) => {
+      const trimmed = line.trim();
+      const match = trimmed.match(/https?:\/\/\S+/i);
+      if (!match) return null;
+      const rawUrl = match[0];
+      const url = rawUrl.replace(/[),.;]+$/, '');
+      const name = trimmed.replace(rawUrl, '').replace(/[:\-–—|]+$/g, '').trim();
+      return { name: name || `Attachment ${index + 1}`, url };
+    })
+    .filter((attachment): attachment is { name: string; url: string } => Boolean(attachment));
+}
+
+function brisbaneToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Australia/Brisbane',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+function shiftMonth(monthKey: string, offset: number) {
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return date.toISOString().slice(0, 7);
+}
+
+function formatCalendarMonth(monthKey: string) {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-AU', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC'
+  });
+}
+
+function buildJobsCalendarDays(jobs: NotionJobsReport['upcomingJobs'], monthKey: string) {
+  const [year, month] = monthKey.split('-').map(Number);
+  const firstOfMonth = new Date(Date.UTC(year, month - 1, 1));
+  const startOffset = (firstOfMonth.getUTCDay() + 6) % 7;
+  const start = new Date(firstOfMonth);
+  start.setUTCDate(firstOfMonth.getUTCDate() - startOffset);
+  const jobsByDate = jobs.reduce<Record<string, NotionJobsReport['upcomingJobs']>>((groups, job) => {
+    if (!job.jobDate) return groups;
+    groups[job.jobDate] = [...(groups[job.jobDate] || []), job];
+    return groups;
+  }, {});
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + index);
+    const key = date.toISOString().slice(0, 10);
+    return {
+      date: key,
+      inMonth: key.startsWith(monthKey),
+      jobs: jobsByDate[key] || []
+    };
+  });
 }
 
 function Today({
@@ -3300,7 +3453,10 @@ function Today({
   addCapture,
   notes,
   smartBriefing,
-  inboxSummary
+  inboxSummary,
+  jobsReport,
+  xeroReport,
+  setScreen
 }: {
   greeting: string;
   command: string;
@@ -3312,7 +3468,16 @@ function Today({
   notes: CaptureNote[];
   smartBriefing: SmartBriefing;
   inboxSummary: { label: string; value: string; detail: string }[];
+  jobsReport: NotionJobsReport;
+  xeroReport: XeroReport;
+  setScreen: (screen: Screen) => void;
 }) {
+  const nextJobs = jobsReport.upcomingJobs.filter((job) => job.jobDate).slice(0, 3);
+  const urgentTasks = [...jobsReport.pipelineTasks, ...jobsReport.taskList]
+    .filter((task) => ['Overdue', 'Due today', 'Tomorrow'].includes(task.dueState) || task.priority === 'High')
+    .slice(0, 3);
+  const moneyDue = xeroReport.totals.amountDue + xeroReport.totals.billsDue;
+
   return (
     <section className="page-fade">
       <div className="hero-grid">
@@ -3338,6 +3503,24 @@ function Today({
           </button>
         </article>
       </div>
+
+      <section className="home-command-strip">
+        <button onClick={() => setScreen('upcoming-jobs')}>
+          <BriefcaseBusiness size={18} />
+          <span>Next job</span>
+          <strong>{nextJobs[0]?.title || 'No dated job'}</strong>
+        </button>
+        <button onClick={() => setScreen('tasks')}>
+          <ListTodo size={18} />
+          <span>Task pressure</span>
+          <strong>{urgentTasks.length} active</strong>
+        </button>
+        <button onClick={() => setScreen('xero')}>
+          <WalletCards size={18} />
+          <span>Finance due</span>
+          <strong>{formatCompactMoney(moneyDue, xeroReport.organisation?.baseCurrency || 'AUD')}</strong>
+        </button>
+      </section>
 
       <section className="briefing-strip">
         {[
@@ -3372,7 +3555,12 @@ function Today({
         <article className="glass-card wide">
           <PanelTitle eyebrow="Noah recommends" title="Priority stack" />
           <div className="priority-list">
-            {priorities.map((priority) => (
+            {(urgentTasks.length > 0 ? urgentTasks.map((task) => ({
+              title: task.title,
+              detail: `${task.status || 'Active'}${task.dueDate ? ` - ${task.dueState} ${task.dueDate}` : ''}`,
+              signal: task.priority || 'Task',
+              status: task.dueState === 'Overdue' ? 'critical' : task.priority === 'High' ? 'warning' : 'active'
+            })) : priorities).map((priority) => (
               <div className={`priority-row ${priority.status}`} key={priority.title}>
                 <div>
                   <strong>{priority.title}</strong>
@@ -3385,9 +3573,14 @@ function Today({
         </article>
 
         <article className="glass-card wide">
-          <PanelTitle eyebrow="Focus rhythm" title="A calmer way through the day" />
+          <PanelTitle eyebrow="Job radar" title="What is coming up" />
           <div className="focus-list">
-            {focusItems.map((item) => (
+            {(nextJobs.length > 0 ? nextJobs.map((job) => ({
+              time: job.jobDate || 'No date',
+              title: job.title,
+              detail: [job.client, job.location, job.deliverableTypes.slice(0, 2).join(', ')].filter(Boolean).join(' - ') || 'No job details yet.',
+              tone: job.dueState === 'Overdue' ? 'red' : job.dueState === 'Due today' ? 'amber' : 'blue'
+            })) : focusItems).map((item) => (
               <div className={`focus-row ${item.tone}`} key={item.title}>
                 <span>{item.time}</span>
                 <div>

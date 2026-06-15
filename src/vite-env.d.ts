@@ -128,6 +128,7 @@ interface Window {
         taskTypes: string[];
         assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
         description: string;
+        attachments: Array<{ name: string; url: string }>;
         url: string;
         archived: boolean;
         complete: boolean;
@@ -145,6 +146,7 @@ interface Window {
         taskTypes: string[];
         assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
         description: string;
+        attachments: Array<{ name: string; url: string }>;
         url: string;
         archived: boolean;
         complete: boolean;
@@ -162,6 +164,7 @@ interface Window {
         taskTypes: string[];
         assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
         description: string;
+        attachments: Array<{ name: string; url: string }>;
         url: string;
         archived: boolean;
         complete: boolean;
@@ -176,6 +179,8 @@ interface Window {
         priority: string;
         deliverableTypes: string[];
         location: string;
+        notes: string;
+        attachments: Array<{ name: string; url: string }>;
         url: string;
         archived: boolean;
       }>;
@@ -202,6 +207,7 @@ interface Window {
         taskTypes: string[];
         assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
         description: string;
+        attachments: Array<{ name: string; url: string }>;
         url: string;
         archived: boolean;
         complete: boolean;
