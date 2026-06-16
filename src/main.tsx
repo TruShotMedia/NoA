@@ -319,6 +319,7 @@ type DraftInvoiceForm = {
 };
 
 type BudgetItemKind = 'income' | 'expenses' | 'debts' | 'mortgages' | 'mortgageExpenses' | 'assets' | 'savings';
+type BudgetModeFilter = 'all' | 'personal' | 'business';
 
 type BudgetOwner = {
   email: string;
@@ -425,6 +426,15 @@ type BudgetEmailPreview = {
   mortgageLocalId: string;
 };
 
+type BudgetEmailSendResult = {
+  ok: boolean;
+  to: string;
+  status: number | string;
+  id?: string;
+  threadId?: string;
+  message: string;
+};
+
 type BudgetReport = {
   ok: boolean;
   message: string;
@@ -439,6 +449,13 @@ type BudgetReport = {
   };
   emailSettings: BudgetEmailSettings;
   settings: Record<string, unknown> | null;
+};
+
+type BudgetEditorField = {
+  key: keyof BudgetRow | string;
+  label: string;
+  type?: 'text' | 'number' | 'checkbox' | 'textarea' | 'select';
+  options?: string[];
 };
 
 const emptyJobsReport: NotionJobsReport = {
@@ -2738,12 +2755,18 @@ function BudgetingView({
   const [emailDraft, setEmailDraft] = useState<BudgetEmailSettings>(() => normalizeBudgetEmailSettings(report.emailSettings));
   const [emailMessage, setEmailMessage] = useState('');
   const [emailPreviews, setEmailPreviews] = useState<BudgetEmailPreview[]>([]);
+  const [emailSendHistory, setEmailSendHistory] = useState<BudgetEmailSendResult[]>([]);
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [modeFilter, setModeFilter] = useState<BudgetModeFilter>('all');
+  const [showInactiveRows, setShowInactiveRows] = useState(false);
   const totals = report.totals;
   const netTone = totals.netWeekly >= 0 ? 'green' : 'amber';
   const dataCount = Object.values(report.tables).reduce((count, rows) => count + rows.length, 0);
   const activeTenantCount = emailDraft.tenants.filter((tenant) => tenant.active !== false && tenant.email).length;
+  const filteredTables = useMemo(() => filterBudgetTables(report.tables, modeFilter, showInactiveRows), [report.tables, modeFilter, showInactiveRows]);
+  const analytics = useMemo(() => buildBudgetPageAnalytics(report, filteredTables), [report, filteredTables]);
+  const nextSendDate = getNextCycleDate(emailDraft.cycleDay);
 
   useEffect(() => {
     setEmailDraft(normalizeBudgetEmailSettings(report.emailSettings));
@@ -2775,6 +2798,7 @@ function BudgetingView({
     const response = await window.noa.sendBudgetTenantEmail({ dryRun: !sendNow });
     setIsSendingEmail(false);
     setEmailPreviews((response.previews || []) as BudgetEmailPreview[]);
+    if (sendNow) setEmailSendHistory((response.sent || []) as BudgetEmailSendResult[]);
     setEmailMessage(response.message || (response.ok ? 'Tenant email action completed.' : 'Tenant email action failed.'));
   };
 
@@ -2850,6 +2874,72 @@ function BudgetingView({
         <BudgetMetric icon={Building2} label="Net worth" value={formatMoney(totals.netWorth)} detail={`${formatMoney(totals.assetValue)} assets minus debts`} />
       </section>
 
+      <section className="budget-decision-grid">
+        <article className="glass-card budget-today-card">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Budget today" title={analytics.today.title} />
+            <Sparkles size={20} />
+          </div>
+          <p>{analytics.today.detail}</p>
+          <div className="budget-action-stack">
+            {analytics.today.actions.map((action) => (
+              <div className={`budget-action ${action.tone}`} key={action.label}>
+                <span />
+                <div>
+                  <strong>{action.label}</strong>
+                  <p>{action.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Forecast" title="Monthly projection" />
+            <BarChart3 size={20} />
+          </div>
+          <BudgetProjectionChart analytics={analytics} />
+        </article>
+      </section>
+
+      <section className="budget-analytics-grid">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Spend pressure" title="Top expense categories" />
+            <PieChart size={20} />
+          </div>
+          <BudgetCategoryBars rows={analytics.expenseCategories} />
+        </article>
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Debt and mortgage" title="Weekly pressure" />
+            <CreditCard size={20} />
+          </div>
+          <BudgetPressureList analytics={analytics} />
+        </article>
+      </section>
+
+      <article className="glass-card wide budget-toolbar">
+        <div>
+          <PanelTitle eyebrow="Ledger controls" title="Budget rows" />
+          <p>Filter the normalized ledger without changing the underlying data.</p>
+        </div>
+        <div className="budget-filter-controls">
+          <div className="segmented-control">
+            {(['all', 'personal', 'business'] as BudgetModeFilter[]).map((mode) => (
+              <button key={mode} className={modeFilter === mode ? 'active' : ''} onClick={() => setModeFilter(mode)}>
+                {mode === 'all' ? 'All' : mode[0].toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+          <label className="toggle-row">
+            <input type="checkbox" checked={showInactiveRows} onChange={(event) => setShowInactiveRows(event.currentTarget.checked)} />
+            Show inactive
+          </label>
+        </div>
+      </article>
+
       <section className="budget-grid">
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
@@ -2895,6 +2985,7 @@ function BudgetingView({
               </label>
             </div>
             <p>{activeTenantCount} active recipient(s). Cycle day: {dayName(emailDraft.cycleDay)}.</p>
+            <small>Next scheduled cycle: {nextSendDate}</small>
             <div className="budget-email-fields">
               <label>
                 <span>Cycle day</span>
@@ -2979,17 +3070,28 @@ function BudgetingView({
                 ))}
               </div>
             )}
+            {emailSendHistory.length > 0 && (
+              <div className="budget-email-history">
+                {emailSendHistory.map((result) => (
+                  <article className={result.ok ? 'success' : 'failed'} key={`${result.to}-${result.id || result.status}`}>
+                    <span>{result.ok ? 'Sent' : 'Failed'}</span>
+                    <strong>{result.to || 'Unknown recipient'}</strong>
+                    <p>{result.message}</p>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         </article>
       </section>
 
       <section className="budget-table-grid">
-        <BudgetTable title="Income" kind="income" rows={report.tables.income} onEdit={(row) => setEditor({ kind: 'income', row })} onCreate={() => setEditor({ kind: 'income', row: null })} />
-        <BudgetTable title="Expenses" kind="expenses" rows={report.tables.expenses} onEdit={(row) => setEditor({ kind: 'expenses', row })} onCreate={() => setEditor({ kind: 'expenses', row: null })} />
-        <BudgetTable title="Mortgages" kind="mortgages" rows={report.tables.mortgages} onEdit={(row) => setEditor({ kind: 'mortgages', row })} onCreate={() => setEditor({ kind: 'mortgages', row: null })} />
-        <BudgetTable title="Mortgage expenses" kind="mortgageExpenses" rows={report.tables.mortgageExpenses} onEdit={(row) => setEditor({ kind: 'mortgageExpenses', row })} onCreate={() => setEditor({ kind: 'mortgageExpenses', row: null })} />
-        <BudgetTable title="Debts" kind="debts" rows={report.tables.debts} onEdit={(row) => setEditor({ kind: 'debts', row })} onCreate={() => setEditor({ kind: 'debts', row: null })} />
-        <BudgetTable title="Assets and savings" kind="assets" rows={[...report.tables.assets, ...report.tables.savings]} onEdit={(row) => setEditor({ kind: row.goal_name ? 'savings' : 'assets', row })} onCreate={() => setEditor({ kind: 'assets', row: null })} />
+        <BudgetTable title="Income" kind="income" rows={filteredTables.income} onEdit={(row) => setEditor({ kind: 'income', row })} onCreate={() => setEditor({ kind: 'income', row: null })} />
+        <BudgetTable title="Expenses" kind="expenses" rows={filteredTables.expenses} onEdit={(row) => setEditor({ kind: 'expenses', row })} onCreate={() => setEditor({ kind: 'expenses', row: null })} />
+        <BudgetTable title="Mortgages" kind="mortgages" rows={filteredTables.mortgages} onEdit={(row) => setEditor({ kind: 'mortgages', row })} onCreate={() => setEditor({ kind: 'mortgages', row: null })} />
+        <BudgetTable title="Mortgage expenses" kind="mortgageExpenses" rows={filteredTables.mortgageExpenses} onEdit={(row) => setEditor({ kind: 'mortgageExpenses', row })} onCreate={() => setEditor({ kind: 'mortgageExpenses', row: null })} />
+        <BudgetTable title="Debts" kind="debts" rows={filteredTables.debts} onEdit={(row) => setEditor({ kind: 'debts', row })} onCreate={() => setEditor({ kind: 'debts', row: null })} />
+        <BudgetTable title="Assets and savings" kind="assets" rows={[...filteredTables.assets, ...filteredTables.savings]} onEdit={(row) => setEditor({ kind: row.goal_name ? 'savings' : 'assets', row })} onCreate={() => setEditor({ kind: 'assets', row: null })} />
       </section>
 
       {editor && (
@@ -3027,6 +3129,77 @@ function BudgetMetric({
       <strong>{value}</strong>
       <p>{detail}</p>
     </article>
+  );
+}
+
+function BudgetProjectionChart({ analytics }: { analytics: ReturnType<typeof buildBudgetPageAnalytics> }) {
+  const rows = [
+    { label: 'Income', value: analytics.monthlyIncome, tone: 'income' },
+    { label: 'Expenses', value: analytics.monthlyOutgoings, tone: 'expense' },
+    { label: 'Net', value: Math.abs(analytics.monthlyNet), tone: analytics.monthlyNet >= 0 ? 'income' : 'warn' }
+  ];
+  const max = Math.max(...rows.map((row) => row.value), 1);
+
+  return (
+    <div className="budget-projection-chart">
+      {rows.map((row) => (
+        <div className={`budget-projection-row ${row.tone}`} key={row.label}>
+          <div>
+            <strong>{row.label}</strong>
+            <span>{formatMoney(row.label === 'Net' ? analytics.monthlyNet : row.value)}</span>
+          </div>
+          <i><b style={{ width: `${Math.max(4, Math.round((row.value / max) * 100))}%` }} /></i>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BudgetCategoryBars({ rows }: { rows: Array<{ label: string; amount: number; count: number }> }) {
+  const max = Math.max(...rows.map((row) => row.amount), 1);
+  if (rows.length === 0) return <p className="empty-state">No active expenses in this filter.</p>;
+
+  return (
+    <div className="budget-category-bars">
+      {rows.slice(0, 7).map((row, index) => (
+        <div className="budget-category-row" key={row.label}>
+          <div className="xero-client-rank">{index + 1}</div>
+          <div>
+            <div className="xero-client-head">
+              <strong>{row.label}</strong>
+              <span>{formatMoney(row.amount)} weekly</span>
+            </div>
+            <div className="xero-progress-track">
+              <i style={{ width: `${Math.max(5, Math.round((row.amount / max) * 100))}%` }} />
+            </div>
+            <p>{row.count} row(s)</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BudgetPressureList({ analytics }: { analytics: ReturnType<typeof buildBudgetPageAnalytics> }) {
+  const rows = [
+    { label: 'Debt repayments', value: analytics.weeklyDebt, detail: `${formatMoney(analytics.debtBalance)} balance`, tone: analytics.weeklyDebt > 0 ? 'warn' : 'calm' },
+    { label: 'Mortgage repayments', value: analytics.weeklyMortgage, detail: `${formatMoney(analytics.mortgageBalance)} mortgage balance`, tone: analytics.weeklyMortgage > 0 ? 'warn' : 'calm' },
+    { label: 'Tenant offsets', value: analytics.weeklyTenantOffsets, detail: 'expenses currently offset to tenants', tone: analytics.weeklyTenantOffsets > 0 ? 'calm' : 'warn' },
+    { label: 'Savings', value: analytics.weeklySavings, detail: 'weekly savings commitments', tone: analytics.weeklySavings > 0 ? 'calm' : 'warn' }
+  ];
+
+  return (
+    <div className="budget-pressure-list">
+      {rows.map((row) => (
+        <div className={`budget-action ${row.tone}`} key={row.label}>
+          <span />
+          <div>
+            <strong>{row.label}: {formatMoney(row.value)}</strong>
+            <p>{row.detail}</p>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -3148,6 +3321,16 @@ function BudgetEditorModal({
                   checked={Boolean(draft[field.key])}
                   onChange={(event) => updateDraft(field.key, event.currentTarget.checked)}
                 />
+              ) : field.type === 'select' ? (
+                <select
+                  value={String(draft[field.key] || '')}
+                  onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
+                >
+                  <option value="">Select...</option>
+                  {(field.options || []).map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                </select>
               ) : field.type === 'textarea' ? (
                 <textarea
                   value={String(draft[field.key] || '')}
@@ -3619,6 +3802,124 @@ function dayName(day: number) {
   return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day] || 'Monday';
 }
 
+function filterBudgetTables(tables: BudgetTables, mode: BudgetModeFilter, showInactive: boolean): BudgetTables {
+  const filterRows = (rows: BudgetRow[]) => rows.filter((row) => {
+    const modeMatches = mode === 'all' || (row.mode || 'personal') === mode;
+    const activeMatches = showInactive || row.active !== false;
+    return modeMatches && activeMatches;
+  });
+  return {
+    income: filterRows(tables.income),
+    expenses: filterRows(tables.expenses),
+    debts: filterRows(tables.debts),
+    mortgages: filterRows(tables.mortgages),
+    mortgageExpenses: filterRows(tables.mortgageExpenses),
+    assets: filterRows(tables.assets),
+    savings: filterRows(tables.savings)
+  };
+}
+
+function buildBudgetPageAnalytics(report: BudgetReport, tables: BudgetTables) {
+  const weeklyIncome = sumNumbers(tables.income, (row) => budgetWeeklyValue(row, 'amount'));
+  const weeklyExpenses = sumNumbers(tables.expenses, (row) => budgetWeeklyValue(row, 'amount'));
+  const weeklyDebt = sumNumbers(tables.debts, (row) => budgetWeeklyValue(row, 'repayment'));
+  const weeklyMortgage = sumNumbers(tables.mortgages, (row) => budgetWeeklyValue(row, 'repayment'));
+  const weeklyMortgageExpenses = sumNumbers(tables.mortgageExpenses, (row) => budgetWeeklyValue(row, 'amount'));
+  const weeklySavings = sumNumbers(tables.savings, (row) => budgetWeeklyValue(row, 'amount'));
+  const weeklyTenantOffsets = sumNumbers(tables.mortgageExpenses.filter((row) => row.offset_to_tenants), (row) => budgetWeeklyValue(row, 'amount'));
+  const monthlyIncome = weeklyIncome * 52 / 12;
+  const monthlyOutgoings = (weeklyExpenses + weeklyDebt + weeklyMortgage + weeklyMortgageExpenses + weeklySavings) * 52 / 12;
+  const monthlyNet = monthlyIncome - monthlyOutgoings;
+  const debtBalance = sumNumbers(tables.debts, (row) => numberOrZero(row.balance));
+  const mortgageBalance = sumNumbers(tables.mortgages, (row) => numberOrZero(row.balance));
+  const expenseCategories = buildBudgetCategoryTotals([...tables.expenses, ...tables.mortgageExpenses]);
+  const largestExpense = expenseCategories[0];
+  const nextTenantReady = report.emailSettings.tenants.filter((tenant) => tenant.active !== false && tenant.email).length;
+  const todayTone = monthlyNet < 0 ? 'warn' : weeklyTenantOffsets > 0 ? 'calm' : 'info';
+
+  return {
+    weeklyIncome,
+    weeklyExpenses,
+    weeklyDebt,
+    weeklyMortgage,
+    weeklyMortgageExpenses,
+    weeklySavings,
+    weeklyTenantOffsets,
+    monthlyIncome,
+    monthlyOutgoings,
+    monthlyNet,
+    debtBalance,
+    mortgageBalance,
+    expenseCategories,
+    today: {
+      title: monthlyNet >= 0 ? 'Budget is holding' : 'Budget needs attention',
+      detail: monthlyNet >= 0
+        ? `Projected monthly surplus is ${formatMoney(monthlyNet)}. Keep an eye on the highest pressure category before adding new commitments.`
+        : `Projected monthly deficit is ${formatMoney(Math.abs(monthlyNet))}. Review recurring expenses or debt pressure before taking on new spend.`,
+      tone: todayTone,
+      actions: [
+        {
+          label: largestExpense ? `Review ${largestExpense.label}` : 'Add spending categories',
+          detail: largestExpense ? `${largestExpense.label} is currently ${formatMoney(largestExpense.amount)} per week across ${largestExpense.count} row(s).` : 'No expense categories are active in this filter yet.',
+          tone: largestExpense && largestExpense.amount > weeklyIncome * 0.25 ? 'warn' : 'calm'
+        },
+        {
+          label: nextTenantReady > 0 ? 'Tenant billing ready' : 'Tenant billing not ready',
+          detail: nextTenantReady > 0 ? `${nextTenantReady} tenant recipient(s) can receive a bill preview or send now.` : 'Add tenant recipients and connect Gmail before relying on billing automation.',
+          tone: nextTenantReady > 0 ? 'calm' : 'warn'
+        },
+        {
+          label: debtBalance > 0 ? 'Debt balance visible' : 'Debt rows clear',
+          detail: debtBalance > 0 ? `${formatMoney(debtBalance)} in debt balances with ${formatMoney(weeklyDebt)} weekly repayment pressure.` : 'No active debt balance is showing in this filtered view.',
+          tone: debtBalance > 0 ? 'warn' : 'calm'
+        }
+      ]
+    }
+  };
+}
+
+function buildBudgetCategoryTotals(rows: BudgetRow[]) {
+  const totals = new Map<string, { label: string; amount: number; count: number }>();
+  for (const row of rows) {
+    const label = row.category || (row.offset_to_tenants ? 'Mortgage tenant offsets' : row.mortgage_local_id ? 'Mortgage expenses' : 'Uncategorised');
+    const current = totals.get(label) || { label, amount: 0, count: 0 };
+    current.amount += budgetWeeklyValue(row, 'amount');
+    current.count += 1;
+    totals.set(label, current);
+  }
+  return Array.from(totals.values()).sort((a, b) => b.amount - a.amount);
+}
+
+function budgetWeeklyValue(row: BudgetRow, amountKey: keyof BudgetRow) {
+  const explicit = numberOrZero(row.weekly_amount ?? row.weekly_repayment);
+  if (explicit > 0) return explicit;
+  const amount = numberOrZero(row[amountKey]);
+  const frequency = String(row.frequency || '').toLowerCase();
+  if (!amount) return 0;
+  if (frequency.includes('week')) return amount;
+  if (frequency.includes('fortnight')) return amount / 2;
+  if (frequency.includes('month')) return amount * 12 / 52;
+  if (frequency.includes('year') || frequency.includes('annual')) return amount / 52;
+  return amount;
+}
+
+function getNextCycleDate(cycleDay: number) {
+  const date = new Date();
+  const target = Number.isFinite(cycleDay) ? cycleDay : 1;
+  const delta = (target - date.getDay() + 7) % 7 || 7;
+  date.setDate(date.getDate() + delta);
+  return date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
+}
+
+function sumNumbers<T>(items: T[], getter: (item: T) => number) {
+  return items.reduce((total, item) => total + numberOrZero(getter(item)), 0);
+}
+
+function numberOrZero(value: unknown) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
 function kindLabel(kind: BudgetItemKind) {
   return {
     income: 'Income',
@@ -3664,80 +3965,106 @@ function budgetDraftFromRow(kind: BudgetItemKind, row: BudgetRow | null): Record
   return draft;
 }
 
-function budgetFieldsForKind(kind: BudgetItemKind): Array<{ key: keyof BudgetRow | string; label: string; type?: 'text' | 'number' | 'checkbox' | 'textarea' }> {
+function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
   const common = [
     { key: 'name', label: 'Name' },
-    { key: 'frequency', label: 'Frequency' },
+    { key: 'mode', label: 'Mode', type: 'select' as const, options: ['personal', 'business'] },
+    { key: 'frequency', label: 'Frequency', type: 'select' as const, options: ['weekly', 'fortnightly', 'monthly', 'annually'] },
+    { key: 'schedule_type', label: 'Schedule type', type: 'select' as const, options: ['weekly', 'fortnightly', 'monthly', 'exact_date'] },
+    { key: 'schedule_day', label: 'Schedule day', type: 'select' as const, options: ['0', '1', '2', '3', '4', '5', '6'] },
+    { key: 'schedule_date', label: 'Schedule date', type: 'number' as const },
     { key: 'active', label: 'Active', type: 'checkbox' as const },
     { key: 'notes', label: 'Notes', type: 'textarea' as const }
   ];
 
   if (kind === 'income') return [
     common[0],
-    { key: 'amount', label: 'Amount', type: 'number' },
     common[1],
-    { key: 'tax_rate', label: 'Tax rate', type: 'number' },
+    { key: 'amount', label: 'Amount', type: 'number' },
     common[2],
-    common[3]
+    { key: 'tax_rate', label: 'Tax rate', type: 'number' },
+    common[3],
+    common[4],
+    common[5],
+    common[6],
+    common[7]
   ];
 
   if (kind === 'expenses') return [
     common[0],
-    { key: 'category', label: 'Category' },
-    { key: 'amount', label: 'Amount', type: 'number' },
     common[1],
+    { key: 'category', label: 'Category', type: 'select', options: ['Housing', 'Utilities', 'Subscriptions', 'Transport', 'Food', 'Insurance', 'Business', 'Equipment', 'Other'] },
+    { key: 'amount', label: 'Amount', type: 'number' },
     common[2],
-    common[3]
+    common[3],
+    common[4],
+    common[5],
+    common[6],
+    common[7]
   ];
 
   if (kind === 'debts') return [
     common[0],
-    { key: 'debt_type', label: 'Debt type' },
+    common[1],
+    { key: 'debt_type', label: 'Debt type', type: 'select', options: ['credit_card', 'loan', 'tax', 'personal', 'business', 'other'] },
     { key: 'balance', label: 'Balance', type: 'number' },
     { key: 'repayment', label: 'Repayment', type: 'number' },
-    common[1],
-    { key: 'interest_rate', label: 'Interest rate', type: 'number' },
     common[2],
-    common[3]
+    { key: 'interest_rate', label: 'Interest rate', type: 'number' },
+    common[3],
+    common[4],
+    common[5],
+    common[6],
+    common[7]
   ];
 
   if (kind === 'mortgages') return [
     common[0],
+    common[1],
     { key: 'property_address', label: 'Property address' },
     { key: 'balance', label: 'Balance', type: 'number' },
     { key: 'property_value', label: 'Property value', type: 'number' },
     { key: 'repayment', label: 'Repayment', type: 'number' },
-    common[1],
+    common[2],
     { key: 'tenant_count', label: 'Tenant count', type: 'number' },
     { key: 'interest_rate', label: 'Interest rate', type: 'number' },
-    common[2],
-    common[3]
+    common[3],
+    common[4],
+    common[5],
+    common[6],
+    common[7]
   ];
 
   if (kind === 'mortgageExpenses') return [
     common[0],
+    common[1],
     { key: 'mortgage_local_id', label: 'Mortgage local ID' },
     { key: 'amount', label: 'Amount', type: 'number' },
-    common[1],
-    { key: 'offset_to_tenants', label: 'Offset expense to tenants', type: 'checkbox' },
     common[2],
-    common[3]
+    { key: 'offset_to_tenants', label: 'Offset expense to tenants', type: 'checkbox' },
+    common[3],
+    common[4],
+    common[5],
+    common[6],
+    common[7]
   ];
 
   if (kind === 'assets') return [
     common[0],
-    { key: 'asset_type', label: 'Asset type' },
+    common[1],
+    { key: 'asset_type', label: 'Asset type', type: 'select', options: ['property', 'vehicle', 'cash', 'investment', 'equipment', 'other'] },
     { key: 'value', label: 'Value', type: 'number' },
-    common[2],
-    common[3]
+    common[6],
+    common[7]
   ];
 
   return [
     { key: 'goal_name', label: 'Goal name' },
+    common[1],
     { key: 'amount', label: 'Amount', type: 'number' },
     { key: 'goal_amount', label: 'Goal amount', type: 'number' },
-    common[1],
-    common[2]
+    common[2],
+    common[6]
   ];
 }
 
