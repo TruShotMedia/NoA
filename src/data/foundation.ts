@@ -15,6 +15,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  WalletCards,
   Workflow
 } from 'lucide-react';
 import type {
@@ -37,6 +38,7 @@ export const navItems: NavItem[] = [
   { id: 'tasks', label: 'Tasks', icon: Inbox },
   { id: 'upcoming-jobs', label: 'Upcoming Jobs', icon: CalendarDays },
   { id: 'xero', label: 'Xero', icon: CreditCard },
+  { id: 'budgeting', label: 'Budgeting', icon: WalletCards },
   { id: 'plan', label: 'Plan', icon: ClipboardList },
   { id: 'memory', label: 'Memory', icon: BrainCircuit },
   { id: 'automations', label: 'Automations', icon: Workflow },

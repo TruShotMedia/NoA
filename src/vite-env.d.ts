@@ -421,6 +421,64 @@ interface Window {
       }>;
       warnings: string[];
     }>;
+    getBudgetSummary?: () => Promise<{
+      ok: boolean;
+      message: string;
+      fetchedAt: string;
+      owner: {
+        email: string;
+        displayName?: string;
+        userId: string;
+      };
+      tables: Record<string, unknown[]>;
+      totals: Record<string, number>;
+      mortgageSummary: {
+        mortgages: unknown[];
+        totalWeeklyTenantBill: number;
+        totalWeeklyOffsetExpenses: number;
+      };
+      emailSettings: {
+        enabled: boolean;
+        cycleDay: number;
+        subjectPrefix: string;
+        replyTo: string;
+        notes: string;
+        tenants: Array<{
+          id: string;
+          name: string;
+          email: string;
+          mortgageLocalId: string;
+          active: boolean;
+        }>;
+      };
+      settings: Record<string, unknown> | null;
+    }>;
+    manageBudgetItem?: (payload: {
+      kind: string;
+      action: 'create' | 'update' | 'delete';
+      id?: string;
+      values?: Record<string, unknown>;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      item?: unknown;
+    }>;
+    saveBudgetEmailSettings?: (payload: {
+      settings: Record<string, unknown>;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      settings?: unknown;
+    }>;
+    sendBudgetTenantEmail?: (payload: {
+      dryRun?: boolean;
+      tenantId?: string;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      previews: unknown[];
+      sent: unknown[];
+    }>;
     startOfflineWake: () => Promise<{
       ok: boolean;
       message: string;

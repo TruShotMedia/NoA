@@ -2733,6 +2733,284 @@ h3 {
   text-decoration: none;
 }
 
+.budget-page {
+  display: grid;
+  gap: 18px;
+}
+
+.budget-hero {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.budget-overview {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.budget-metric,
+.budget-panel {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.04));
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
+  padding: 22px;
+}
+
+.budget-metric span {
+  color: var(--faint);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.budget-metric strong {
+  color: #fff;
+  display: block;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.budget-metric p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+
+.budget-metric.green .xero-card-icon {
+  background: rgba(52, 211, 153, 0.13);
+  color: #bbf7d0;
+}
+
+.budget-metric.amber .xero-card-icon {
+  background: rgba(251, 191, 36, 0.13);
+  color: #fde68a;
+}
+
+.budget-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 1.15fr 0.85fr;
+}
+
+.budget-table-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.budget-mortgage-list,
+.budget-row-list {
+  display: grid;
+  gap: 10px;
+}
+
+.budget-mortgage-card,
+.budget-email-card,
+.budget-row {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.budget-mortgage-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.budget-mortgage-card strong,
+.budget-email-card strong,
+.budget-row strong {
+  color: #fff;
+}
+
+.budget-mortgage-card p,
+.budget-email-card p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.budget-bill-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.budget-bill-grid span {
+  background: rgba(255, 255, 255, 0.055);
+  border-radius: 14px;
+  color: var(--faint);
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.budget-bill-grid strong {
+  color: #dbeafe;
+  overflow-wrap: anywhere;
+}
+
+.budget-email-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.budget-email-topline,
+.budget-email-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.budget-email-fields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.budget-email-fields label,
+.budget-tenant-row {
+  display: grid;
+  gap: 7px;
+}
+
+.budget-email-fields label span {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.budget-email-fields input,
+.budget-email-fields select,
+.budget-email-fields textarea,
+.budget-tenant-row input,
+.budget-tenant-row select {
+  background: rgba(3, 7, 18, 0.62);
+  border: 0;
+  border-radius: 13px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  font: inherit;
+  min-height: 42px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.budget-email-fields label:last-child {
+  grid-column: 1 / -1;
+}
+
+.budget-tenant-list,
+.budget-email-previews {
+  display: grid;
+  gap: 9px;
+}
+
+.budget-tenant-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.055);
+  border-radius: 16px;
+  grid-template-columns: 1fr 1.2fr 1fr auto auto;
+  padding: 10px;
+}
+
+.toggle-row {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.76);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.toggle-row input {
+  accent-color: #93c5fd;
+}
+
+.budget-email-previews article {
+  background: rgba(3, 7, 18, 0.48);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: grid;
+  gap: 7px;
+  padding: 13px;
+}
+
+.budget-email-previews span {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.budget-email-previews p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.budget-email-card small {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.45;
+  padding: 11px;
+}
+
+.budget-row {
+  align-items: center;
+  border: 0;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 14px;
+  text-align: left;
+}
+
+.budget-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.budget-row small {
+  color: var(--faint);
+  display: block;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.budget-row > span:nth-child(2) {
+  color: #dbeafe;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.danger-action {
+  color: #fecdd3;
+}
+
+.budget-modal {
+  max-width: 760px;
+}
+
 .xero-page {
   display: grid;
   gap: 18px;
@@ -3503,6 +3781,8 @@ h3 {
   }
 
   .metric-grid,
+    .budget-overview,
+    .budget-table-grid,
     .memory-grid,
     .hero-grid,
     .briefing-strip,
@@ -3522,6 +3802,10 @@ h3 {
     .xero-analytics-grid,
     .xero-intelligence-grid,
     .xero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3963,6 +4247,44 @@ h3 {
     align-items: stretch;
     flex-direction: column;
     width: 100%;
+  }
+
+  .budget-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .budget-bill-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-email-fields,
+  .budget-tenant-row {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-email-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .budget-email-actions button {
+    width: 100%;
+  }
+
+  .budget-row {
+    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .budget-row svg {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .budget-row > span:nth-child(2) {
+    grid-column: 1 / -1;
+    white-space: normal;
   }
 
   .xero-actions button,

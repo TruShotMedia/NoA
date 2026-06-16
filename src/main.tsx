@@ -76,7 +76,7 @@ type SmartBriefing = {
   firstAction: string;
 };
 
-type IntegrationId = 'openai' | 'supabase' | 'n8n' | 'notion' | 'xero';
+type IntegrationId = 'openai' | 'supabase' | 'n8n' | 'notion' | 'xero' | 'email';
 
 type IntegrationStatus = Record<IntegrationId, boolean>;
 
@@ -318,6 +318,129 @@ type DraftInvoiceForm = {
   taxType: string;
 };
 
+type BudgetItemKind = 'income' | 'expenses' | 'debts' | 'mortgages' | 'mortgageExpenses' | 'assets' | 'savings';
+
+type BudgetOwner = {
+  email: string;
+  displayName?: string;
+  userId: string;
+};
+
+type BudgetRow = {
+  id?: string;
+  local_id?: string;
+  mode?: string;
+  name?: string;
+  goal_name?: string;
+  property_address?: string;
+  category?: string;
+  asset_type?: string;
+  debt_type?: string;
+  mortgage_local_id?: string;
+  amount?: number;
+  repayment?: number;
+  balance?: number;
+  value?: number;
+  property_value?: number;
+  goal_amount?: number;
+  frequency?: string;
+  active?: boolean;
+  offset_to_tenants?: boolean;
+  tenant_count?: number | null;
+  weekly_amount?: number;
+  monthly_amount?: number;
+  weekly_repayment?: number;
+  monthly_repayment?: number;
+  tenant_bill_weekly?: number;
+  tenant_bill_monthly?: number;
+  tenant_bill_per_tenant_weekly?: number;
+  tenant_bill_per_tenant_monthly?: number;
+  schedule_type?: string;
+  schedule_day?: number | null;
+  schedule_date?: number | null;
+  schedule_exact_date?: string;
+  notes?: string;
+  sourceTable?: string;
+  updated_at?: string;
+};
+
+type BudgetTables = Record<BudgetItemKind, BudgetRow[]>;
+
+type BudgetTotals = {
+  weeklyIncome: number;
+  weeklyExpenses: number;
+  weeklyDebtRepayments: number;
+  weeklyMortgageRepayments: number;
+  weeklyMortgageExpenses: number;
+  weeklySavings: number;
+  weeklyTenantOffsets: number;
+  netWeekly: number;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  assetValue: number;
+  debtBalance: number;
+  mortgageBalance: number;
+  netWorth: number;
+};
+
+type BudgetMortgageBill = {
+  id?: string;
+  localId?: string;
+  name: string;
+  propertyAddress: string;
+  tenantCount: number;
+  weeklyRepayment: number;
+  weeklyOffsetExpenses: number;
+  weeklyTenantBill: number;
+  expenses: BudgetRow[];
+};
+
+type BudgetTenant = {
+  id: string;
+  name: string;
+  email: string;
+  mortgageLocalId: string;
+  active: boolean;
+};
+
+type BudgetEmailSettings = {
+  enabled: boolean;
+  cycleDay: number;
+  subjectPrefix: string;
+  replyTo: string;
+  notes: string;
+  tenants: BudgetTenant[];
+};
+
+type BudgetEmailPreview = {
+  tenantId: string;
+  tenantName: string;
+  to: string;
+  from: string;
+  replyTo: string;
+  subject: string;
+  text: string;
+  weeklyBill: number;
+  mortgageName: string;
+  mortgageLocalId: string;
+};
+
+type BudgetReport = {
+  ok: boolean;
+  message: string;
+  fetchedAt: string;
+  owner: BudgetOwner;
+  tables: BudgetTables;
+  totals: BudgetTotals;
+  mortgageSummary: {
+    mortgages: BudgetMortgageBill[];
+    totalWeeklyTenantBill: number;
+    totalWeeklyOffsetExpenses: number;
+  };
+  emailSettings: BudgetEmailSettings;
+  settings: Record<string, unknown> | null;
+};
+
 const emptyJobsReport: NotionJobsReport = {
   tasks: [],
   pipelineTasks: [],
@@ -371,6 +494,52 @@ const emptyXeroReport: XeroReport = {
   warnings: []
 };
 
+const emptyBudgetReport: BudgetReport = {
+  ok: false,
+  message: '',
+  fetchedAt: '',
+  owner: { email: 'info@fearlessau.com', userId: '' },
+  tables: {
+    income: [],
+    expenses: [],
+    debts: [],
+    mortgages: [],
+    mortgageExpenses: [],
+    assets: [],
+    savings: []
+  },
+  totals: {
+    weeklyIncome: 0,
+    weeklyExpenses: 0,
+    weeklyDebtRepayments: 0,
+    weeklyMortgageRepayments: 0,
+    weeklyMortgageExpenses: 0,
+    weeklySavings: 0,
+    weeklyTenantOffsets: 0,
+    netWeekly: 0,
+    monthlyIncome: 0,
+    monthlyExpenses: 0,
+    assetValue: 0,
+    debtBalance: 0,
+    mortgageBalance: 0,
+    netWorth: 0
+  },
+  mortgageSummary: {
+    mortgages: [],
+    totalWeeklyTenantBill: 0,
+    totalWeeklyOffsetExpenses: 0
+  },
+  emailSettings: {
+    enabled: false,
+    cycleDay: 1,
+    subjectPrefix: 'Weekly property bill',
+    replyTo: 'info@fearlessau.com',
+    notes: '',
+    tenants: []
+  },
+  settings: null
+};
+
 const jobColumns = ['Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes'];
 
 if (!window.noa) {
@@ -399,6 +568,10 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     updateNotionTaskStatus: (payload) => postJson('/api/notion-task-status', payload),
     manageNotionItem: (payload) => postJson('/api/notion-item', payload),
     getXeroSummary: () => fetch('/api/xero/summary').then((response) => response.json()),
+    getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
+    manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
+    saveBudgetEmailSettings: (payload) => postJson('/api/budget/email-settings', payload),
+    sendBudgetTenantEmail: (payload) => postJson('/api/budget/tenant-email', payload),
     startOfflineWake: async () => ({
       ok: false,
       message: 'Offline Hey Noah activation runs on the Windows home base. Tablet mode supports tap-to-talk and spoken replies.'
@@ -518,6 +691,29 @@ const integrationSetups: IntegrationSetup[] = [
       { key: 'XERO_TENANT_ID', label: 'Tenant ID', placeholder: 'Returned by /api/xero/callback' },
       { key: 'XERO_REDIRECT_URI', label: 'Redirect URI', placeholder: 'https://no-a.vercel.app/api/xero/callback' }
     ]
+  },
+  {
+    id: 'email',
+    name: 'Email',
+    role: 'Sends approval-gated tenant billing emails and future NoA notifications through Gmail API.',
+    statusLabel: 'Gmail OAuth setup',
+    credential: 'Vercel env -> Google OAuth client plus Gmail refresh token',
+    steps: [
+      'Create a Google Cloud OAuth web client and enable the Gmail API.',
+      'Add https://no-a.vercel.app/api/gmail/callback as an authorised redirect URI.',
+      'Save GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GMAIL_REDIRECT_URI, and GMAIL_SENDER_EMAIL in Vercel, then redeploy.',
+      'Open https://no-a.vercel.app/api/gmail/start and approve Gmail send access.',
+      'NoA will save the Gmail refresh token automatically when Supabase private settings are configured.'
+    ],
+    fields: [
+      { key: 'GOOGLE_CLIENT_ID', label: 'Google client ID', required: true, placeholder: 'Google OAuth web client id' },
+      { key: 'GOOGLE_CLIENT_SECRET', label: 'Google client secret', type: 'password', required: true, placeholder: 'Google OAuth web client secret' },
+      { key: 'GMAIL_REFRESH_TOKEN', label: 'Gmail refresh token fallback', type: 'password', placeholder: 'Stored automatically in Supabase after /api/gmail/start' },
+      { key: 'GMAIL_SENDER_EMAIL', label: 'Sender email', required: true, placeholder: 'info@fearlessau.com' },
+      { key: 'GMAIL_REDIRECT_URI', label: 'Redirect URI', required: true, placeholder: 'https://no-a.vercel.app/api/gmail/callback' },
+      { key: 'RESEND_API_KEY', label: 'Resend fallback API key', type: 'password', placeholder: 'Optional fallback: re_...' },
+      { key: 'BUDGET_EMAIL_FROM', label: 'Resend fallback sender', placeholder: 'Optional fallback: NoA <info@fearlessau.com>' }
+    ]
   }
 ];
 
@@ -539,8 +735,8 @@ function App() {
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus>(() => {
     const saved = window.localStorage.getItem('noa.integrationStatus');
     return saved
-      ? { openai: false, supabase: false, n8n: false, notion: false, xero: false, ...(JSON.parse(saved) as Partial<IntegrationStatus>) }
-      : { openai: false, supabase: false, n8n: false, notion: false, xero: false };
+      ? { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false, ...(JSON.parse(saved) as Partial<IntegrationStatus>) }
+      : { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false };
   });
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -556,6 +752,8 @@ function App() {
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
   const [isLoadingXero, setIsLoadingXero] = useState(false);
+  const [budgetReport, setBudgetReport] = useState<BudgetReport>(emptyBudgetReport);
+  const [isLoadingBudget, setIsLoadingBudget] = useState(false);
   const [startupSync, setStartupSync] = useState<StartupSyncState>({
     status: 'idle',
     message: 'Data will sync automatically.',
@@ -592,6 +790,7 @@ function App() {
   const startupSyncStartedRef = useRef(false);
   const jobsRequestRef = useRef<Promise<NotionJobsReport> | null>(null);
   const xeroRequestRef = useRef<Promise<XeroReport> | null>(null);
+  const budgetRequestRef = useRef<Promise<BudgetReport> | null>(null);
   const voiceSupported = false;
   const recordingSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
 
@@ -751,6 +950,25 @@ function App() {
     }
   };
 
+  const loadBudgetSummary = async () => {
+    const getBudgetSummary = window.noa?.getBudgetSummary;
+    if (!getBudgetSummary) return emptyBudgetReport;
+    if (budgetRequestRef.current) return budgetRequestRef.current;
+    setIsLoadingBudget(true);
+    const request = (async () => {
+      const report = mergeBudgetReport(await getBudgetSummary() as Partial<BudgetReport>);
+      setBudgetReport(report);
+      return report;
+    })();
+    budgetRequestRef.current = request;
+    try {
+      return await request;
+    } finally {
+      budgetRequestRef.current = null;
+      setIsLoadingBudget(false);
+    }
+  };
+
   useEffect(() => {
     if (startupSyncStartedRef.current) return;
     startupSyncStartedRef.current = true;
@@ -759,13 +977,14 @@ function App() {
     const syncAtStartup = async () => {
       setStartupSync({
         status: 'syncing',
-        message: 'Syncing Notion and Xero...',
+        message: 'Syncing Notion, Xero, and Budgeting...',
         checkedAt: ''
       });
 
-      const [notionResult, xeroResult] = await Promise.allSettled([
+      const [notionResult, xeroResult, budgetResult] = await Promise.allSettled([
         loadNotionJobs(),
-        loadXeroSummary()
+        loadXeroSummary(),
+        loadBudgetSummary()
       ]);
 
       if (!isMounted) return;
@@ -783,9 +1002,15 @@ function App() {
         issues.push('Xero needs attention');
       }
 
+      if (budgetResult.status === 'rejected') {
+        issues.push('Budget failed');
+      } else if (!budgetResult.value.ok) {
+        issues.push('Budget needs attention');
+      }
+
       setStartupSync({
         status: issues.length ? 'partial' : 'synced',
-        message: issues.length ? issues.join(' - ') : 'Notion and Xero are synced.',
+        message: issues.length ? issues.join(' - ') : 'Notion, Xero, and Budgeting are synced.',
         checkedAt: new Date().toISOString()
       });
     };
@@ -806,6 +1031,9 @@ function App() {
     }
     if (screen === 'xero' && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
+    }
+    if (screen === 'budgeting' && !budgetReport.fetchedAt && !isLoadingBudget) {
+      void loadBudgetSummary();
     }
   }, [screen]);
 
@@ -1521,6 +1749,14 @@ function App() {
             isLoadingNotion={isLoadingJobs}
             refreshXero={loadXeroSummary}
             refreshNotion={loadNotionJobs}
+          />
+        )}
+        {screen === 'budgeting' && (
+          <BudgetingView
+            report={budgetReport}
+            isLoading={isLoadingBudget}
+            refreshBudget={loadBudgetSummary}
+            onMutated={() => void loadBudgetSummary()}
           />
         )}
         {screen === 'plan' && <Plan />}
@@ -2487,6 +2723,467 @@ function CalendarDayModal({
   );
 }
 
+function BudgetingView({
+  report,
+  isLoading,
+  refreshBudget,
+  onMutated
+}: {
+  report: BudgetReport;
+  isLoading: boolean;
+  refreshBudget: () => Promise<BudgetReport>;
+  onMutated: () => void;
+}) {
+  const [editor, setEditor] = useState<{ kind: BudgetItemKind; row: BudgetRow | null } | null>(null);
+  const [emailDraft, setEmailDraft] = useState<BudgetEmailSettings>(() => normalizeBudgetEmailSettings(report.emailSettings));
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailPreviews, setEmailPreviews] = useState<BudgetEmailPreview[]>([]);
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const totals = report.totals;
+  const netTone = totals.netWeekly >= 0 ? 'green' : 'amber';
+  const dataCount = Object.values(report.tables).reduce((count, rows) => count + rows.length, 0);
+  const activeTenantCount = emailDraft.tenants.filter((tenant) => tenant.active !== false && tenant.email).length;
+
+  useEffect(() => {
+    setEmailDraft(normalizeBudgetEmailSettings(report.emailSettings));
+  }, [report.emailSettings]);
+
+  const saveEmailSettings = async () => {
+    if (!window.noa?.saveBudgetEmailSettings) {
+      setEmailMessage('Tenant email settings need the Vercel/desktop API.');
+      return;
+    }
+    setIsSavingEmail(true);
+    setEmailMessage('');
+    const response = await window.noa.saveBudgetEmailSettings({ settings: emailDraft });
+    setIsSavingEmail(false);
+    setEmailMessage(response.message || (response.ok ? 'Settings saved.' : 'Could not save settings.'));
+    if (response.ok) onMutated();
+  };
+
+  const previewTenantEmails = async (sendNow = false) => {
+    if (!window.noa?.sendBudgetTenantEmail) {
+      setEmailMessage('Tenant email sending needs the Vercel/desktop API.');
+      return;
+    }
+    setIsSendingEmail(true);
+    setEmailMessage('');
+    if (sendNow && emailPreviews.length === 0) {
+      await saveEmailSettings();
+    }
+    const response = await window.noa.sendBudgetTenantEmail({ dryRun: !sendNow });
+    setIsSendingEmail(false);
+    setEmailPreviews((response.previews || []) as BudgetEmailPreview[]);
+    setEmailMessage(response.message || (response.ok ? 'Tenant email action completed.' : 'Tenant email action failed.'));
+  };
+
+  const updateTenant = (tenantId: string, patch: Partial<BudgetTenant>) => {
+    setEmailDraft((current) => ({
+      ...current,
+      tenants: current.tenants.map((tenant) => tenant.id === tenantId ? { ...tenant, ...patch } : tenant)
+    }));
+  };
+
+  const addTenant = () => {
+    setEmailDraft((current) => ({
+      ...current,
+      tenants: [
+        ...current.tenants,
+        { id: crypto.randomUUID(), name: '', email: '', mortgageLocalId: report.mortgageSummary.mortgages[0]?.localId || '', active: true }
+      ]
+    }));
+  };
+
+  const removeTenant = (tenantId: string) => {
+    setEmailDraft((current) => ({
+      ...current,
+      tenants: current.tenants.filter((tenant) => tenant.id !== tenantId)
+    }));
+  };
+
+  return (
+    <section className="page-fade budget-page">
+      <article className="glass-card wide budget-hero">
+        <div>
+          <PanelTitle eyebrow="Optra Studio ledger" title="Budgeting" />
+          <p className="section-copy">
+            A normalized budget workspace for {report.owner.email}. It reads income, expenses, debts, mortgages, assets, savings, and tenant offsets from Supabase.
+          </p>
+        </div>
+        <div className="xero-actions">
+          <div className={`xero-health ${report.ok ? 'online' : 'offline'}`}>
+            <span />
+            {report.ok ? 'Connected' : 'Needs setup'}
+          </div>
+          <button className="secondary-action" onClick={() => void refreshBudget()} disabled={isLoading}>
+            <RefreshCw size={16} />
+            {isLoading ? 'Syncing...' : 'Sync budget'}
+          </button>
+        </div>
+      </article>
+
+      {!report.ok && (
+        <article className="glass-card wide xero-alert">
+          <CircleAlert size={20} />
+          <div>
+            <strong>{report.message || 'Budgeting is not connected yet.'}</strong>
+            <p>Confirm SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured for the Optra Studio project.</p>
+          </div>
+        </article>
+      )}
+
+      {report.ok && dataCount === 0 && (
+        <article className="glass-card wide xero-alert">
+          <Database size={20} />
+          <div>
+            <strong>Connected, but the normalized ledger tables are empty.</strong>
+            <p>Add income, expenses, mortgage, or tenant offset rows here and NoA will write them back into Supabase.</p>
+          </div>
+        </article>
+      )}
+
+      <section className="budget-overview">
+        <BudgetMetric icon={WalletCards} label="Weekly income" value={formatMoney(totals.weeklyIncome)} detail={formatMoney(totals.monthlyIncome) + ' monthly equivalent'} />
+        <BudgetMetric icon={ReceiptText} label="Weekly outgoings" value={formatMoney(totals.weeklyExpenses + totals.weeklyDebtRepayments + totals.weeklyMortgageRepayments + totals.weeklyMortgageExpenses + totals.weeklySavings)} detail="expenses, debts, mortgage, savings" />
+        <BudgetMetric icon={PieChart} label="Net weekly" value={formatMoney(totals.netWeekly)} detail="after active budget rows" tone={netTone} />
+        <BudgetMetric icon={Building2} label="Net worth" value={formatMoney(totals.netWorth)} detail={`${formatMoney(totals.assetValue)} assets minus debts`} />
+      </section>
+
+      <section className="budget-grid">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Mortgage automation" title="Tenant bills" />
+            <span>{report.fetchedAt ? `Synced ${formatTimeOnly(report.fetchedAt)}` : 'Not synced'}</span>
+          </div>
+          {report.mortgageSummary.mortgages.length === 0 ? (
+            <p className="empty-state">No active mortgage rows found yet. Add a mortgage to calculate tenant bill splits.</p>
+          ) : (
+            <div className="budget-mortgage-list">
+              {report.mortgageSummary.mortgages.map((mortgage) => (
+                <article className="budget-mortgage-card" key={mortgage.id || mortgage.localId || mortgage.name}>
+                  <div>
+                    <strong>{mortgage.name}</strong>
+                    <p>{mortgage.propertyAddress || 'No property address'} · {mortgage.tenantCount || 0} tenant(s)</p>
+                  </div>
+                  <div className="budget-bill-grid">
+                    <span>Repayment <strong>{formatMoney(mortgage.weeklyRepayment)}</strong></span>
+                    <span>Offsets <strong>{formatMoney(mortgage.weeklyOffsetExpenses)}</strong></span>
+                    <span>Per tenant <strong>{formatMoney(mortgage.weeklyTenantBill)}</strong></span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </article>
+
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Email automation" title="Tenant billing emails" />
+            <Send size={20} />
+          </div>
+          <div className="budget-email-card">
+            <div className="budget-email-topline">
+              <strong>{emailDraft.enabled ? 'Weekly tenant emails enabled' : 'Manual tenant emails'}</strong>
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={emailDraft.enabled}
+                  onChange={(event) => setEmailDraft((current) => ({ ...current, enabled: event.currentTarget.checked }))}
+                />
+                Auto cycle
+              </label>
+            </div>
+            <p>{activeTenantCount} active recipient(s). Cycle day: {dayName(emailDraft.cycleDay)}.</p>
+            <div className="budget-email-fields">
+              <label>
+                <span>Cycle day</span>
+                <select
+                  value={emailDraft.cycleDay}
+                  onChange={(event) => setEmailDraft((current) => ({ ...current, cycleDay: Number(event.currentTarget.value) }))}
+                >
+                  {[0, 1, 2, 3, 4, 5, 6].map((day) => <option value={day} key={day}>{dayName(day)}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Subject prefix</span>
+                <input
+                  value={emailDraft.subjectPrefix}
+                  onChange={(event) => setEmailDraft((current) => ({ ...current, subjectPrefix: event.currentTarget.value }))}
+                />
+              </label>
+              <label>
+                <span>Reply-to</span>
+                <input
+                  value={emailDraft.replyTo}
+                  onChange={(event) => setEmailDraft((current) => ({ ...current, replyTo: event.currentTarget.value }))}
+                />
+              </label>
+              <label>
+                <span>Tenant note</span>
+                <textarea
+                  value={emailDraft.notes}
+                  onChange={(event) => setEmailDraft((current) => ({ ...current, notes: event.currentTarget.value }))}
+                  rows={3}
+                />
+              </label>
+            </div>
+            <div className="budget-tenant-list">
+              {emailDraft.tenants.map((tenant) => (
+                <article className="budget-tenant-row" key={tenant.id}>
+                  <input placeholder="Tenant name" value={tenant.name} onChange={(event) => updateTenant(tenant.id, { name: event.currentTarget.value })} />
+                  <input placeholder="tenant@email.com" value={tenant.email} onChange={(event) => updateTenant(tenant.id, { email: event.currentTarget.value })} />
+                  <select value={tenant.mortgageLocalId} onChange={(event) => updateTenant(tenant.id, { mortgageLocalId: event.currentTarget.value })}>
+                    <option value="">First mortgage</option>
+                    {report.mortgageSummary.mortgages.map((mortgage) => (
+                      <option value={mortgage.localId || ''} key={mortgage.id || mortgage.localId || mortgage.name}>{mortgage.name}</option>
+                    ))}
+                  </select>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={tenant.active} onChange={(event) => updateTenant(tenant.id, { active: event.currentTarget.checked })} />
+                    Active
+                  </label>
+                  <button className="secondary-action compact" onClick={() => removeTenant(tenant.id)} aria-label="Remove tenant">
+                    <Trash2 size={15} />
+                  </button>
+                </article>
+              ))}
+              <button className="secondary-action compact" onClick={addTenant}>
+                <Plus size={16} />
+                Add tenant
+              </button>
+            </div>
+            {emailMessage && <p className="form-message">{emailMessage}</p>}
+            <div className="budget-email-actions">
+              <button className="secondary-action" onClick={() => void saveEmailSettings()} disabled={isSavingEmail}>
+                <Save size={16} />
+                {isSavingEmail ? 'Saving...' : 'Save settings'}
+              </button>
+              <button className="secondary-action" onClick={() => void previewTenantEmails(false)} disabled={isSendingEmail}>
+                <Eye size={16} />
+                Preview
+              </button>
+              <button className="primary-action" onClick={() => void previewTenantEmails(true)} disabled={isSendingEmail || activeTenantCount === 0}>
+                <Send size={16} />
+                {isSendingEmail ? 'Sending...' : 'Send now'}
+              </button>
+            </div>
+            {emailPreviews.length > 0 && (
+              <div className="budget-email-previews">
+                {emailPreviews.map((preview) => (
+                  <article key={preview.tenantId}>
+                    <span>{preview.to || 'No email address'}</span>
+                    <strong>{preview.subject}</strong>
+                    <p>{preview.text}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="budget-table-grid">
+        <BudgetTable title="Income" kind="income" rows={report.tables.income} onEdit={(row) => setEditor({ kind: 'income', row })} onCreate={() => setEditor({ kind: 'income', row: null })} />
+        <BudgetTable title="Expenses" kind="expenses" rows={report.tables.expenses} onEdit={(row) => setEditor({ kind: 'expenses', row })} onCreate={() => setEditor({ kind: 'expenses', row: null })} />
+        <BudgetTable title="Mortgages" kind="mortgages" rows={report.tables.mortgages} onEdit={(row) => setEditor({ kind: 'mortgages', row })} onCreate={() => setEditor({ kind: 'mortgages', row: null })} />
+        <BudgetTable title="Mortgage expenses" kind="mortgageExpenses" rows={report.tables.mortgageExpenses} onEdit={(row) => setEditor({ kind: 'mortgageExpenses', row })} onCreate={() => setEditor({ kind: 'mortgageExpenses', row: null })} />
+        <BudgetTable title="Debts" kind="debts" rows={report.tables.debts} onEdit={(row) => setEditor({ kind: 'debts', row })} onCreate={() => setEditor({ kind: 'debts', row: null })} />
+        <BudgetTable title="Assets and savings" kind="assets" rows={[...report.tables.assets, ...report.tables.savings]} onEdit={(row) => setEditor({ kind: row.goal_name ? 'savings' : 'assets', row })} onCreate={() => setEditor({ kind: 'assets', row: null })} />
+      </section>
+
+      {editor && (
+        <BudgetEditorModal
+          kind={editor.kind}
+          row={editor.row}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null);
+            onMutated();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function BudgetMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = 'blue'
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: 'blue' | 'green' | 'amber';
+}) {
+  return (
+    <article className={`budget-metric ${tone}`}>
+      <div className="xero-card-icon"><Icon size={22} /></div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </article>
+  );
+}
+
+function BudgetTable({
+  title,
+  kind,
+  rows,
+  onEdit,
+  onCreate
+}: {
+  title: string;
+  kind: BudgetItemKind;
+  rows: BudgetRow[];
+  onEdit: (row: BudgetRow) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <article className="glass-card budget-panel">
+      <div className="panel-row-head">
+        <PanelTitle eyebrow={kindLabel(kind)} title={title} />
+        <button className="secondary-action compact" onClick={onCreate}>
+          <Plus size={16} />
+          New
+        </button>
+      </div>
+      <div className="budget-row-list">
+        {rows.length === 0 ? (
+          <p className="empty-state">No rows yet.</p>
+        ) : (
+          rows.map((row, index) => (
+            <button className="budget-row" key={row.id || row.local_id || `${title}-${index}`} onClick={() => onEdit(row)}>
+              <span>
+                <strong>{budgetRowTitle(row)}</strong>
+                <small>{budgetRowSubtitle(kind, row)}</small>
+              </span>
+              <span>{formatMoney(budgetPrimaryAmount(kind, row))}</span>
+              <Edit3 size={16} />
+            </button>
+          ))
+        )}
+      </div>
+    </article>
+  );
+}
+
+function BudgetEditorModal({
+  kind,
+  row,
+  onClose,
+  onSaved
+}: {
+  kind: BudgetItemKind;
+  row: BudgetRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [draft, setDraft] = useState<Record<string, string | boolean>>(() => budgetDraftFromRow(kind, row));
+  const [message, setMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const fields = budgetFieldsForKind(kind);
+  const isEditing = Boolean(row?.id);
+
+  const updateDraft = (key: string, value: string | boolean) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const save = async () => {
+    if (!window.noa?.manageBudgetItem) {
+      setMessage('Budget editing is only available through the Vercel/desktop API.');
+      return;
+    }
+    setIsSaving(true);
+    setMessage('');
+    const response = await window.noa.manageBudgetItem({
+      kind,
+      action: isEditing ? 'update' : 'create',
+      id: row?.id,
+      values: draft
+    });
+    setIsSaving(false);
+    if (!response.ok) {
+      setMessage(response.message || 'Could not save budget item.');
+      return;
+    }
+    onSaved();
+  };
+
+  const deleteItem = async () => {
+    if (!row?.id || !window.noa?.manageBudgetItem) return;
+    setIsSaving(true);
+    const response = await window.noa.manageBudgetItem({ kind, action: 'delete', id: row.id });
+    setIsSaving(false);
+    if (!response.ok) {
+      setMessage(response.message || 'Could not delete budget item.');
+      return;
+    }
+    onSaved();
+  };
+
+  return (
+    <div className="modal-shell">
+      <button className="modal-backdrop" aria-label="Close budget editor" onClick={onClose} />
+      <article className="notion-modal budget-modal">
+        <div className="modal-head">
+          <div>
+            <p className="eyebrow">{kindLabel(kind)}</p>
+            <h3>{isEditing ? 'Edit budget row' : 'Create budget row'}</h3>
+          </div>
+          <button onClick={onClose} aria-label="Close budget editor"><X size={18} /></button>
+        </div>
+
+        <div className="notion-form-grid">
+          {fields.map((field) => (
+            <label key={field.key} className={field.type === 'textarea' ? 'span-2' : ''}>
+              <span>{field.label}</span>
+              {field.type === 'checkbox' ? (
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft[field.key])}
+                  onChange={(event) => updateDraft(field.key, event.currentTarget.checked)}
+                />
+              ) : field.type === 'textarea' ? (
+                <textarea
+                  value={String(draft[field.key] || '')}
+                  onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
+                  rows={4}
+                />
+              ) : (
+                <input
+                  type={field.type === 'number' ? 'number' : 'text'}
+                  value={String(draft[field.key] || '')}
+                  onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
+                />
+              )}
+            </label>
+          ))}
+        </div>
+
+        {message && <p className="form-message error">{message}</p>}
+        <div className="modal-actions">
+          {isEditing && (
+            <button className="secondary-action danger-action" onClick={() => void deleteItem()} disabled={isSaving}>
+              <Trash2 size={16} />
+              Delete
+            </button>
+          )}
+          <button className="secondary-action" onClick={onClose} disabled={isSaving}>Cancel</button>
+          <button className="primary-action" onClick={() => void save()} disabled={isSaving}>
+            <Save size={16} />
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </article>
+    </div>
+  );
+}
+
 function XeroView({
   report,
   notionReport,
@@ -2876,6 +3573,172 @@ function XeroMetric({
       <p>{detail}</p>
     </article>
   );
+}
+
+function mergeBudgetReport(report: Partial<BudgetReport>): BudgetReport {
+  return {
+    ...emptyBudgetReport,
+    ...report,
+    owner: {
+      ...emptyBudgetReport.owner,
+      ...(report.owner || {})
+    },
+    tables: {
+      ...emptyBudgetReport.tables,
+      ...(report.tables || {})
+    },
+    totals: {
+      ...emptyBudgetReport.totals,
+      ...(report.totals || {})
+    },
+    mortgageSummary: {
+      ...emptyBudgetReport.mortgageSummary,
+      ...(report.mortgageSummary || {}),
+      mortgages: report.mortgageSummary?.mortgages || []
+    },
+    emailSettings: normalizeBudgetEmailSettings(report.emailSettings),
+    settings: report.settings || null
+  };
+}
+
+function normalizeBudgetEmailSettings(settings: Partial<BudgetEmailSettings> | undefined): BudgetEmailSettings {
+  return {
+    ...emptyBudgetReport.emailSettings,
+    ...(settings || {}),
+    tenants: Array.isArray(settings?.tenants) ? settings.tenants.map((tenant, index) => ({
+      id: tenant.id || `tenant-${index + 1}`,
+      name: tenant.name || '',
+      email: tenant.email || '',
+      mortgageLocalId: tenant.mortgageLocalId || '',
+      active: tenant.active !== false
+    })) : []
+  };
+}
+
+function dayName(day: number) {
+  return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day] || 'Monday';
+}
+
+function kindLabel(kind: BudgetItemKind) {
+  return {
+    income: 'Income',
+    expenses: 'Expense',
+    debts: 'Debt',
+    mortgages: 'Mortgage',
+    mortgageExpenses: 'Mortgage expense',
+    assets: 'Asset',
+    savings: 'Saving'
+  }[kind];
+}
+
+function budgetRowTitle(row: BudgetRow) {
+  return row.name || row.goal_name || row.property_address || row.local_id || 'Untitled row';
+}
+
+function budgetRowSubtitle(kind: BudgetItemKind, row: BudgetRow) {
+  const status = row.active === false ? 'inactive' : 'active';
+  if (kind === 'mortgageExpenses') return [row.mortgage_local_id, row.offset_to_tenants ? 'offset to tenants' : 'not offset', status].filter(Boolean).join(' · ');
+  if (kind === 'mortgages') return [row.property_address, row.tenant_count ? `${row.tenant_count} tenants` : '', row.frequency, status].filter(Boolean).join(' · ');
+  if (kind === 'assets') return [row.asset_type, status].filter(Boolean).join(' · ');
+  if (kind === 'debts') return [row.debt_type, row.frequency, status].filter(Boolean).join(' · ');
+  return [row.category, row.frequency, status].filter(Boolean).join(' · ');
+}
+
+function budgetPrimaryAmount(kind: BudgetItemKind, row: BudgetRow) {
+  if (kind === 'debts' || kind === 'mortgages') return row.repayment || row.weekly_repayment || row.balance || 0;
+  if (kind === 'assets') return row.value || 0;
+  if (kind === 'savings') return row.amount || row.goal_amount || 0;
+  return row.amount || row.weekly_amount || 0;
+}
+
+function budgetDraftFromRow(kind: BudgetItemKind, row: BudgetRow | null): Record<string, string | boolean> {
+  const draft: Record<string, string | boolean> = {};
+  for (const field of budgetFieldsForKind(kind)) {
+    const value = row?.[field.key as keyof BudgetRow];
+    draft[field.key] = field.type === 'checkbox' ? Boolean(value) : value == null ? '' : String(value);
+  }
+  if (!row) {
+    draft.active = true;
+    if ('frequency' in draft) draft.frequency = 'weekly';
+  }
+  return draft;
+}
+
+function budgetFieldsForKind(kind: BudgetItemKind): Array<{ key: keyof BudgetRow | string; label: string; type?: 'text' | 'number' | 'checkbox' | 'textarea' }> {
+  const common = [
+    { key: 'name', label: 'Name' },
+    { key: 'frequency', label: 'Frequency' },
+    { key: 'active', label: 'Active', type: 'checkbox' as const },
+    { key: 'notes', label: 'Notes', type: 'textarea' as const }
+  ];
+
+  if (kind === 'income') return [
+    common[0],
+    { key: 'amount', label: 'Amount', type: 'number' },
+    common[1],
+    { key: 'tax_rate', label: 'Tax rate', type: 'number' },
+    common[2],
+    common[3]
+  ];
+
+  if (kind === 'expenses') return [
+    common[0],
+    { key: 'category', label: 'Category' },
+    { key: 'amount', label: 'Amount', type: 'number' },
+    common[1],
+    common[2],
+    common[3]
+  ];
+
+  if (kind === 'debts') return [
+    common[0],
+    { key: 'debt_type', label: 'Debt type' },
+    { key: 'balance', label: 'Balance', type: 'number' },
+    { key: 'repayment', label: 'Repayment', type: 'number' },
+    common[1],
+    { key: 'interest_rate', label: 'Interest rate', type: 'number' },
+    common[2],
+    common[3]
+  ];
+
+  if (kind === 'mortgages') return [
+    common[0],
+    { key: 'property_address', label: 'Property address' },
+    { key: 'balance', label: 'Balance', type: 'number' },
+    { key: 'property_value', label: 'Property value', type: 'number' },
+    { key: 'repayment', label: 'Repayment', type: 'number' },
+    common[1],
+    { key: 'tenant_count', label: 'Tenant count', type: 'number' },
+    { key: 'interest_rate', label: 'Interest rate', type: 'number' },
+    common[2],
+    common[3]
+  ];
+
+  if (kind === 'mortgageExpenses') return [
+    common[0],
+    { key: 'mortgage_local_id', label: 'Mortgage local ID' },
+    { key: 'amount', label: 'Amount', type: 'number' },
+    common[1],
+    { key: 'offset_to_tenants', label: 'Offset expense to tenants', type: 'checkbox' },
+    common[2],
+    common[3]
+  ];
+
+  if (kind === 'assets') return [
+    common[0],
+    { key: 'asset_type', label: 'Asset type' },
+    { key: 'value', label: 'Value', type: 'number' },
+    common[2],
+    common[3]
+  ];
+
+  return [
+    { key: 'goal_name', label: 'Goal name' },
+    { key: 'amount', label: 'Amount', type: 'number' },
+    { key: 'goal_amount', label: 'Goal amount', type: 'number' },
+    common[1],
+    common[2]
+  ];
 }
 
 function mergeXeroReport(report: Partial<XeroReport>): XeroReport {
@@ -4876,6 +5739,7 @@ function screenTitle(screen: Screen) {
     tasks: 'Tasks',
     'upcoming-jobs': 'Upcoming Jobs',
     xero: 'Xero',
+    budgeting: 'Budgeting',
     plan: 'Build Plan',
     memory: 'Memory',
     automations: 'Automations',
