@@ -444,6 +444,15 @@ type BudgetEmailSendResult = {
   message: string;
 };
 
+type BudgetTenantBillingRow = {
+  tenant: BudgetTenant;
+  mortgage: BudgetMortgageBill | null;
+  rentWeekly: number;
+  utilitiesWeekly: number;
+  totalWeekly: number;
+  warnings: string[];
+};
+
 type BudgetReport = {
   ok: boolean;
   message: string;
@@ -2799,7 +2808,7 @@ function BudgetingView({
   const activeTenantCount = emailDraft.tenants.filter((tenant) => tenant.active !== false && tenant.email).length;
   const filteredTables = useMemo(() => filterBudgetTables(report.tables, modeFilter, showInactiveRows), [report.tables, modeFilter, showInactiveRows]);
   const analytics = useMemo(() => buildBudgetPageAnalytics(report, filteredTables), [report, filteredTables]);
-  const tenantBillingRows = useMemo(() => emailDraft.tenants.map((tenant) => {
+  const tenantBillingRows = useMemo<BudgetTenantBillingRow[]>(() => emailDraft.tenants.map((tenant) => {
     const mortgage = findBudgetMortgageForTenant(tenant, report.mortgageSummary.mortgages);
     const rentWeekly = toWeeklyBudgetAmount(tenant.rent, tenant.rentFrequency);
     const utilitiesWeekly = mortgage ? mortgage.weeklyUtilitiesSplit ?? mortgage.weeklyTenantBill : 0;
@@ -2814,6 +2823,10 @@ function BudgetingView({
   }), [emailDraft.tenants, report.mortgageSummary.mortgages]);
   const setupWarnings = tenantBillingRows.flatMap((row) => row.warnings.map((warning) => `${row.tenant.name || 'Unnamed tenant'}: ${warning}`));
   const mortgageExpenseGroups = useMemo(() => buildMortgageExpenseGroups(report.mortgageSummary.mortgages, filteredTables.mortgageExpenses), [report.mortgageSummary.mortgages, filteredTables.mortgageExpenses]);
+  const propertyAnalytics = useMemo(() => buildBudgetPropertyAnalytics(report.mortgageSummary.mortgages, tenantBillingRows, mortgageExpenseGroups), [report.mortgageSummary.mortgages, tenantBillingRows, mortgageExpenseGroups]);
+  const attentionItems = useMemo(() => buildBudgetAttentionItems(analytics, tenantBillingRows, mortgageExpenseGroups, filteredTables), [analytics, tenantBillingRows, mortgageExpenseGroups, filteredTables]);
+  const tenantWeeklyTotal = sumNumbers(tenantBillingRows.filter((row) => row.tenant.active !== false), (row) => row.totalWeekly);
+  const ownerPropertyWeekly = analytics.weeklyMortgage + sumNumbers(mortgageExpenseGroups, (group) => group.weeklyOwner);
   const nextSendDate = getNextCycleDate(emailDraft.cycleDay);
 
   useEffect(() => {
@@ -2953,6 +2966,12 @@ function BudgetingView({
         <BudgetMetric icon={ReceiptText} label="Weekly outgoings" value={formatMoney(totals.weeklyExpenses + totals.weeklyDebtRepayments + totals.weeklyMortgageRepayments + totals.weeklyMortgageExpenses + totals.weeklySavings)} detail="expenses, debts, mortgage, savings" />
         <BudgetMetric icon={PieChart} label="Net weekly" value={formatMoney(totals.netWeekly)} detail="after active budget rows" tone={netTone} />
         <BudgetMetric icon={Building2} label="Net worth" value={formatMoney(totals.netWorth)} detail={`${formatMoney(totals.assetValue)} assets minus debts`} />
+      </section>
+
+      <section className="budget-command-grid">
+        <BudgetCashflowPanel analytics={analytics} tenantWeeklyTotal={tenantWeeklyTotal} ownerPropertyWeekly={ownerPropertyWeekly} />
+        <BudgetPropertyPanel rows={propertyAnalytics} />
+        <BudgetAttentionPanel items={attentionItems} />
       </section>
 
       <section className="budget-decision-grid">
@@ -3414,6 +3433,99 @@ function BudgetMetric({
       <span>{label}</span>
       <strong>{value}</strong>
       <p>{detail}</p>
+    </article>
+  );
+}
+
+function BudgetCashflowPanel({
+  analytics,
+  tenantWeeklyTotal,
+  ownerPropertyWeekly
+}: {
+  analytics: ReturnType<typeof buildBudgetPageAnalytics>;
+  tenantWeeklyTotal: number;
+  ownerPropertyWeekly: number;
+}) {
+  const rows = [
+    { label: 'Income', weekly: analytics.weeklyIncome, detail: 'active income rows', tone: 'income' },
+    { label: 'Core outgoings', weekly: analytics.weeklyExpenses + analytics.weeklyDebt + analytics.weeklySavings, detail: 'expenses, debts, savings', tone: 'expense' },
+    { label: 'Owner property cost', weekly: ownerPropertyWeekly, detail: 'mortgage plus owner-only costs', tone: 'property' },
+    { label: 'Tenant billing configured', weekly: tenantWeeklyTotal, detail: 'rent plus tenant-offset utilities', tone: 'tenant' }
+  ];
+  const max = Math.max(...rows.map((row) => row.weekly), 1);
+
+  return (
+    <article className="glass-card budget-panel budget-command-card">
+      <div className="panel-row-head">
+        <PanelTitle eyebrow="Cashflow" title="Weekly to monthly view" />
+        <WalletCards size={20} />
+      </div>
+      <div className="budget-cashflow-list">
+        {rows.map((row) => (
+          <div className={`budget-cashflow-row ${row.tone}`} key={row.label}>
+            <div>
+              <strong>{row.label}</strong>
+              <span>{formatMoney(row.weekly)} weekly - {formatMoney(row.weekly * 52 / 12)} monthly</span>
+            </div>
+            <i><b style={{ width: `${Math.max(5, Math.round((row.weekly / max) * 100))}%` }} /></i>
+            <p>{row.detail}</p>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function BudgetPropertyPanel({ rows }: { rows: ReturnType<typeof buildBudgetPropertyAnalytics> }) {
+  return (
+    <article className="glass-card budget-panel budget-command-card">
+      <div className="panel-row-head">
+        <PanelTitle eyebrow="Property analytics" title="Mortgage and tenant view" />
+        <Building2 size={20} />
+      </div>
+      <div className="budget-property-list">
+        {rows.length === 0 ? (
+          <p className="empty-state">No property rows found yet.</p>
+        ) : rows.map((row) => (
+          <div className="budget-property-card" key={row.key}>
+            <div className="budget-property-head">
+              <div>
+                <strong>{row.title}</strong>
+                <p>{row.address || 'No property address'}</p>
+              </div>
+              <span>{formatMoney(row.tenantWeeklyTotal)} tenant billing</span>
+            </div>
+            <div className="budget-property-grid">
+              <span>Repayment <strong>{formatMoney(row.weeklyRepayment)}</strong></span>
+              <span>Owner-only <strong>{formatMoney(row.ownerWeekly)}</strong></span>
+              <span>Tenant utilities <strong>{formatMoney(row.tenantOffsetWeekly)}</strong></span>
+              <span>Rent configured <strong>{formatMoney(row.rentWeekly)}</strong></span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function BudgetAttentionPanel({ items }: { items: ReturnType<typeof buildBudgetAttentionItems> }) {
+  return (
+    <article className="glass-card budget-panel budget-command-card">
+      <div className="panel-row-head">
+        <PanelTitle eyebrow="Attention" title="What needs a look" />
+        <CircleAlert size={20} />
+      </div>
+      <div className="budget-attention-list">
+        {items.map((item) => (
+          <div className={`budget-attention-item ${item.tone}`} key={item.title}>
+            <span />
+            <div>
+              <strong>{item.title}</strong>
+              <p>{item.detail}</p>
+            </div>
+          </div>
+        ))}
+      </div>
     </article>
   );
 }
@@ -4202,6 +4314,104 @@ function buildMortgageExpenseGroup({
     perTenant,
     warnings
   };
+}
+
+function buildBudgetPropertyAnalytics(
+  mortgages: BudgetMortgageBill[],
+  tenantRows: BudgetTenantBillingRow[],
+  expenseGroups: ReturnType<typeof buildMortgageExpenseGroups>
+) {
+  return mortgages.map((mortgage) => {
+    const group = expenseGroups.find((item) => item.mortgage?.localId === mortgage.localId || item.mortgage?.id === mortgage.id || item.key === mortgage.localId || item.key === mortgage.id);
+    const tenants = tenantRows.filter((row) => row.tenant.active !== false && row.mortgage === mortgage);
+    const rentWeekly = sumNumbers(tenants, (row) => row.rentWeekly);
+    const tenantWeeklyTotal = sumNumbers(tenants, (row) => row.totalWeekly);
+    return {
+      key: mortgage.localId || mortgage.id || mortgage.name,
+      title: mortgage.name || mortgage.propertyAddress || 'Property',
+      address: mortgage.propertyAddress,
+      weeklyRepayment: mortgage.weeklyRepayment,
+      ownerWeekly: group?.weeklyOwner || 0,
+      tenantOffsetWeekly: group?.weeklyOffset || mortgage.weeklyOffsetExpenses || 0,
+      rentWeekly,
+      tenantWeeklyTotal,
+      tenantCount: mortgage.tenantCount
+    };
+  });
+}
+
+function buildBudgetAttentionItems(
+  analytics: ReturnType<typeof buildBudgetPageAnalytics>,
+  tenantRows: BudgetTenantBillingRow[],
+  expenseGroups: ReturnType<typeof buildMortgageExpenseGroups>,
+  tables: BudgetTables
+) {
+  const items: Array<{ title: string; detail: string; tone: 'warn' | 'calm' | 'info' }> = [];
+  const tenantWarningCount = tenantRows.reduce((count, row) => count + row.warnings.length, 0);
+  const unlinkedCount = expenseGroups.find((group) => !group.mortgage)?.expenses.length || 0;
+  const zeroTenantOffsetCount = expenseGroups.filter((group) => group.mortgage && group.weeklyOffset > 0 && group.tenantCount <= 0).length;
+
+  if (analytics.monthlyNet < 0) {
+    items.push({
+      title: 'Projected deficit',
+      detail: `${formatMoney(Math.abs(analytics.monthlyNet))} monthly gap based on active rows.`,
+      tone: 'warn'
+    });
+  } else {
+    items.push({
+      title: 'Cashflow positive',
+      detail: `${formatMoney(analytics.monthlyNet)} projected monthly surplus in this filter.`,
+      tone: 'calm'
+    });
+  }
+
+  if (tenantWarningCount > 0) {
+    items.push({
+      title: 'Tenant setup warnings',
+      detail: `${tenantWarningCount} billing setup warning(s) need review before automation.`,
+      tone: 'warn'
+    });
+  } else {
+    items.push({
+      title: 'Tenant setup clear',
+      detail: 'No active tenant setup warnings are currently showing.',
+      tone: 'calm'
+    });
+  }
+
+  if (unlinkedCount > 0) {
+    items.push({
+      title: 'Unlinked mortgage expenses',
+      detail: `${unlinkedCount} mortgage expense row(s) are not tied to a property.`,
+      tone: 'warn'
+    });
+  }
+
+  if (zeroTenantOffsetCount > 0) {
+    items.push({
+      title: 'Tenant count missing',
+      detail: `${zeroTenantOffsetCount} property group(s) offset costs but cannot split them.`,
+      tone: 'warn'
+    });
+  }
+
+  if (analytics.weeklySavings <= 0) {
+    items.push({
+      title: 'No active savings plan',
+      detail: 'Add or activate a savings row if you want savings pressure included.',
+      tone: 'info'
+    });
+  }
+
+  if (tables.income.length === 0) {
+    items.push({
+      title: 'No income rows in filter',
+      detail: 'The selected filter has no active income rows, so net cashflow may look harsher.',
+      tone: 'info'
+    });
+  }
+
+  return items.slice(0, 5);
 }
 
 function filterBudgetTables(tables: BudgetTables, mode: BudgetModeFilter, showInactive: boolean): BudgetTables {

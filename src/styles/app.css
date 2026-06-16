@@ -2817,6 +2817,18 @@ h3 {
   grid-template-columns: 1fr 1fr;
 }
 
+.budget-command-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 1fr 1.2fr 0.9fr;
+}
+
+.budget-command-card {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+}
+
 .budget-today-card {
   display: grid;
   gap: 14px;
@@ -2933,6 +2945,139 @@ h3 {
   color: var(--faint);
   font-size: 12px;
   margin: 7px 0 0;
+}
+
+.budget-cashflow-list,
+.budget-property-list,
+.budget-attention-list {
+  display: grid;
+  gap: 10px;
+}
+
+.budget-cashflow-row {
+  background: rgba(3, 7, 18, 0.42);
+  border-radius: 16px;
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+}
+
+.budget-cashflow-row div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.budget-cashflow-row strong,
+.budget-property-card strong,
+.budget-attention-item strong {
+  color: #fff;
+}
+
+.budget-cashflow-row span,
+.budget-cashflow-row p,
+.budget-property-card p,
+.budget-attention-item p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.budget-cashflow-row i {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  display: block;
+  height: 10px;
+  overflow: hidden;
+}
+
+.budget-cashflow-row b {
+  background: linear-gradient(90deg, #60a5fa, #a78bfa);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.budget-cashflow-row.income b,
+.budget-cashflow-row.tenant b {
+  background: linear-gradient(90deg, #34d399, #93c5fd);
+}
+
+.budget-cashflow-row.expense b,
+.budget-cashflow-row.property b {
+  background: linear-gradient(90deg, #f59e0b, #fb7185);
+}
+
+.budget-property-card {
+  background: rgba(3, 7, 18, 0.42);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+}
+
+.budget-property-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.budget-property-head > span {
+  background: rgba(96, 165, 250, 0.12);
+  border-radius: 999px;
+  color: #dbeafe;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.budget-property-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.budget-property-grid span {
+  background: rgba(255, 255, 255, 0.055);
+  border-radius: 14px;
+  color: var(--faint);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.budget-property-grid strong {
+  color: #dbeafe;
+  overflow-wrap: anywhere;
+}
+
+.budget-attention-item {
+  align-items: flex-start;
+  background: rgba(3, 7, 18, 0.42);
+  border-radius: 16px;
+  display: grid;
+  gap: 11px;
+  grid-template-columns: auto 1fr;
+  padding: 13px;
+}
+
+.budget-attention-item > span {
+  background: #93c5fd;
+  border-radius: 999px;
+  height: 10px;
+  margin-top: 5px;
+  width: 10px;
+}
+
+.budget-attention-item.warn > span {
+  background: var(--amber);
+}
+
+.budget-attention-item.calm > span {
+  background: var(--green);
 }
 
 .budget-toolbar {
@@ -4348,6 +4493,7 @@ h3 {
 
   .metric-grid,
     .budget-overview,
+    .budget-command-grid,
     .budget-decision-grid,
     .budget-analytics-grid,
     .budget-table-grid,
@@ -4387,6 +4533,10 @@ h3 {
   }
 
   .budget-tenant-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .budget-property-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -4866,12 +5016,14 @@ h3 {
   .tenant-bill-breakdown,
   .budget-tenant-form-grid,
   .budget-tenant-config-summary,
+  .budget-property-grid,
   .mortgage-expense-split-grid,
   .mortgage-expense-values {
     grid-template-columns: 1fr;
   }
 
   .tenant-bill-head,
+  .budget-property-head,
   .budget-tenant-editor-head,
   .budget-tenant-config-top,
   .budget-tenant-config-actions,
