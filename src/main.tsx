@@ -2266,85 +2266,118 @@ function CalendarDayModal({
     setSelectedId(jobs[0] ? `${jobs[0].sourceKind}-${jobs[0].id}` : '');
   }, [date, jobs]);
 
+  const selectedKey = selectedJob ? `${selectedJob.sourceKind}-${selectedJob.id}` : '';
+  const sourceCounts = jobs.reduce<Record<string, number>>((counts, job) => {
+    const key = job.sourceKind === 'task' ? "JOHN'S HUB" : 'Jobs database';
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={`Calendar items for ${date}`}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Close calendar day" />
       <section className="notion-modal calendar-day-modal">
-        <div className="modal-head">
+        <div className="modal-head calendar-day-headline">
           <div>
             <p className="eyebrow">Calendar day</p>
             <h3>{formatCalendarDay(date)}</h3>
+            <div className="calendar-day-summary">
+              <span>{jobs.length} {jobs.length === 1 ? 'item' : 'items'}</span>
+              {Object.entries(sourceCounts).map(([source, count]) => (
+                <span key={source}>{count} {source}</span>
+              ))}
+            </div>
           </div>
           <button type="button" className="icon-close" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
-        <div className="calendar-day-tabs" role="tablist" aria-label="Tasks on this day">
-          {jobs.map((job, index) => (
-            <button
-              className={`${job.sourceKind}-${job.id}` === selectedId ? 'active' : ''}
-              onClick={() => setSelectedId(`${job.sourceKind}-${job.id}`)}
-              role="tab"
-              type="button"
-              key={`${job.sourceKind}-${job.id}`}
-            >
-              <span>{index + 1}</span>
-              {job.title}
-            </button>
-          ))}
-        </div>
+        <div className="calendar-day-layout">
+          <div className="calendar-agenda-list" role="tablist" aria-label="Tasks on this day">
+            {jobs.map((job, index) => {
+              const key = `${job.sourceKind}-${job.id}`;
+              return (
+                <button
+                  className={key === selectedId ? 'active' : ''}
+                  onClick={() => setSelectedId(key)}
+                  role="tab"
+                  type="button"
+                  aria-selected={key === selectedId}
+                  key={key}
+                >
+                  <span className={`priority-dot priority-${(job.priority || 'none').toLowerCase()}`} />
+                  <div>
+                    <strong>{job.title}</strong>
+                    <small>{[job.client, job.sourceLabel].filter(Boolean).join(' - ') || `Item ${index + 1}`}</small>
+                  </div>
+                  <em>{job.dueState || 'Scheduled'}</em>
+                </button>
+              );
+            })}
+          </div>
 
-        {selectedJob && (
-          <article className={`calendar-day-preview priority-${(selectedJob.priority || 'none').toLowerCase()}`}>
-            <div>
-              <span className="priority-dot" />
-              <strong>{selectedJob.title}</strong>
-            </div>
-            <p>{[selectedJob.client, selectedJob.location, selectedJob.sourceLabel].filter(Boolean).join(' - ') || 'No extra details'}</p>
-            <div className="job-card-meta">
-              <span className={`due-pill ${selectedJob.dueState === 'Overdue' ? 'danger' : selectedJob.dueState === 'Due today' ? 'today' : ''}`}>
-                {selectedJob.jobDate ? `${selectedJob.dueState} - ${selectedJob.jobDate}` : 'No date'}
-              </span>
-              {selectedJob.priority && <span>{selectedJob.priority}</span>}
-              <span>{selectedJob.sourceKind === 'task' ? "JOHN'S HUB" : 'Jobs database'}</span>
-            </div>
-            {selectedJob.notes && <p>{selectedJob.notes}</p>}
-            {selectedJob.deliverableTypes.length > 0 && (
-              <div className="job-chip-row">
-                {selectedJob.deliverableTypes.slice(0, 5).map((type) => <span key={type}>{type}</span>)}
-              </div>
-            )}
-            {(selectedJob.attachments || []).length > 0 && (
-              <div className="attachment-chip-row">
-                {(selectedJob.attachments || []).slice(0, 3).map((attachment) => (
-                  <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
-                    <ArrowUpRight size={12} />
-                    {attachment.name}
-                  </a>
-                ))}
-              </div>
-            )}
-          </article>
-        )}
-
-        <div className="modal-actions">
-          {selectedJob?.url && (
-            <a className="secondary-action" href={selectedJob.url} target="_blank" rel="noreferrer">
-              <ArrowUpRight size={16} />
-              Open in Notion
-            </a>
-          )}
           {selectedJob && (
-            <>
-              <button type="button" className="secondary-action" onClick={() => onEdit(selectedJob)}>
-                <Edit3 size={16} />
-                Edit
-              </button>
-              <button type="button" className="primary-action" onClick={() => onOpen(selectedJob)}>
-                View details
-              </button>
-            </>
+            <article className={`calendar-day-preview priority-${(selectedJob.priority || 'none').toLowerCase()}`} role="tabpanel" aria-label={selectedJob.title} key={selectedKey}>
+              <div className="calendar-preview-title">
+                <span className={`priority-dot priority-${(selectedJob.priority || 'none').toLowerCase()}`} />
+                <div>
+                  <strong>{selectedJob.title}</strong>
+                  <p>{[selectedJob.client, selectedJob.location].filter(Boolean).join(' - ') || selectedJob.sourceLabel}</p>
+                </div>
+              </div>
+
+              <div className="calendar-preview-grid">
+                <div>
+                  <span>Date</span>
+                  <strong>{selectedJob.jobDate || 'No date'}</strong>
+                  <small>{selectedJob.dueState || 'Scheduled'}</small>
+                </div>
+                <div>
+                  <span>Source</span>
+                  <strong>{selectedJob.sourceKind === 'task' ? "JOHN'S HUB" : 'Jobs'}</strong>
+                  <small>{selectedJob.sourceLabel}</small>
+                </div>
+                <div>
+                  <span>Priority</span>
+                  <strong>{selectedJob.priority || 'None'}</strong>
+                  <small>{selectedJob.sourceKind === 'task' ? selectedJob.task?.status || '' : selectedJob.location || ''}</small>
+                </div>
+              </div>
+
+              {selectedJob.notes && <p className="calendar-preview-notes">{selectedJob.notes}</p>}
+              {selectedJob.deliverableTypes.length > 0 && (
+                <div className="job-chip-row">
+                  {selectedJob.deliverableTypes.slice(0, 6).map((type) => <span key={type}>{type}</span>)}
+                </div>
+              )}
+              {(selectedJob.attachments || []).length > 0 && (
+                <div className="attachment-chip-row">
+                  {(selectedJob.attachments || []).slice(0, 4).map((attachment) => (
+                    <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
+                      <ArrowUpRight size={12} />
+                      {attachment.name}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              <div className="calendar-preview-actions">
+                {selectedJob.url && (
+                  <a className="secondary-action" href={selectedJob.url} target="_blank" rel="noreferrer">
+                    <ArrowUpRight size={16} />
+                    Open Notion
+                  </a>
+                )}
+                <button type="button" className="secondary-action" onClick={() => onEdit(selectedJob)}>
+                  <Edit3 size={16} />
+                  Edit
+                </button>
+                <button type="button" className="primary-action" onClick={() => onOpen(selectedJob)}>
+                  View details
+                </button>
+              </div>
+            </article>
           )}
         </div>
       </section>
