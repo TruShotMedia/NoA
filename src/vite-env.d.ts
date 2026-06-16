@@ -453,6 +453,25 @@ interface Window {
           active: boolean;
         }>;
       };
+      tenantEmailActivity: Array<{
+        id: string;
+        createdAt: string;
+        cycleKey: string;
+        source: string;
+        status: string;
+        provider: string;
+        tenantId: string;
+        tenantName: string;
+        to: string;
+        subject: string;
+        rent: number;
+        utilities: number;
+        total: number;
+        mortgageName: string;
+        messageId: string;
+        rawStatus: number | string;
+        message: string;
+      }>;
       settings: Record<string, unknown> | null;
     }>;
     manageBudgetItem?: (payload: {
@@ -475,11 +494,22 @@ interface Window {
     sendBudgetTenantEmail?: (payload: {
       dryRun?: boolean;
       tenantId?: string;
+      allowDuplicate?: boolean;
     }) => Promise<{
       ok: boolean;
       message: string;
       previews: unknown[];
       sent: unknown[];
+    }>;
+    runBudgetTenantEmailSchedule?: (payload: {
+      force?: boolean;
+      send?: boolean;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      previews: unknown[];
+      sent: unknown[];
+      schedule?: unknown;
     }>;
     startOfflineWake: () => Promise<{
       ok: boolean;

@@ -1,4 +1,10 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/budget/tenant-email-schedule",
+      "schedule": "0 22 * * *"
+    }
+  ]
 }

@@ -442,6 +442,29 @@ type BudgetEmailSendResult = {
   id?: string;
   threadId?: string;
   message: string;
+  cycleKey?: string;
+  source?: string;
+  provider?: string;
+};
+
+type BudgetEmailActivity = {
+  id: string;
+  createdAt: string;
+  cycleKey: string;
+  source: string;
+  status: string;
+  provider: string;
+  tenantId: string;
+  tenantName: string;
+  to: string;
+  subject: string;
+  rent: number;
+  utilities: number;
+  total: number;
+  mortgageName: string;
+  messageId: string;
+  rawStatus: number | string;
+  message: string;
 };
 
 type BudgetTenantBillingRow = {
@@ -466,6 +489,7 @@ type BudgetReport = {
     totalWeeklyOffsetExpenses: number;
   };
   emailSettings: BudgetEmailSettings;
+  tenantEmailActivity: BudgetEmailActivity[];
   settings: Record<string, unknown> | null;
 };
 
@@ -572,6 +596,7 @@ const emptyBudgetReport: BudgetReport = {
     notes: '',
     tenants: []
   },
+  tenantEmailActivity: [],
   settings: null
 };
 
@@ -607,6 +632,7 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
     saveBudgetEmailSettings: (payload) => postJson('/api/budget/email-settings', payload),
     sendBudgetTenantEmail: (payload) => postJson('/api/budget/tenant-email', payload),
+    runBudgetTenantEmailSchedule: (payload) => postJson('/api/budget/tenant-email-schedule', payload),
     startOfflineWake: async () => ({
       ok: false,
       message: 'Offline Hey Noah activation runs on the Windows home base. Tablet mode supports tap-to-talk and spoken replies.'
@@ -2864,6 +2890,7 @@ function BudgetingView({
     setEmailPreviews((response.previews || []) as BudgetEmailPreview[]);
     if (sendNow) setEmailSendHistory((response.sent || []) as BudgetEmailSendResult[]);
     setEmailMessage(response.message || (response.ok ? 'Tenant email action completed.' : 'Tenant email action failed.'));
+    onMutated();
   };
 
   const updateTenant = (tenantId: string, patch: Partial<BudgetTenant>) => {
@@ -3386,6 +3413,7 @@ function BudgetingView({
                 ))}
               </div>
             )}
+            <BudgetEmailActivityPanel activity={report.tenantEmailActivity} />
           </div>
         </article>
       </section>
@@ -3527,6 +3555,36 @@ function BudgetAttentionPanel({ items }: { items: ReturnType<typeof buildBudgetA
         ))}
       </div>
     </article>
+  );
+}
+
+function BudgetEmailActivityPanel({ activity }: { activity: BudgetEmailActivity[] }) {
+  const recent = activity.slice(0, 8);
+  return (
+    <div className="budget-activity-panel">
+      <div className="budget-tenant-editor-head">
+        <div>
+          <strong>Billing activity</strong>
+          <p>Recent previews, sends, duplicate skips, and scheduled checks.</p>
+        </div>
+      </div>
+      {recent.length === 0 ? (
+        <p className="empty-state">No tenant billing activity logged yet.</p>
+      ) : (
+        <div className="budget-activity-list">
+          {recent.map((item) => (
+            <article className={`budget-activity-row ${activityTone(item.status)}`} key={item.id}>
+              <span>{item.status}</span>
+              <div>
+                <strong>{item.tenantName || item.to || 'Scheduled billing'}</strong>
+                <p>{activitySummary(item)}</p>
+              </div>
+              <small>{formatActivityTime(item.createdAt)}</small>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -4178,6 +4236,7 @@ function mergeBudgetReport(report: Partial<BudgetReport>): BudgetReport {
       mortgages: report.mortgageSummary?.mortgages || []
     },
     emailSettings: normalizeBudgetEmailSettings(report.emailSettings),
+    tenantEmailActivity: Array.isArray(report.tenantEmailActivity) ? report.tenantEmailActivity : [],
     settings: report.settings || null
   };
 }
@@ -4227,6 +4286,28 @@ function formatFrequencyLabel(frequency: string) {
   if (text.includes('month')) return 'monthly rent';
   if (text.includes('year') || text.includes('annual')) return 'annual rent';
   return 'weekly rent';
+}
+
+function activityTone(status: string) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'sent') return 'success';
+  if (value === 'failed') return 'failed';
+  if (value === 'skipped') return 'skipped';
+  return 'neutral';
+}
+
+function activitySummary(item: BudgetEmailActivity) {
+  const amount = item.total > 0 ? ` - ${formatMoney(item.total)}` : '';
+  const destination = item.to ? ` to ${item.to}` : '';
+  const source = item.source ? ` via ${item.source}` : '';
+  return `${item.message || item.subject || 'Tenant billing activity'}${destination}${amount}${source}`;
+}
+
+function formatActivityTime(value: string) {
+  if (!value) return 'Unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 function budgetTenantWarnings(tenant: BudgetTenant, mortgage: BudgetMortgageBill | null, rentWeekly: number, utilitiesWeekly: number) {

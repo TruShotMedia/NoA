@@ -3,6 +3,7 @@ const {
   manageBudgetItem,
   saveBudgetEmailSettings,
   sendBudgetTenantEmail,
+  runBudgetTenantEmailSchedule,
   methodNotAllowed,
   sendJson
 } = require('../../lib/noa');
@@ -30,8 +31,13 @@ module.exports = async function handler(req, res) {
     return sendJson(res, 200, await sendBudgetTenantEmail(req));
   }
 
+  if (action === 'tenant-email-schedule') {
+    if (!['GET', 'POST'].includes(req.method)) return methodNotAllowed(res);
+    return sendJson(res, 200, await runBudgetTenantEmailSchedule(req));
+  }
+
   return sendJson(res, 404, {
     ok: false,
-    message: 'Unknown budget route. Use /api/budget/summary, /api/budget/item, /api/budget/email-settings, or /api/budget/tenant-email.'
+    message: 'Unknown budget route. Use /api/budget/summary, /api/budget/item, /api/budget/email-settings, /api/budget/tenant-email, or /api/budget/tenant-email-schedule.'
   });
 };
