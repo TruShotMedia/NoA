@@ -2014,6 +2014,7 @@ function UpcomingJobsView({
   const dueSoonCount = jobs.filter((job) => ['Overdue', 'Due today', 'Tomorrow', 'Due soon'].includes(job.dueState)).length;
   const taskSourcedCount = jobs.filter((job) => job.sourceKind === 'task').length;
   const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionUpcomingJob | NotionTask | null } | null>(null);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<{ date: string; jobs: CalendarJob[] } | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => brisbaneToday().slice(0, 7));
   const calendarDays = useMemo(() => buildJobsCalendarDays(jobs, calendarMonth), [jobs, calendarMonth]);
   const jobsThisMonth = jobs.filter((job) => job.jobDate?.startsWith(calendarMonth));
@@ -2120,14 +2121,18 @@ function UpcomingJobsView({
                 {day.jobs.length > 0 && <strong>{day.jobs.length}</strong>}
               </div>
               <div className="calendar-day-jobs">
-                {day.jobs.slice(0, 3).map((job) => (
+                {day.jobs.slice(0, 2).map((job) => (
                   <button className={`calendar-job priority-${(job.priority || 'none').toLowerCase()}`} onClick={() => setEditor({ mode: 'view', kind: job.sourceKind, item: job.task || job })} key={`${job.sourceKind}-${job.id}`}>
                     <span>{job.title}</span>
                     {job.client && <small>{job.client}</small>}
                     <small>{job.sourceLabel}</small>
                   </button>
                 ))}
-                {day.jobs.length > 3 && <em>+{day.jobs.length - 3} more</em>}
+                {day.jobs.length > 2 && (
+                  <button className="calendar-more" onClick={() => setSelectedCalendarDay({ date: day.date, jobs: day.jobs })}>
+                    {day.jobs.length} tasks
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -2154,6 +2159,21 @@ function UpcomingJobsView({
           ))
         )}
       </section>
+      {selectedCalendarDay && (
+        <CalendarDayModal
+          date={selectedCalendarDay.date}
+          jobs={selectedCalendarDay.jobs}
+          onClose={() => setSelectedCalendarDay(null)}
+          onOpen={(job) => {
+            setSelectedCalendarDay(null);
+            setEditor({ mode: 'view', kind: job.sourceKind, item: job.task || job });
+          }}
+          onEdit={(job) => {
+            setSelectedCalendarDay(null);
+            setEditor({ mode: 'edit', kind: job.sourceKind, item: job.task || job });
+          }}
+        />
+      )}
       {editor && (
         <NotionItemModal
           mode={editor.mode}
@@ -2218,6 +2238,113 @@ function UpcomingJobCard({
         </div>
       )}
     </article>
+  );
+}
+
+function CalendarDayModal({
+  date,
+  jobs,
+  onClose,
+  onOpen,
+  onEdit
+}: {
+  date: string;
+  jobs: CalendarJob[];
+  onClose: () => void;
+  onOpen: (job: CalendarJob) => void;
+  onEdit: (job: CalendarJob) => void;
+}) {
+  const firstKey = jobs[0] ? `${jobs[0].sourceKind}-${jobs[0].id}` : '';
+  const [selectedId, setSelectedId] = useState(firstKey);
+  const selectedJob = jobs.find((job) => `${job.sourceKind}-${job.id}` === selectedId) || jobs[0];
+
+  useEffect(() => {
+    setSelectedId(jobs[0] ? `${jobs[0].sourceKind}-${jobs[0].id}` : '');
+  }, [date, jobs]);
+
+  return (
+    <div className="modal-shell" role="dialog" aria-modal="true" aria-label={`Calendar items for ${date}`}>
+      <button className="modal-backdrop" onClick={onClose} aria-label="Close calendar day" />
+      <section className="notion-modal calendar-day-modal">
+        <div className="modal-head">
+          <div>
+            <p className="eyebrow">Calendar day</p>
+            <h3>{formatCalendarDay(date)}</h3>
+          </div>
+          <button type="button" className="icon-close" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="calendar-day-tabs" role="tablist" aria-label="Tasks on this day">
+          {jobs.map((job, index) => (
+            <button
+              className={`${job.sourceKind}-${job.id}` === selectedId ? 'active' : ''}
+              onClick={() => setSelectedId(`${job.sourceKind}-${job.id}`)}
+              role="tab"
+              type="button"
+              key={`${job.sourceKind}-${job.id}`}
+            >
+              <span>{index + 1}</span>
+              {job.title}
+            </button>
+          ))}
+        </div>
+
+        {selectedJob && (
+          <article className={`calendar-day-preview priority-${(selectedJob.priority || 'none').toLowerCase()}`}>
+            <div>
+              <span className="priority-dot" />
+              <strong>{selectedJob.title}</strong>
+            </div>
+            <p>{[selectedJob.client, selectedJob.location, selectedJob.sourceLabel].filter(Boolean).join(' - ') || 'No extra details'}</p>
+            <div className="job-card-meta">
+              <span className={`due-pill ${selectedJob.dueState === 'Overdue' ? 'danger' : selectedJob.dueState === 'Due today' ? 'today' : ''}`}>
+                {selectedJob.jobDate ? `${selectedJob.dueState} - ${selectedJob.jobDate}` : 'No date'}
+              </span>
+              {selectedJob.priority && <span>{selectedJob.priority}</span>}
+              <span>{selectedJob.sourceKind === 'task' ? "JOHN'S HUB" : 'Jobs database'}</span>
+            </div>
+            {selectedJob.notes && <p>{selectedJob.notes}</p>}
+            {selectedJob.deliverableTypes.length > 0 && (
+              <div className="job-chip-row">
+                {selectedJob.deliverableTypes.slice(0, 5).map((type) => <span key={type}>{type}</span>)}
+              </div>
+            )}
+            {(selectedJob.attachments || []).length > 0 && (
+              <div className="attachment-chip-row">
+                {(selectedJob.attachments || []).slice(0, 3).map((attachment) => (
+                  <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
+                    <ArrowUpRight size={12} />
+                    {attachment.name}
+                  </a>
+                ))}
+              </div>
+            )}
+          </article>
+        )}
+
+        <div className="modal-actions">
+          {selectedJob?.url && (
+            <a className="secondary-action" href={selectedJob.url} target="_blank" rel="noreferrer">
+              <ArrowUpRight size={16} />
+              Open in Notion
+            </a>
+          )}
+          {selectedJob && (
+            <>
+              <button type="button" className="secondary-action" onClick={() => onEdit(selectedJob)}>
+                <Edit3 size={16} />
+                Edit
+              </button>
+              <button type="button" className="primary-action" onClick={() => onOpen(selectedJob)}>
+                View details
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -3479,6 +3606,17 @@ function shiftMonth(monthKey: string, offset: number) {
 function formatCalendarMonth(monthKey: string) {
   const [year, month] = monthKey.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-AU', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC'
+  });
+}
+
+function formatCalendarDay(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-AU', {
+    weekday: 'long',
+    day: 'numeric',
     month: 'long',
     year: 'numeric',
     timeZone: 'UTC'
