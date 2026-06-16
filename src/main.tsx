@@ -159,6 +159,11 @@ type NotionTask = {
 
 type NotionItemKind = 'task' | 'job';
 type NotionEditorMode = 'create' | 'view' | 'edit';
+type AttachmentDraft = {
+  id: string;
+  name: string;
+  url: string;
+};
 type NotionUpcomingJob = NotionJobsReport['upcomingJobs'][number];
 type CalendarJob = NotionUpcomingJob & {
   sourceKind: NotionItemKind;
@@ -1643,6 +1648,7 @@ function PipelineBoard({
       values
     });
     setPipelineMessage(result.message);
+    if (!result.ok) throw new Error(result.message || 'Notion did not save this task.');
     if (result.ok) {
       setEditor(null);
       await refreshJobs();
@@ -1882,8 +1888,7 @@ function TasksView({
       values
     });
     if (!result.ok) {
-      window.alert(result.message);
-      return;
+      throw new Error(result.message || 'Notion did not save this task.');
     }
     setEditor(null);
     await refreshJobs();
@@ -2029,8 +2034,7 @@ function UpcomingJobsView({
       values
     });
     if (!result.ok) {
-      window.alert(result.message);
-      return;
+      throw new Error(result.message || 'Notion did not save this item.');
     }
     setEditor(null);
     await refreshJobs();
@@ -3312,20 +3316,65 @@ function NotionItemModal({
 }) {
   const isJob = kind === 'job';
   const [values, setValues] = useState<Record<string, string>>(() => getInitialNotionValues(kind, item));
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>(() => attachmentDraftsFromValue(values.attachments));
   const [isSaving, setIsSaving] = useState(false);
+  const [formMessage, setFormMessage] = useState('');
+  const firstInputRef = useRef<HTMLInputElement | null>(null);
   const isReadOnly = mode === 'view';
   const title = mode === 'create'
     ? isJob ? 'New job' : 'New task'
     : values.title || (isJob ? 'Job details' : 'Task details');
 
   const updateValue = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }));
+  const updateAttachment = (id: string, key: 'name' | 'url', value: string) => {
+    setAttachments((current) => current.map((attachment) => (
+      attachment.id === id ? { ...attachment, [key]: value } : attachment
+    )));
+  };
+  const addAttachment = () => {
+    setAttachments((current) => [...current, createAttachmentDraft('', '')]);
+  };
+  const removeAttachment = (id: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+  };
+
+  useEffect(() => {
+    const nextValues = getInitialNotionValues(kind, item);
+    setValues(nextValues);
+    setAttachments(attachmentDraftsFromValue(nextValues.attachments));
+    setFormMessage('');
+    setIsSaving(false);
+  }, [kind, item, mode]);
+
+  useEffect(() => {
+    if (mode === 'edit' || mode === 'create') {
+      window.setTimeout(() => firstInputRef.current?.focus(), 40);
+    }
+  }, [mode, item?.id]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isReadOnly || !values.title.trim()) return;
+    const cleanAttachments = attachments
+      .map((attachment) => ({
+        name: attachment.name.trim(),
+        url: attachment.url.trim()
+      }))
+      .filter((attachment) => attachment.name || attachment.url);
+    const invalidAttachment = cleanAttachments.find((attachment) => attachment.url && !/^https?:\/\//i.test(attachment.url));
+    if (invalidAttachment) {
+      setFormMessage('Attachment links need to start with http:// or https://.');
+      return;
+    }
     setIsSaving(true);
+    setFormMessage('Saving to Notion...');
     try {
-      await onSave(values);
+      await onSave({
+        ...values,
+        attachments: formatAttachmentValue(cleanAttachments.filter((attachment) => attachment.url))
+      });
+    } catch (error) {
+      setFormMessage(error instanceof Error ? error.message : 'Notion did not save this item.');
     } finally {
       setIsSaving(false);
     }
@@ -3358,7 +3407,7 @@ function NotionItemModal({
         <div className="notion-form-grid">
           <label className="notion-field wide">
             <span>{isJob ? 'Job title' : 'Task title'}</span>
-            <input value={values.title} onChange={(event) => updateValue('title', event.target.value)} readOnly={isReadOnly} required />
+            <input ref={firstInputRef} value={values.title} onChange={(event) => updateValue('title', event.target.value)} readOnly={isReadOnly} required />
           </label>
 
           {isJob ? (
@@ -3391,10 +3440,6 @@ function NotionItemModal({
               <label className="notion-field wide">
                 <span>Notes</span>
                 <textarea value={values.notes} onChange={(event) => updateValue('notes', event.target.value)} readOnly={isReadOnly} />
-              </label>
-              <label className="notion-field wide">
-                <span>Attachments</span>
-                <textarea value={values.attachments} onChange={(event) => updateValue('attachments', event.target.value)} readOnly={isReadOnly} placeholder={'Contract: https://...\nRun sheet: https://...'} />
               </label>
             </>
           ) : (
@@ -3443,24 +3488,81 @@ function NotionItemModal({
                 <span>Description</span>
                 <textarea value={values.description} onChange={(event) => updateValue('description', event.target.value)} readOnly={isReadOnly} />
               </label>
-              <label className="notion-field wide">
-                <span>Attachments</span>
-                <textarea value={values.attachments} onChange={(event) => updateValue('attachments', event.target.value)} readOnly={isReadOnly} placeholder={'Brief: https://...\nReference: https://...'} />
-              </label>
             </>
           )}
         </div>
 
-        {parseAttachmentValue(values.attachments).length > 0 && (
-          <div className="attachment-list">
-            {parseAttachmentValue(values.attachments).map((attachment) => (
-              <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
-                <ArrowUpRight size={14} />
-                {attachment.name}
-              </a>
-            ))}
+        <section className="attachment-editor">
+          <div className="attachment-editor-head">
+            <div>
+              <span>Google Drive links</span>
+              <small>Links are saved back to the Notion attachment field.</small>
+            </div>
+            {!isReadOnly && (
+              <button type="button" className="secondary-action compact" onClick={addAttachment}>
+                <Plus size={14} />
+                Add link
+              </button>
+            )}
           </div>
-        )}
+
+          {isReadOnly ? (
+            parseAttachmentValue(formatAttachmentValue(attachments)).length > 0 ? (
+              <div className="attachment-list">
+                {parseAttachmentValue(formatAttachmentValue(attachments)).map((attachment) => (
+                  <a href={attachment.url} target="_blank" rel="noreferrer" key={attachment.url}>
+                    <ArrowUpRight size={14} />
+                    {attachment.name}
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-inline">No Google Drive links attached.</p>
+            )
+          ) : (
+            <div className="attachment-rows">
+              {attachments.length === 0 && (
+                <button type="button" className="attachment-empty-add" onClick={addAttachment}>
+                  <Plus size={16} />
+                  Add the first Google Drive link
+                </button>
+              )}
+              {attachments.map((attachment, index) => (
+                <div className="attachment-row" key={attachment.id}>
+                  <label>
+                    <span>Name</span>
+                    <input
+                      value={attachment.name}
+                      onChange={(event) => updateAttachment(attachment.id, 'name', event.target.value)}
+                      placeholder={`Link ${index + 1}`}
+                    />
+                  </label>
+                  <label>
+                    <span>URL</span>
+                    <input
+                      value={attachment.url}
+                      onChange={(event) => updateAttachment(attachment.id, 'url', event.target.value)}
+                      placeholder="https://drive.google.com/..."
+                      inputMode="url"
+                    />
+                  </label>
+                  <div className="attachment-row-actions">
+                    {attachment.url && /^https?:\/\//i.test(attachment.url) && (
+                      <a className="icon-link" href={attachment.url} target="_blank" rel="noreferrer" aria-label={`Open ${attachment.name || 'link'}`}>
+                        <ArrowUpRight size={15} />
+                      </a>
+                    )}
+                    <button type="button" className="icon-danger" onClick={() => removeAttachment(attachment.id)} aria-label="Remove link">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {formMessage && <p className={`form-message ${formMessage.toLowerCase().includes('saving') ? 'saving' : 'error'}`}>{formMessage}</p>}
 
         <div className="modal-actions">
           {item?.url && (
@@ -3522,7 +3624,22 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
 }
 
 function formatAttachmentValue(attachments: Array<{ name: string; url: string }>) {
-  return attachments.map((attachment) => `${attachment.name}: ${attachment.url}`).join('\n');
+  return attachments
+    .filter((attachment) => attachment.url)
+    .map((attachment, index) => `${attachment.name || `Attachment ${index + 1}`}: ${attachment.url}`)
+    .join('\n');
+}
+
+function createAttachmentDraft(name: string, url: string): AttachmentDraft {
+  return {
+    id: `attachment-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name,
+    url
+  };
+}
+
+function attachmentDraftsFromValue(value: string): AttachmentDraft[] {
+  return parseAttachmentValue(value).map((attachment) => createAttachmentDraft(attachment.name, attachment.url));
 }
 
 function parseAttachmentValue(value: string) {
