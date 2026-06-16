@@ -3028,6 +3028,122 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.budget-mortgage-expense-centre {
+  grid-column: 1 / -1;
+}
+
+.mortgage-expense-group-list,
+.mortgage-expense-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.mortgage-expense-group {
+  background: rgba(3, 7, 18, 0.42);
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.mortgage-expense-group-head,
+.mortgage-expense-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.mortgage-expense-group-head span,
+.mortgage-expense-row > div:first-child span {
+  color: #93c5fd;
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.mortgage-expense-group-head strong,
+.mortgage-expense-row strong {
+  color: #fff;
+  display: block;
+}
+
+.mortgage-expense-group-head p,
+.mortgage-expense-row p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 5px 0 0;
+}
+
+.mortgage-expense-split-grid,
+.mortgage-expense-values {
+  display: grid;
+  gap: 8px;
+}
+
+.mortgage-expense-split-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mortgage-expense-values {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: min(330px, 36vw);
+}
+
+.mortgage-expense-split-grid span,
+.mortgage-expense-values span {
+  background: rgba(255, 255, 255, 0.055);
+  border-radius: 14px;
+  color: var(--faint);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.mortgage-expense-split-grid strong,
+.mortgage-expense-values strong {
+  color: #dbeafe;
+  overflow-wrap: anywhere;
+}
+
+.mortgage-expense-row {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  box-shadow: inset 3px 0 0 rgba(148, 163, 184, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  padding: 12px;
+}
+
+.mortgage-expense-row.tenant-offset {
+  box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.86), inset 0 0 0 1px rgba(52, 211, 153, 0.1);
+}
+
+.mortgage-expense-row.inactive {
+  opacity: 0.62;
+}
+
+.offset-toggle {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.065);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.78);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
+.offset-toggle input {
+  accent-color: #34d399;
+}
+
 .budget-email-card {
   display: grid;
   gap: 10px;
@@ -4274,6 +4390,20 @@ h3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .mortgage-expense-split-grid,
+  .mortgage-expense-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mortgage-expense-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mortgage-expense-values {
+    min-width: 0;
+  }
+
   .budget-toolbar {
     align-items: flex-start;
     flex-direction: column;
@@ -4735,14 +4865,17 @@ h3 {
   .budget-tenant-summary-grid,
   .tenant-bill-breakdown,
   .budget-tenant-form-grid,
-  .budget-tenant-config-summary {
+  .budget-tenant-config-summary,
+  .mortgage-expense-split-grid,
+  .mortgage-expense-values {
     grid-template-columns: 1fr;
   }
 
   .tenant-bill-head,
   .budget-tenant-editor-head,
   .budget-tenant-config-top,
-  .budget-tenant-config-actions {
+  .budget-tenant-config-actions,
+  .mortgage-expense-group-head {
     align-items: stretch;
     flex-direction: column;
   }
@@ -4761,7 +4894,14 @@ h3 {
   }
 
   .budget-tenant-config-actions button,
-  .budget-tenant-editor-head button {
+  .budget-tenant-editor-head button,
+  .mortgage-expense-group-head button,
+  .mortgage-expense-row button {
+    width: 100%;
+  }
+
+  .offset-toggle {
+    justify-content: center;
     width: 100%;
   }
 

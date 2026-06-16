@@ -2787,8 +2787,10 @@ function BudgetingView({
   const [emailMessage, setEmailMessage] = useState('');
   const [emailPreviews, setEmailPreviews] = useState<BudgetEmailPreview[]>([]);
   const [emailSendHistory, setEmailSendHistory] = useState<BudgetEmailSendResult[]>([]);
+  const [mortgageExpenseMessage, setMortgageExpenseMessage] = useState('');
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [updatingExpenseId, setUpdatingExpenseId] = useState('');
   const [modeFilter, setModeFilter] = useState<BudgetModeFilter>('all');
   const [showInactiveRows, setShowInactiveRows] = useState(false);
   const totals = report.totals;
@@ -2811,6 +2813,7 @@ function BudgetingView({
     };
   }), [emailDraft.tenants, report.mortgageSummary.mortgages]);
   const setupWarnings = tenantBillingRows.flatMap((row) => row.warnings.map((warning) => `${row.tenant.name || 'Unnamed tenant'}: ${warning}`));
+  const mortgageExpenseGroups = useMemo(() => buildMortgageExpenseGroups(report.mortgageSummary.mortgages, filteredTables.mortgageExpenses), [report.mortgageSummary.mortgages, filteredTables.mortgageExpenses]);
   const nextSendDate = getNextCycleDate(emailDraft.cycleDay);
 
   useEffect(() => {
@@ -2872,6 +2875,36 @@ function BudgetingView({
       ...current,
       tenants: current.tenants.filter((tenant) => tenant.id !== tenantId)
     }));
+  };
+
+  const updateMortgageExpenseOffset = async (row: BudgetRow, offsetToTenants: boolean) => {
+    if (!row.id || !window.noa?.manageBudgetItem) {
+      setMortgageExpenseMessage('Mortgage expense updates need the Vercel/desktop API.');
+      return;
+    }
+    setUpdatingExpenseId(row.id);
+    setMortgageExpenseMessage('');
+    const response = await window.noa.manageBudgetItem({
+      kind: 'mortgageExpenses',
+      action: 'update',
+      id: row.id,
+      values: { offset_to_tenants: offsetToTenants }
+    });
+    setUpdatingExpenseId('');
+    setMortgageExpenseMessage(response.message || (response.ok ? 'Mortgage expense updated.' : 'Could not update mortgage expense.'));
+    if (response.ok) onMutated();
+  };
+
+  const createMortgageExpenseFor = (mortgage: BudgetMortgageBill | null) => {
+    setEditor({
+      kind: 'mortgageExpenses',
+      row: {
+        mortgage_local_id: mortgage?.localId || '',
+        frequency: 'weekly',
+        active: true,
+        offset_to_tenants: false
+      }
+    });
   };
 
   return (
@@ -3058,6 +3091,84 @@ function BudgetingView({
               ))}
             </div>
           )}
+        </article>
+
+        <article className="glass-card budget-panel budget-mortgage-expense-centre">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Mortgage expense logic" title="Owner costs vs tenant offsets" />
+            <button className="secondary-action compact" onClick={() => createMortgageExpenseFor(report.mortgageSummary.mortgages[0] || null)}>
+              <Plus size={16} />
+              Add expense
+            </button>
+          </div>
+          <p className="budget-panel-copy">
+            Expenses marked offset to tenants are split evenly into tenant utilities. Everything else stays as an owner-only cost.
+          </p>
+          {mortgageExpenseMessage && <p className="form-message">{mortgageExpenseMessage}</p>}
+          <div className="mortgage-expense-group-list">
+            {mortgageExpenseGroups.length === 0 ? (
+              <p className="empty-state">No mortgage expenses found yet. Add one here to start separating owner costs from tenant-billed utilities.</p>
+            ) : mortgageExpenseGroups.map((group) => (
+              <article className="mortgage-expense-group" key={group.key}>
+                <div className="mortgage-expense-group-head">
+                  <div>
+                    <span>{group.mortgage ? 'Linked property' : 'Unlinked expenses'}</span>
+                    <strong>{group.title}</strong>
+                    <p>{group.address || 'No property address'} - {group.tenantCount} tenant(s)</p>
+                  </div>
+                  <button className="secondary-action compact" onClick={() => createMortgageExpenseFor(group.mortgage)}>
+                    <Plus size={16} />
+                    New
+                  </button>
+                </div>
+                <div className="mortgage-expense-split-grid">
+                  <span>Total expenses <strong>{formatMoney(group.weeklyTotal)}</strong></span>
+                  <span>Tenant offsets <strong>{formatMoney(group.weeklyOffset)}</strong></span>
+                  <span>Owner-only <strong>{formatMoney(group.weeklyOwner)}</strong></span>
+                  <span>Per tenant <strong>{formatMoney(group.perTenant)}</strong></span>
+                </div>
+                {group.warnings.length > 0 && (
+                  <div className="budget-tenant-warning-row">
+                    {group.warnings.map((warning) => <span key={warning}><CircleAlert size={13} />{warning}</span>)}
+                  </div>
+                )}
+                <div className="mortgage-expense-list">
+                  {group.expenses.length === 0 ? (
+                    <p className="empty-state">No expense rows linked to this property yet.</p>
+                  ) : group.expenses.map((expense) => {
+                    const weekly = budgetWeeklyValue(expense, 'amount');
+                    const perTenant = expense.offset_to_tenants && group.tenantCount > 0 ? weekly / group.tenantCount : 0;
+                    return (
+                      <article className={`mortgage-expense-row ${expense.offset_to_tenants ? 'tenant-offset' : 'owner-only'} ${expense.active === false ? 'inactive' : ''}`} key={expense.id || expense.local_id || expense.name}>
+                        <div>
+                          <span>{expense.offset_to_tenants ? 'Tenant offset' : 'Owner-only'}</span>
+                          <strong>{expense.name || expense.category || 'Mortgage expense'}</strong>
+                          <p>{[expense.category, expense.frequency, expense.active === false ? 'inactive' : 'active'].filter(Boolean).join(' - ')}</p>
+                        </div>
+                        <div className="mortgage-expense-values">
+                          <span>Weekly <strong>{formatMoney(weekly)}</strong></span>
+                          <span>Per tenant <strong>{formatMoney(perTenant)}</strong></span>
+                        </div>
+                        <label className="offset-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(expense.offset_to_tenants)}
+                            disabled={updatingExpenseId === expense.id}
+                            onChange={(event) => void updateMortgageExpenseOffset(expense, event.currentTarget.checked)}
+                          />
+                          <span>{expense.offset_to_tenants ? 'Offset on' : 'Offset off'}</span>
+                        </label>
+                        <button className="secondary-action compact" onClick={() => setEditor({ kind: 'mortgageExpenses', row: expense })}>
+                          <Edit3 size={15} />
+                          Edit
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </article>
+            ))}
+          </div>
         </article>
 
         <article className="glass-card budget-panel">
@@ -4017,6 +4128,82 @@ function budgetTenantWarnings(tenant: BudgetTenant, mortgage: BudgetMortgageBill
   return warnings;
 }
 
+function buildMortgageExpenseGroups(mortgages: BudgetMortgageBill[], expenses: BudgetRow[]) {
+  const linkedKeys = new Set<string>();
+  const groups = mortgages.map((mortgage) => {
+    const keys = [mortgage.localId, mortgage.id, mortgage.name].filter(Boolean).map(String);
+    const rows = expenses.filter((expense) => {
+      const matches = keys.includes(String(expense.mortgage_local_id || ''));
+      if (matches && expense.id) linkedKeys.add(expense.id);
+      return matches;
+    });
+    return buildMortgageExpenseGroup({
+      key: mortgage.localId || mortgage.id || mortgage.name,
+      title: mortgage.name || mortgage.propertyAddress || 'Mortgage',
+      address: mortgage.propertyAddress,
+      tenantCount: mortgage.tenantCount,
+      mortgage,
+      expenses: rows
+    });
+  });
+
+  const unlinked = expenses.filter((expense) => expense.id ? !linkedKeys.has(expense.id) : !mortgages.some((mortgage) => [mortgage.localId, mortgage.id, mortgage.name].filter(Boolean).map(String).includes(String(expense.mortgage_local_id || ''))));
+  if (unlinked.length > 0 || groups.length === 0) {
+    groups.push(buildMortgageExpenseGroup({
+      key: 'unlinked',
+      title: 'Unlinked mortgage expenses',
+      address: '',
+      tenantCount: 0,
+      mortgage: null,
+      expenses: unlinked
+    }));
+  }
+
+  return groups;
+}
+
+function buildMortgageExpenseGroup({
+  key,
+  title,
+  address,
+  tenantCount,
+  mortgage,
+  expenses
+}: {
+  key?: string;
+  title: string;
+  address: string;
+  tenantCount: number;
+  mortgage: BudgetMortgageBill | null;
+  expenses: BudgetRow[];
+}) {
+  const activeExpenses = expenses.filter((expense) => expense.active !== false);
+  const weeklyTotal = sumNumbers(activeExpenses, (expense) => budgetWeeklyValue(expense, 'amount'));
+  const weeklyOffset = sumNumbers(activeExpenses.filter((expense) => expense.offset_to_tenants), (expense) => budgetWeeklyValue(expense, 'amount'));
+  const weeklyOwner = weeklyTotal - weeklyOffset;
+  const perTenant = tenantCount > 0 ? weeklyOffset / tenantCount : 0;
+  const warnings: string[] = [];
+  if (!mortgage) warnings.push('expenses are not linked to a property');
+  if (mortgage && tenantCount <= 0) warnings.push('tenant count is zero');
+  if (mortgage && weeklyOffset <= 0) warnings.push('no active expenses offset to tenants');
+  if (activeExpenses.some((expense) => expense.offset_to_tenants && budgetWeeklyValue(expense, 'amount') <= 0)) warnings.push('offset expense has no amount');
+  if (expenses.some((expense) => expense.active === false && expense.offset_to_tenants)) warnings.push('inactive expense has offset enabled');
+
+  return {
+    key: key || title,
+    title,
+    address,
+    tenantCount,
+    mortgage,
+    expenses,
+    weeklyTotal,
+    weeklyOffset,
+    weeklyOwner,
+    perTenant,
+    warnings
+  };
+}
+
 function filterBudgetTables(tables: BudgetTables, mode: BudgetModeFilter, showInactive: boolean): BudgetTables {
   const filterRows = (rows: BudgetRow[]) => rows.filter((row) => {
     const modeMatches = mode === 'all' || (row.mode || 'personal') === mode;
@@ -4254,6 +4441,7 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     common[0],
     common[1],
     { key: 'mortgage_local_id', label: 'Mortgage local ID' },
+    { key: 'category', label: 'Category', type: 'select', options: ['Utilities', 'Rates', 'Insurance', 'Maintenance', 'Strata', 'Repairs', 'Other'] },
     { key: 'amount', label: 'Amount', type: 'number' },
     common[2],
     { key: 'offset_to_tenants', label: 'Offset expense to tenants', type: 'checkbox' },
