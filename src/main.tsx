@@ -80,6 +80,12 @@ type IntegrationId = 'openai' | 'supabase' | 'n8n' | 'notion' | 'xero';
 
 type IntegrationStatus = Record<IntegrationId, boolean>;
 
+type StartupSyncState = {
+  status: 'idle' | 'syncing' | 'synced' | 'partial';
+  message: string;
+  checkedAt: string;
+};
+
 type IntegrationField = {
   key: string;
   label: string;
@@ -550,6 +556,11 @@ function App() {
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
   const [isLoadingXero, setIsLoadingXero] = useState(false);
+  const [startupSync, setStartupSync] = useState<StartupSyncState>({
+    status: 'idle',
+    message: 'Data will sync automatically.',
+    checkedAt: ''
+  });
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>('off');
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -578,6 +589,9 @@ function App() {
   const wakeLoopActiveRef = useRef(false);
   const voiceVolumeRef = useRef(voiceVolume);
   const voiceStateRef = useRef<VoiceState>('off');
+  const startupSyncStartedRef = useRef(false);
+  const jobsRequestRef = useRef<Promise<NotionJobsReport> | null>(null);
+  const xeroRequestRef = useRef<Promise<XeroReport> | null>(null);
   const voiceSupported = false;
   const recordingSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
 
@@ -698,37 +712,99 @@ function App() {
   };
 
   const loadNotionJobs = async () => {
-    if (!window.noa?.getNotionJobs) return emptyJobsReport;
+    const getNotionJobs = window.noa?.getNotionJobs;
+    if (!getNotionJobs) return emptyJobsReport;
+    if (jobsRequestRef.current) return jobsRequestRef.current;
     setIsLoadingJobs(true);
-    try {
-      const report = await window.noa.getNotionJobs();
+    const request = (async () => {
+      const report = await getNotionJobs();
       setJobsReport(report);
       return report;
+    })();
+    jobsRequestRef.current = request;
+    try {
+      return await request;
     } finally {
+      jobsRequestRef.current = null;
       setIsLoadingJobs(false);
     }
   };
 
   const loadXeroSummary = async () => {
-    if (!window.noa?.getXeroSummary) return emptyXeroReport;
+    const getXeroSummary = window.noa?.getXeroSummary;
+    if (!getXeroSummary) return emptyXeroReport;
+    if (xeroRequestRef.current) return xeroRequestRef.current;
     setIsLoadingXero(true);
-    try {
-      const report = await window.noa.getXeroSummary();
+    const request = (async () => {
+      const report = await getXeroSummary();
       const mergedReport = mergeXeroReport(report as Partial<XeroReport>);
       setXeroReport(mergedReport);
       setIntegrationStatus((current) => ({ ...current, xero: Boolean(report.ok) }));
       return mergedReport;
+    })();
+    xeroRequestRef.current = request;
+    try {
+      return await request;
     } finally {
+      xeroRequestRef.current = null;
       setIsLoadingXero(false);
     }
   };
 
   useEffect(() => {
-    if (screen === 'pipeline' || screen === 'tasks' || screen === 'upcoming-jobs') {
+    if (startupSyncStartedRef.current) return;
+    startupSyncStartedRef.current = true;
+    let isMounted = true;
+
+    const syncAtStartup = async () => {
+      setStartupSync({
+        status: 'syncing',
+        message: 'Syncing Notion and Xero...',
+        checkedAt: ''
+      });
+
+      const [notionResult, xeroResult] = await Promise.allSettled([
+        loadNotionJobs(),
+        loadXeroSummary()
+      ]);
+
+      if (!isMounted) return;
+
+      const issues: string[] = [];
+      if (notionResult.status === 'rejected') {
+        issues.push('Notion failed');
+      } else if (notionHasErrors(notionResult.value)) {
+        issues.push('Notion partial');
+      }
+
+      if (xeroResult.status === 'rejected') {
+        issues.push('Xero failed');
+      } else if (!xeroResult.value.ok) {
+        issues.push('Xero needs attention');
+      }
+
+      setStartupSync({
+        status: issues.length ? 'partial' : 'synced',
+        message: issues.length ? issues.join(' - ') : 'Notion and Xero are synced.',
+        checkedAt: new Date().toISOString()
+      });
+    };
+
+    void syncAtStartup();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if ((screen === 'pipeline' || screen === 'tasks' || screen === 'upcoming-jobs') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
-    if (screen === 'xero') {
+    if (screen === 'xero' && !xeroReport.fetchedAt && !isLoadingXero) {
       void loadXeroSummary();
+    }
+    if (screen === 'xero' && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
   }, [screen]);
@@ -754,6 +830,10 @@ function App() {
   const sendCommand = () => {
     void submitCommand(command, { speakReply: false, interactionMode: 'typed' });
   };
+
+  const syncStatusPill = useMemo(() => {
+    return buildSyncStatusPill(startupSync, isLoadingJobs || isLoadingXero);
+  }, [startupSync, isLoadingJobs, isLoadingXero]);
 
   const submitCommand = async (rawValue: string, options: { speakReply: boolean; interactionMode: InteractionMode }) => {
     const value = rawValue.trim();
@@ -1378,6 +1458,7 @@ function App() {
               More
             </button>
             <StatusPill tone="success" icon={ShieldCheck} label="Protected actions" />
+            <StatusPill tone={syncStatusPill.tone} icon={syncStatusPill.icon} label={syncStatusPill.label} />
             <StatusPill tone="info" icon={Bot} label="Noah ready" />
             <StatusPill tone="muted" icon={LockKeyhole} label="Private mode" />
           </div>
@@ -4623,6 +4704,34 @@ function StatusPill({ icon: Icon, label, tone }: { icon: React.ElementType; labe
       {label}
     </div>
   );
+}
+
+function buildSyncStatusPill(state: StartupSyncState, activelyLoading: boolean): { icon: React.ElementType; label: string; tone: string } {
+  if (activelyLoading || state.status === 'syncing') {
+    return { icon: RefreshCw, label: 'Syncing data', tone: 'info' };
+  }
+
+  if (state.status === 'partial') {
+    return { icon: CircleAlert, label: 'Sync needs attention', tone: 'warning' };
+  }
+
+  if (state.status === 'synced') {
+    return {
+      icon: CheckCircle2,
+      label: state.checkedAt ? `Synced ${formatTimeOnly(state.checkedAt)}` : 'Data synced',
+      tone: 'success'
+    };
+  }
+
+  return { icon: Database, label: 'Data ready', tone: 'muted' };
+}
+
+function formatTimeOnly(value: string) {
+  return new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function notionHasErrors(report: NotionJobsReport) {
+  return Boolean(report.mainJobsError || report.tasksError || report.upcomingJobsError);
 }
 
 function WorkflowIcon({ state }: { state: 'draft' | 'ready' | 'approval' }) {
