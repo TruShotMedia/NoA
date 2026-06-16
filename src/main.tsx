@@ -1954,10 +1954,11 @@ function TasksView({
   isLoading: boolean;
   refreshJobs: () => Promise<NotionJobsReport>;
 }) {
-  const tasks = report.taskList?.length ? report.taskList : [];
-  const highPriorityCount = tasks.filter((task) => task.priority === 'High').length;
-  const overdueCount = tasks.filter((task) => task.dueState === 'Overdue').length;
-  const noDateCount = tasks.filter((task) => !task.dueDate).length;
+  const allTasks = report.taskList?.length ? report.taskList : [];
+  const visibleTasks = allTasks.filter((task) => !task.complete && isTaskInRecentWindow(task));
+  const hiddenOutsideWindowCount = allTasks.filter((task) => !task.complete && !isTaskInRecentWindow(task)).length;
+  const highPriorityCount = visibleTasks.filter((task) => task.priority === 'High').length;
+  const overdueCount = visibleTasks.filter((task) => task.dueState === 'Overdue').length;
   const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null } | null>(null);
 
   const handleTaskSave = async (values: Record<string, string>) => {
@@ -1972,6 +1973,24 @@ function TasksView({
       throw new Error(result.message || 'Notion did not save this task.');
     }
     setEditor(null);
+    await refreshJobs();
+  };
+
+  const markTaskComplete = async (task: NotionTask) => {
+    if (!window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({
+      kind: 'task',
+      action: 'update',
+      id: task.id,
+      values: {
+        title: task.title,
+        complete: 'true'
+      }
+    });
+    if (!result.ok) {
+      window.alert(result.message || 'Notion did not mark this task complete.');
+      return;
+    }
     await refreshJobs();
   };
 
@@ -1992,13 +2011,13 @@ function TasksView({
         <div>
           <PanelTitle eyebrow="Notion tasks view" title="Tasks" />
           <p className="section-copy">
-            Focused task list powered by your saved Notion tasks view.
+            Showing incomplete Notion tasks from the last 7 days. Completion is controlled by your Notion checkbox.
           </p>
         </div>
         <div className="jobs-actions">
           <div className="jobs-sync">
             <span>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleString()}` : 'Not synced yet'}</span>
-            <strong>{tasks.length} tasks</strong>
+            <strong>{visibleTasks.length} open</strong>
           </div>
           <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
             {isLoading ? 'Syncing...' : 'Sync tasks'}
@@ -2019,8 +2038,8 @@ function TasksView({
 
       <section className="jobs-metrics">
         <article>
-          <span>Total</span>
-          <strong>{tasks.length}</strong>
+          <span>Open shown</span>
+          <strong>{visibleTasks.length}</strong>
         </article>
         <article>
           <span>High priority</span>
@@ -2031,23 +2050,24 @@ function TasksView({
           <strong>{overdueCount}</strong>
         </article>
         <article>
-          <span>No date</span>
-          <strong>{noDateCount}</strong>
+          <span>Outside window</span>
+          <strong>{hiddenOutsideWindowCount}</strong>
         </article>
       </section>
 
       <section className="task-list">
-        {tasks.length === 0 ? (
+        {visibleTasks.length === 0 ? (
           <article className="glass-card wide">
-            <p className="empty-state">No tasks are visible in this Notion view.</p>
+            <p className="empty-state">No incomplete tasks have a Due date or Shoot Date inside the last 7 days.</p>
           </article>
         ) : (
-          tasks.map((task) => (
+          visibleTasks.map((task) => (
             <TaskRow
               task={task}
               key={task.id}
               onOpen={() => setEditor({ mode: 'view', kind: 'task', item: task })}
               onEdit={() => setEditor({ mode: 'edit', kind: 'task', item: task })}
+              onComplete={() => void markTaskComplete(task)}
             />
           ))
         )}
@@ -2067,7 +2087,7 @@ function TasksView({
   );
 }
 
-function TaskRow({ task, onOpen, onEdit }: { task: NotionTask; onOpen: () => void; onEdit: () => void }) {
+function TaskRow({ task, onOpen, onEdit, onComplete }: { task: NotionTask; onOpen: () => void; onEdit: () => void; onComplete: () => void }) {
   return (
     <article className={`task-row priority-${(task.priority || 'none').toLowerCase()}`}>
       <span className="priority-dot" />
@@ -2075,13 +2095,14 @@ function TaskRow({ task, onOpen, onEdit }: { task: NotionTask; onOpen: () => voi
         <strong>{task.title}</strong>
         <p>{task.description || task.attachments?.[0]?.name || task.status || 'No description'}</p>
       </button>
-      <span>{task.status || 'No status'}</span>
+      <span>{task.complete ? 'Complete' : 'Open'}</span>
       <span className={`due-pill ${task.dueState === 'Overdue' ? 'danger' : task.dueState === 'Due today' ? 'today' : ''}`}>
         {task.dueDate ? `${task.dueState} · ${task.dueDate}` : 'No date'}
       </span>
       <div className="row-actions">
         <button onClick={onOpen}>View</button>
         <button onClick={onEdit} aria-label={`Edit ${task.title}`}><Edit3 size={14} /></button>
+        <button onClick={onComplete} aria-label={`Mark ${task.title} complete`}><CheckCircle2 size={14} /></button>
       </div>
     </article>
   );
@@ -3576,6 +3597,15 @@ function NotionItemModal({
                 <span>Shoot Date</span>
                 <input type="date" value={values.shootDate} onChange={(event) => updateValue('shootDate', event.target.value)} readOnly={isReadOnly} />
               </label>
+              <label className="notion-checkbox">
+                <input
+                  type="checkbox"
+                  checked={values.complete === 'true'}
+                  onChange={(event) => updateValue('complete', String(event.target.checked))}
+                  disabled={isReadOnly}
+                />
+                <span>Complete in Notion</span>
+              </label>
               <label className="notion-field">
                 <span>Priority</span>
                 <select value={values.priority} onChange={(event) => updateValue('priority', event.target.value)} disabled={isReadOnly}>
@@ -3729,6 +3759,7 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
     status: task?.status || 'Not started',
     dueDate: task?.dueDate || '',
     shootDate: task?.shootDate || '',
+    complete: task?.complete ? 'true' : 'false',
     priority: task?.priority || '',
     effortLevel: task?.effortLevel || '',
     taskTypes: task?.taskTypes?.join(', ') || '',
@@ -3850,6 +3881,19 @@ function isDateWithinDays(dateKey: string, startKey: string, days: number) {
   return date >= start && date < end;
 }
 
+function isTaskInRecentWindow(task: NotionTask) {
+  const todayKey = brisbaneToday();
+  const start = dateFromKey(todayKey);
+  start.setUTCDate(start.getUTCDate() - 6);
+  const startTime = start.getTime();
+  const endTime = dateFromKey(todayKey).getTime();
+  return [task.dueDate, task.shootDate].some((dateKey) => {
+    if (!dateKey) return false;
+    const time = dateFromKey(dateKey).getTime();
+    return time >= startTime && time <= endTime;
+  });
+}
+
 function buildSevenDayPulse(jobs: CalendarJob[], tasks: NotionTask[], todayKey: string) {
   return Array.from({ length: 7 }, (_, index) => {
     const date = dateFromKey(todayKey);
@@ -3964,7 +4008,7 @@ function Today({
   const nextJobs = calendarJobs.filter((job) => job.jobDate && job.jobDate >= todayKey).slice(0, 4);
   const allTasks = dedupeTasks([...jobsReport.pipelineTasks, ...jobsReport.taskList, ...jobsReport.tasks]);
   const urgentTasks = allTasks
-    .filter((task) => ['Overdue', 'Due today', 'Tomorrow'].includes(task.dueState) || task.priority === 'High')
+    .filter((task) => !task.complete && (['Overdue', 'Due today', 'Tomorrow'].includes(task.dueState) || task.priority === 'High'))
     .sort(sortTodayTasks)
     .slice(0, 5);
   const moneyDue = xeroReport.totals.amountDue + xeroReport.totals.billsDue;
