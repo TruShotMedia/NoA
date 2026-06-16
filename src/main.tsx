@@ -55,6 +55,9 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
+const primaryMobileScreens: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline'];
+const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
+
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/service-worker.js').catch(() => undefined);
@@ -392,6 +395,7 @@ type BudgetMortgageBill = {
   tenantCount: number;
   weeklyRepayment: number;
   weeklyOffsetExpenses: number;
+  weeklyUtilitiesSplit?: number;
   weeklyTenantBill: number;
   expenses: BudgetRow[];
 };
@@ -1714,6 +1718,8 @@ function App() {
           </div>
         </header>
 
+        <ResponsivePageNav screen={screen} setScreen={setScreen} />
+
         {screen === 'today' && (
           <Today
             greeting={greeting}
@@ -1812,6 +1818,26 @@ function App() {
   );
 }
 
+function ResponsivePageNav({ screen, setScreen }: { screen: Screen; setScreen: (screen: Screen) => void }) {
+  const quickItems = tabletQuickScreens
+    .map((id) => navItems.find((item) => item.id === id))
+    .filter(Boolean) as typeof navItems;
+
+  return (
+    <nav className="page-switcher" aria-label="Frequently used pages">
+      {quickItems.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => setScreen(item.id)}>
+            <Icon size={16} />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 function MobileNav({
   screen,
   setScreen,
@@ -1825,12 +1851,12 @@ function MobileNav({
   toggleMoreMenu: () => void;
   closeMoreMenu: () => void;
 }) {
-  const primaryItems: Array<{ id: Screen; label: string; icon: React.ElementType }> = [
-    { id: 'today', label: 'Home', icon: Home },
-    { id: 'upcoming-jobs', label: 'Jobs', icon: BriefcaseBusiness },
-    { id: 'tasks', label: 'Tasks', icon: ListTodo },
-    { id: 'pipeline', label: 'Pipeline', icon: Kanban }
-  ];
+  const primaryItems: Array<{ id: Screen; label: string; icon: React.ElementType }> = primaryMobileScreens.map((id) => {
+    if (id === 'today') return { id, label: 'Home', icon: Home };
+    if (id === 'upcoming-jobs') return { id, label: 'Jobs', icon: BriefcaseBusiness };
+    if (id === 'tasks') return { id, label: 'Tasks', icon: ListTodo };
+    return { id, label: 'Pipeline', icon: Kanban };
+  });
   const secondaryItems = navItems.filter((item) => !primaryItems.some((primary) => primary.id === item.id));
 
   return (
@@ -2771,16 +2797,28 @@ function BudgetingView({
   const activeTenantCount = emailDraft.tenants.filter((tenant) => tenant.active !== false && tenant.email).length;
   const filteredTables = useMemo(() => filterBudgetTables(report.tables, modeFilter, showInactiveRows), [report.tables, modeFilter, showInactiveRows]);
   const analytics = useMemo(() => buildBudgetPageAnalytics(report, filteredTables), [report, filteredTables]);
+  const tenantBillingRows = useMemo(() => emailDraft.tenants.map((tenant) => {
+    const mortgage = findBudgetMortgageForTenant(tenant, report.mortgageSummary.mortgages);
+    const rentWeekly = toWeeklyBudgetAmount(tenant.rent, tenant.rentFrequency);
+    const utilitiesWeekly = mortgage ? mortgage.weeklyUtilitiesSplit ?? mortgage.weeklyTenantBill : 0;
+    return {
+      tenant,
+      mortgage,
+      rentWeekly,
+      utilitiesWeekly,
+      totalWeekly: rentWeekly + utilitiesWeekly
+    };
+  }), [emailDraft.tenants, report.mortgageSummary.mortgages]);
   const nextSendDate = getNextCycleDate(emailDraft.cycleDay);
 
   useEffect(() => {
     setEmailDraft(normalizeBudgetEmailSettings(report.emailSettings));
   }, [report.emailSettings]);
 
-  const saveEmailSettings = async () => {
+  const saveEmailSettings = async (): Promise<boolean> => {
     if (!window.noa?.saveBudgetEmailSettings) {
       setEmailMessage('Tenant email settings need the Vercel/desktop API.');
-      return;
+      return false;
     }
     setIsSavingEmail(true);
     setEmailMessage('');
@@ -2788,19 +2826,22 @@ function BudgetingView({
     setIsSavingEmail(false);
     setEmailMessage(response.message || (response.ok ? 'Settings saved.' : 'Could not save settings.'));
     if (response.ok) onMutated();
+    return response.ok;
   };
 
-  const previewTenantEmails = async (sendNow = false) => {
+  const previewTenantEmails = async (sendNow = false, tenantId = '') => {
     if (!window.noa?.sendBudgetTenantEmail) {
       setEmailMessage('Tenant email sending needs the Vercel/desktop API.');
       return;
     }
     setIsSendingEmail(true);
     setEmailMessage('');
-    if (sendNow && emailPreviews.length === 0) {
-      await saveEmailSettings();
+    const saved = await saveEmailSettings();
+    if (!saved) {
+      setIsSendingEmail(false);
+      return;
     }
-    const response = await window.noa.sendBudgetTenantEmail({ dryRun: !sendNow });
+    const response = await window.noa.sendBudgetTenantEmail({ dryRun: !sendNow, tenantId: tenantId || undefined });
     setIsSendingEmail(false);
     setEmailPreviews((response.previews || []) as BudgetEmailPreview[]);
     if (sendNow) setEmailSendHistory((response.sent || []) as BudgetEmailSendResult[]);
@@ -2946,6 +2987,51 @@ function BudgetingView({
       </article>
 
       <section className="budget-grid">
+        <article className="glass-card budget-panel budget-tenant-workflow">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Tenant billing workflow" title="Rent, utilities, total" />
+            <span>{activeTenantCount} active tenant(s)</span>
+          </div>
+          <p className="budget-panel-copy">
+            Tenant totals combine their configured rent with an even split of expenses marked offset to tenants.
+          </p>
+          <div className="budget-tenant-summary-grid">
+            {tenantBillingRows.length === 0 ? (
+              <div className="empty-state">No tenants configured yet. Add tenants below, then save settings.</div>
+            ) : tenantBillingRows.map(({ tenant, mortgage, rentWeekly, utilitiesWeekly, totalWeekly }) => (
+              <article className={`tenant-bill-card ${tenant.active === false ? 'inactive' : ''}`} key={tenant.id}>
+                <div className="tenant-bill-head">
+                  <div>
+                    <span>{tenant.active === false ? 'Paused' : tenant.email ? 'Ready to email' : 'Needs email'}</span>
+                    <strong>{tenant.name || 'Unnamed tenant'}</strong>
+                    <p>{tenant.email || 'No email configured'}</p>
+                  </div>
+                  <b>{formatMoney(totalWeekly)}</b>
+                </div>
+                <div className="tenant-bill-breakdown">
+                  <span>Rent <strong>{formatMoney(rentWeekly)}</strong><small>{formatFrequencyLabel(tenant.rentFrequency)}</small></span>
+                  <span>Utilities <strong>{formatMoney(utilitiesWeekly)}</strong><small>{mortgage?.name || 'No property'}</small></span>
+                  <span>Total <strong>{formatMoney(totalWeekly)}</strong><small>weekly bill</small></span>
+                </div>
+                <div className="tenant-bill-meta">
+                  <span>Next cycle {nextSendDate}</span>
+                  <span>{mortgage?.tenantCount || 0} tenant split</span>
+                </div>
+                <div className="tenant-bill-actions">
+                  <button className="secondary-action compact" onClick={() => void previewTenantEmails(false, tenant.id)} disabled={isSendingEmail || tenant.active === false}>
+                    <Eye size={16} />
+                    Preview
+                  </button>
+                  <button className="primary-action compact" onClick={() => void previewTenantEmails(true, tenant.id)} disabled={isSendingEmail || tenant.active === false || !tenant.email}>
+                    <Send size={16} />
+                    Send now
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </article>
+
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Mortgage automation" title="Tenant bills" />
@@ -3818,6 +3904,33 @@ function normalizeBudgetEmailSettings(settings: Partial<BudgetEmailSettings> | u
 
 function dayName(day: number) {
   return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day] || 'Monday';
+}
+
+function findBudgetMortgageForTenant(tenant: BudgetTenant, mortgages: BudgetMortgageBill[]) {
+  if (tenant.mortgageLocalId) {
+    const matched = mortgages.find((mortgage) => mortgage.localId === tenant.mortgageLocalId || mortgage.id === tenant.mortgageLocalId);
+    if (matched) return matched;
+  }
+  return mortgages[0] || null;
+}
+
+function toWeeklyBudgetAmount(amount: number, frequency: string) {
+  const value = Number(amount || 0);
+  const text = String(frequency || 'weekly').toLowerCase();
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  if (text.includes('week')) return value;
+  if (text.includes('fortnight')) return value / 2;
+  if (text.includes('month')) return value * 12 / 52;
+  if (text.includes('year') || text.includes('annual')) return value / 52;
+  return value;
+}
+
+function formatFrequencyLabel(frequency: string) {
+  const text = String(frequency || 'weekly').toLowerCase();
+  if (text.includes('fortnight')) return 'fortnightly rent';
+  if (text.includes('month')) return 'monthly rent';
+  if (text.includes('year') || text.includes('annual')) return 'annual rent';
+  return 'weekly rent';
 }
 
 function filterBudgetTables(tables: BudgetTables, mode: BudgetModeFilter, showInactive: boolean): BudgetTables {
