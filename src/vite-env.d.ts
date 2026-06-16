@@ -448,6 +448,8 @@ interface Window {
           name: string;
           email: string;
           mortgageLocalId: string;
+          rent: number;
+          rentFrequency: string;
           active: boolean;
         }>;
       };

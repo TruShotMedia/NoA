@@ -401,6 +401,8 @@ type BudgetTenant = {
   name: string;
   email: string;
   mortgageLocalId: string;
+  rent: number;
+  rentFrequency: string;
   active: boolean;
 };
 
@@ -422,6 +424,9 @@ type BudgetEmailPreview = {
   subject: string;
   text: string;
   weeklyBill: number;
+  rent: number;
+  utilities: number;
+  total: number;
   mortgageName: string;
   mortgageLocalId: string;
 };
@@ -2814,7 +2819,7 @@ function BudgetingView({
       ...current,
       tenants: [
         ...current.tenants,
-        { id: crypto.randomUUID(), name: '', email: '', mortgageLocalId: report.mortgageSummary.mortgages[0]?.localId || '', active: true }
+        { id: crypto.randomUUID(), name: '', email: '', mortgageLocalId: report.mortgageSummary.mortgages[0]?.localId || '', rent: 0, rentFrequency: 'weekly', active: true }
       ]
     }));
   };
@@ -2957,9 +2962,9 @@ function BudgetingView({
                     <p>{mortgage.propertyAddress || 'No property address'} · {mortgage.tenantCount || 0} tenant(s)</p>
                   </div>
                   <div className="budget-bill-grid">
-                    <span>Repayment <strong>{formatMoney(mortgage.weeklyRepayment)}</strong></span>
-                    <span>Offsets <strong>{formatMoney(mortgage.weeklyOffsetExpenses)}</strong></span>
-                    <span>Per tenant <strong>{formatMoney(mortgage.weeklyTenantBill)}</strong></span>
+                    <span>Mortgage context <strong>{formatMoney(mortgage.weeklyRepayment)}</strong></span>
+                    <span>Offset utilities <strong>{formatMoney(mortgage.weeklyOffsetExpenses)}</strong></span>
+                    <span>Utilities per tenant <strong>{formatMoney(mortgage.weeklyTenantBill)}</strong></span>
                   </div>
                 </article>
               ))}
@@ -3030,6 +3035,12 @@ function BudgetingView({
                       <option value={mortgage.localId || ''} key={mortgage.id || mortgage.localId || mortgage.name}>{mortgage.name}</option>
                     ))}
                   </select>
+                  <input type="number" placeholder="Rent" value={tenant.rent || ''} onChange={(event) => updateTenant(tenant.id, { rent: Number(event.currentTarget.value || 0) })} />
+                  <select value={tenant.rentFrequency || 'weekly'} onChange={(event) => updateTenant(tenant.id, { rentFrequency: event.currentTarget.value })}>
+                    <option value="weekly">Weekly</option>
+                    <option value="fortnightly">Fortnightly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
                   <label className="toggle-row">
                     <input type="checkbox" checked={tenant.active} onChange={(event) => updateTenant(tenant.id, { active: event.currentTarget.checked })} />
                     Active
@@ -3065,6 +3076,11 @@ function BudgetingView({
                   <article key={preview.tenantId}>
                     <span>{preview.to || 'No email address'}</span>
                     <strong>{preview.subject}</strong>
+                    <div className="budget-preview-total-row">
+                      <small>Rent {formatMoney(preview.rent || 0)}</small>
+                      <small>Utilities {formatMoney(preview.utilities || 0)}</small>
+                      <small>Total {formatMoney(preview.total || preview.weeklyBill || 0)}</small>
+                    </div>
                     <p>{preview.text}</p>
                   </article>
                 ))}
@@ -3793,6 +3809,8 @@ function normalizeBudgetEmailSettings(settings: Partial<BudgetEmailSettings> | u
       name: tenant.name || '',
       email: tenant.email || '',
       mortgageLocalId: tenant.mortgageLocalId || '',
+      rent: Number(tenant.rent || 0),
+      rentFrequency: tenant.rentFrequency || 'weekly',
       active: tenant.active !== false
     })) : []
   };
