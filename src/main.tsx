@@ -18,12 +18,11 @@ import {
   EyeOff,
   Edit3,
   BriefcaseBusiness,
-  Home,
   Kanban,
   LockKeyhole,
   ListTodo,
   MessageSquareText,
-  MoreHorizontal,
+  Menu,
   Plus,
   PieChart,
   Play,
@@ -55,8 +54,15 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const primaryMobileScreens: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline'];
 const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
+type BudgetSection = 'overview' | 'tenant-billing' | 'mortgage-expenses' | 'ledger' | 'automation';
+const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
+  { id: 'overview', label: 'Overview', detail: 'Cashflow, analytics, and attention cards', icon: PieChart },
+  { id: 'tenant-billing', label: 'Tenant Billing', detail: 'Tenants, rent, utilities, previews', icon: UsersRound },
+  { id: 'mortgage-expenses', label: 'Mortgage Expenses', detail: 'Owner costs and tenant offsets', icon: Building2 },
+  { id: 'ledger', label: 'Ledger Rows', detail: 'Income, expenses, debts, assets', icon: Database },
+  { id: 'automation', label: 'Automation', detail: 'Email activity and schedule checks', icon: Zap }
+];
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -780,6 +786,7 @@ const integrationSetups: IntegrationSetup[] = [
 
 function App() {
   const [screen, setScreen] = useState<Screen>('today');
+  const [budgetSection, setBudgetSection] = useState<BudgetSection>('overview');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [command, setCommand] = useState('');
   const [capture, setCapture] = useState('');
@@ -1721,10 +1728,34 @@ function App() {
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => setScreen(item.id)}>
-                <Icon size={18} />
-                <span>{item.label}</span>
-              </button>
+              <div className="nav-item-group" key={item.id}>
+                <button
+                  className={screen === item.id ? 'active' : ''}
+                  onClick={() => {
+                    if (item.id === 'budgeting') {
+                      setBudgetSection('overview');
+                    }
+                    setScreen(item.id);
+                  }}
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                  {item.id === 'budgeting' && <ChevronRight className="nav-chevron" size={15} />}
+                </button>
+                {item.id === 'budgeting' && screen === 'budgeting' && (
+                  <div className="nav-sub-list">
+                    {budgetSections.map((section) => {
+                      const SectionIcon = section.icon;
+                      return (
+                        <button key={section.id} className={budgetSection === section.id ? 'active' : ''} onClick={() => setBudgetSection(section.id)}>
+                          <SectionIcon size={15} />
+                          <span>{section.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -1743,8 +1774,8 @@ function App() {
           </div>
           <div className="top-actions">
             <button className="mobile-more-trigger" onClick={() => setIsMoreMenuOpen((current) => !current)} aria-label="Open more pages">
-              <MoreHorizontal size={18} />
-              More
+              <Menu size={18} />
+              Menu
             </button>
             <StatusPill tone="success" icon={ShieldCheck} label="Protected actions" />
             <StatusPill tone={syncStatusPill.tone} icon={syncStatusPill.icon} label={syncStatusPill.label} />
@@ -1753,7 +1784,12 @@ function App() {
           </div>
         </header>
 
-        <ResponsivePageNav screen={screen} setScreen={setScreen} />
+        <ResponsivePageNav
+          screen={screen}
+          setScreen={setScreen}
+          budgetSection={budgetSection}
+          setBudgetSection={setBudgetSection}
+        />
 
         {screen === 'today' && (
           <Today
@@ -1820,6 +1856,8 @@ function App() {
             isLoading={isLoadingBudget}
             refreshBudget={loadBudgetSummary}
             onMutated={() => void loadBudgetSummary()}
+            section={budgetSection}
+            setSection={setBudgetSection}
           />
         )}
         {screen === 'plan' && <Plan />}
@@ -1845,15 +1883,30 @@ function App() {
           setScreen(nextScreen);
           setIsMoreMenuOpen(false);
         }}
+        budgetSection={budgetSection}
+        setBudgetSection={(nextSection) => {
+          setBudgetSection(nextSection);
+          setScreen('budgeting');
+          setIsMoreMenuOpen(false);
+        }}
         isMoreMenuOpen={isMoreMenuOpen}
-        toggleMoreMenu={() => setIsMoreMenuOpen((current) => !current)}
         closeMoreMenu={() => setIsMoreMenuOpen(false)}
       />
     </main>
   );
 }
 
-function ResponsivePageNav({ screen, setScreen }: { screen: Screen; setScreen: (screen: Screen) => void }) {
+function ResponsivePageNav({
+  screen,
+  setScreen,
+  budgetSection,
+  setBudgetSection
+}: {
+  screen: Screen;
+  setScreen: (screen: Screen) => void;
+  budgetSection: BudgetSection;
+  setBudgetSection: (section: BudgetSection) => void;
+}) {
   const quickItems = tabletQuickScreens
     .map((id) => navItems.find((item) => item.id === id))
     .filter(Boolean) as typeof navItems;
@@ -1863,9 +1916,27 @@ function ResponsivePageNav({ screen, setScreen }: { screen: Screen; setScreen: (
       {quickItems.map((item) => {
         const Icon = item.icon;
         return (
-          <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => setScreen(item.id)}>
+          <button
+            key={item.id}
+            className={screen === item.id ? 'active' : ''}
+            onClick={() => {
+              if (item.id === 'budgeting') {
+                setBudgetSection('overview');
+              }
+              setScreen(item.id);
+            }}
+          >
             <Icon size={16} />
             <span>{item.label}</span>
+          </button>
+        );
+      })}
+      {screen === 'budgeting' && budgetSections.map((section) => {
+        const Icon = section.icon;
+        return (
+          <button key={section.id} className={`sub-page ${budgetSection === section.id ? 'active' : ''}`} onClick={() => setBudgetSection(section.id)}>
+            <Icon size={16} />
+            <span>{section.label}</span>
           </button>
         );
       })}
@@ -1876,68 +1947,93 @@ function ResponsivePageNav({ screen, setScreen }: { screen: Screen; setScreen: (
 function MobileNav({
   screen,
   setScreen,
+  budgetSection,
+  setBudgetSection,
   isMoreMenuOpen,
-  toggleMoreMenu,
   closeMoreMenu,
 }: {
   screen: Screen;
   setScreen: (screen: Screen) => void;
+  budgetSection: BudgetSection;
+  setBudgetSection: (section: BudgetSection) => void;
   isMoreMenuOpen: boolean;
-  toggleMoreMenu: () => void;
   closeMoreMenu: () => void;
 }) {
-  const primaryItems: Array<{ id: Screen; label: string; icon: React.ElementType }> = primaryMobileScreens.map((id) => {
-    if (id === 'today') return { id, label: 'Home', icon: Home };
-    if (id === 'upcoming-jobs') return { id, label: 'Jobs', icon: BriefcaseBusiness };
-    if (id === 'tasks') return { id, label: 'Tasks', icon: ListTodo };
-    return { id, label: 'Pipeline', icon: Kanban };
-  });
+  const primaryItems = navItems.filter((item) => ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'].includes(item.id));
   const secondaryItems = navItems.filter((item) => !primaryItems.some((primary) => primary.id === item.id));
 
   return (
     <>
       {isMoreMenuOpen && (
-        <div className="mobile-more-menu">
-          <button className="mobile-menu-backdrop" onClick={closeMoreMenu} aria-label="Close more pages" />
-          <div className="mobile-more-sheet">
-            <div className="mobile-more-head">
-              <strong>More</strong>
-              <button onClick={closeMoreMenu}>Close</button>
+        <div className="mobile-sidebar-menu">
+          <button className="mobile-menu-backdrop" onClick={closeMoreMenu} aria-label="Close navigation" />
+          <aside className="mobile-sidebar-sheet" aria-label="Mobile navigation">
+            <div className="mobile-sidebar-head">
+              <div className="brand mobile-brand">
+                <div className="brand-mark">NoA</div>
+                <div>
+                  <strong>NoA</strong>
+                  <span>Personal command centre</span>
+                </div>
+              </div>
+              <button onClick={closeMoreMenu} aria-label="Close navigation"><X size={18} /></button>
             </div>
-            <div className="mobile-more-grid">
+
+            <div className="mobile-sidebar-section">
+              <span>Workspace</span>
+              {primaryItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div className="mobile-sidebar-group" key={item.id}>
+                    <button
+                      className={screen === item.id ? 'active' : ''}
+                      onClick={() => {
+                        if (item.id === 'budgeting') {
+                          setBudgetSection('overview');
+                        }
+                        setScreen(item.id);
+                      }}
+                    >
+                      <Icon size={18} />
+                      <span>{item.label}</span>
+                    </button>
+                    {item.id === 'budgeting' && (
+                      <div className="mobile-sidebar-subpages">
+                        {budgetSections.map((section) => {
+                          const SectionIcon = section.icon;
+                          return (
+                            <button
+                              key={section.id}
+                              className={screen === 'budgeting' && budgetSection === section.id ? 'active' : ''}
+                              onClick={() => setBudgetSection(section.id)}
+                            >
+                              <SectionIcon size={16} />
+                              <span>{section.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mobile-sidebar-section">
+              <span>More</span>
               {secondaryItems.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <button
-                    key={item.id}
-                    className={screen === item.id ? 'active' : ''}
-                    onClick={() => setScreen(item.id)}
-                  >
+                  <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => setScreen(item.id)}>
                     <Icon size={18} />
-                    {item.label}
+                    <span>{item.label}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </aside>
         </div>
       )}
-
-      <nav className="mobile-dock" aria-label="Primary mobile navigation">
-        {primaryItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => setScreen(item.id)}>
-              <Icon size={18} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-        <button className={isMoreMenuOpen ? 'active' : ''} onClick={toggleMoreMenu} aria-label="Open more pages">
-          <MoreHorizontal size={18} />
-          <span>More</span>
-        </button>
-      </nav>
     </>
   );
 }
@@ -2810,12 +2906,16 @@ function BudgetingView({
   report,
   isLoading,
   refreshBudget,
-  onMutated
+  onMutated,
+  section,
+  setSection
 }: {
   report: BudgetReport;
   isLoading: boolean;
   refreshBudget: () => Promise<BudgetReport>;
   onMutated: () => void;
+  section: BudgetSection;
+  setSection: (section: BudgetSection) => void;
 }) {
   const [editor, setEditor] = useState<{ kind: BudgetItemKind; row: BudgetRow | null } | null>(null);
   const [emailDraft, setEmailDraft] = useState<BudgetEmailSettings>(() => normalizeBudgetEmailSettings(report.emailSettings));
@@ -2988,6 +3088,20 @@ function BudgetingView({
         </article>
       )}
 
+      <nav className="budget-section-tabs" aria-label="Budgeting sections">
+        {budgetSections.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button key={item.id} className={section === item.id ? 'active' : ''} onClick={() => setSection(item.id)}>
+              <Icon size={17} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {section === 'overview' && (
+        <>
       <section className="budget-overview">
         <BudgetMetric icon={WalletCards} label="Weekly income" value={formatMoney(totals.weeklyIncome)} detail={formatMoney(totals.monthlyIncome) + ' monthly equivalent'} />
         <BudgetMetric icon={ReceiptText} label="Weekly outgoings" value={formatMoney(totals.weeklyExpenses + totals.weeklyDebtRepayments + totals.weeklyMortgageRepayments + totals.weeklyMortgageExpenses + totals.weeklySavings)} detail="expenses, debts, mortgage, savings" />
@@ -3046,7 +3160,10 @@ function BudgetingView({
           <BudgetPressureList analytics={analytics} />
         </article>
       </section>
+        </>
+      )}
 
+      {section === 'ledger' && (
       <article className="glass-card wide budget-toolbar">
         <div>
           <PanelTitle eyebrow="Ledger controls" title="Budget rows" />
@@ -3066,8 +3183,11 @@ function BudgetingView({
           </label>
         </div>
       </article>
+      )}
 
+      {(section === 'tenant-billing' || section === 'mortgage-expenses' || section === 'automation') && (
       <section className="budget-grid">
+        {section === 'tenant-billing' && (
         <article className="glass-card budget-panel budget-tenant-workflow">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Tenant billing workflow" title="Rent, utilities, total" />
@@ -3112,7 +3232,9 @@ function BudgetingView({
             ))}
           </div>
         </article>
+        )}
 
+        {section === 'mortgage-expenses' && (
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Mortgage automation" title="Tenant bills" />
@@ -3138,7 +3260,9 @@ function BudgetingView({
             </div>
           )}
         </article>
+        )}
 
+        {section === 'mortgage-expenses' && (
         <article className="glass-card budget-panel budget-mortgage-expense-centre">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Mortgage expense logic" title="Owner costs vs tenant offsets" />
@@ -3216,10 +3340,12 @@ function BudgetingView({
             ))}
           </div>
         </article>
+        )}
 
+        {(section === 'tenant-billing' || section === 'automation') && (
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Email automation" title="Tenant billing emails" />
+            <PanelTitle eyebrow={section === 'automation' ? 'Automation' : 'Email automation'} title={section === 'automation' ? 'Billing activity and schedule' : 'Tenant billing emails'} />
             <Send size={20} />
           </div>
           <div className="budget-email-card budget-setup-card">
@@ -3416,8 +3542,11 @@ function BudgetingView({
             <BudgetEmailActivityPanel activity={report.tenantEmailActivity} />
           </div>
         </article>
+        )}
       </section>
+      )}
 
+      {section === 'ledger' && (
       <section className="budget-table-grid">
         <BudgetTable title="Income" kind="income" rows={filteredTables.income} onEdit={(row) => setEditor({ kind: 'income', row })} onCreate={() => setEditor({ kind: 'income', row: null })} />
         <BudgetTable title="Expenses" kind="expenses" rows={filteredTables.expenses} onEdit={(row) => setEditor({ kind: 'expenses', row })} onCreate={() => setEditor({ kind: 'expenses', row: null })} />
@@ -3426,6 +3555,7 @@ function BudgetingView({
         <BudgetTable title="Debts" kind="debts" rows={filteredTables.debts} onEdit={(row) => setEditor({ kind: 'debts', row })} onCreate={() => setEditor({ kind: 'debts', row: null })} />
         <BudgetTable title="Assets and savings" kind="assets" rows={[...filteredTables.assets, ...filteredTables.savings]} onEdit={(row) => setEditor({ kind: row.goal_name ? 'savings' : 'assets', row })} onCreate={() => setEditor({ kind: 'assets', row: null })} />
       </section>
+      )}
 
       {editor && (
         <BudgetEditorModal
