@@ -2806,9 +2806,11 @@ function BudgetingView({
       mortgage,
       rentWeekly,
       utilitiesWeekly,
-      totalWeekly: rentWeekly + utilitiesWeekly
+      totalWeekly: rentWeekly + utilitiesWeekly,
+      warnings: budgetTenantWarnings(tenant, mortgage, rentWeekly, utilitiesWeekly)
     };
   }), [emailDraft.tenants, report.mortgageSummary.mortgages]);
+  const setupWarnings = tenantBillingRows.flatMap((row) => row.warnings.map((warning) => `${row.tenant.name || 'Unnamed tenant'}: ${warning}`));
   const nextSendDate = getNextCycleDate(emailDraft.cycleDay);
 
   useEffect(() => {
@@ -3063,83 +3065,154 @@ function BudgetingView({
             <PanelTitle eyebrow="Email automation" title="Tenant billing emails" />
             <Send size={20} />
           </div>
-          <div className="budget-email-card">
-            <div className="budget-email-topline">
-              <strong>{emailDraft.enabled ? 'Weekly tenant emails enabled' : 'Manual tenant emails'}</strong>
-              <label className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={emailDraft.enabled}
-                  onChange={(event) => setEmailDraft((current) => ({ ...current, enabled: event.currentTarget.checked }))}
-                />
-                Auto cycle
-              </label>
-            </div>
-            <p>{activeTenantCount} active recipient(s). Cycle day: {dayName(emailDraft.cycleDay)}.</p>
-            <small>Next scheduled cycle: {nextSendDate}</small>
-            <div className="budget-email-fields">
-              <label>
-                <span>Cycle day</span>
-                <select
-                  value={emailDraft.cycleDay}
-                  onChange={(event) => setEmailDraft((current) => ({ ...current, cycleDay: Number(event.currentTarget.value) }))}
-                >
-                  {[0, 1, 2, 3, 4, 5, 6].map((day) => <option value={day} key={day}>{dayName(day)}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Subject prefix</span>
-                <input
-                  value={emailDraft.subjectPrefix}
-                  onChange={(event) => setEmailDraft((current) => ({ ...current, subjectPrefix: event.currentTarget.value }))}
-                />
-              </label>
-              <label>
-                <span>Reply-to</span>
-                <input
-                  value={emailDraft.replyTo}
-                  onChange={(event) => setEmailDraft((current) => ({ ...current, replyTo: event.currentTarget.value }))}
-                />
-              </label>
-              <label>
-                <span>Tenant note</span>
-                <textarea
-                  value={emailDraft.notes}
-                  onChange={(event) => setEmailDraft((current) => ({ ...current, notes: event.currentTarget.value }))}
-                  rows={3}
-                />
-              </label>
-            </div>
-            <div className="budget-tenant-list">
-              {emailDraft.tenants.map((tenant) => (
-                <article className="budget-tenant-row" key={tenant.id}>
-                  <input placeholder="Tenant name" value={tenant.name} onChange={(event) => updateTenant(tenant.id, { name: event.currentTarget.value })} />
-                  <input placeholder="tenant@email.com" value={tenant.email} onChange={(event) => updateTenant(tenant.id, { email: event.currentTarget.value })} />
-                  <select value={tenant.mortgageLocalId} onChange={(event) => updateTenant(tenant.id, { mortgageLocalId: event.currentTarget.value })}>
-                    <option value="">First mortgage</option>
-                    {report.mortgageSummary.mortgages.map((mortgage) => (
-                      <option value={mortgage.localId || ''} key={mortgage.id || mortgage.localId || mortgage.name}>{mortgage.name}</option>
-                    ))}
-                  </select>
-                  <input type="number" placeholder="Rent" value={tenant.rent || ''} onChange={(event) => updateTenant(tenant.id, { rent: Number(event.currentTarget.value || 0) })} />
-                  <select value={tenant.rentFrequency || 'weekly'} onChange={(event) => updateTenant(tenant.id, { rentFrequency: event.currentTarget.value })}>
-                    <option value="weekly">Weekly</option>
-                    <option value="fortnightly">Fortnightly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
+          <div className="budget-email-card budget-setup-card">
+            <div className="budget-setup-grid">
+              <article className="budget-setup-section">
+                <div className="budget-email-topline">
+                  <div>
+                    <strong>{emailDraft.enabled ? 'Automatic cycle prepared' : 'Manual send mode'}</strong>
+                    <p>{activeTenantCount} active recipient(s). Next cycle: {nextSendDate}.</p>
+                  </div>
                   <label className="toggle-row">
-                    <input type="checkbox" checked={tenant.active} onChange={(event) => updateTenant(tenant.id, { active: event.currentTarget.checked })} />
-                    Active
+                    <input
+                      type="checkbox"
+                      checked={emailDraft.enabled}
+                      onChange={(event) => setEmailDraft((current) => ({ ...current, enabled: event.currentTarget.checked }))}
+                    />
+                    Auto cycle
                   </label>
-                  <button className="secondary-action compact" onClick={() => removeTenant(tenant.id)} aria-label="Remove tenant">
-                    <Trash2 size={15} />
-                  </button>
-                </article>
-              ))}
+                </div>
+                <div className="budget-email-fields compact">
+                  <label>
+                    <span>Cycle day</span>
+                    <select
+                      value={emailDraft.cycleDay}
+                      onChange={(event) => setEmailDraft((current) => ({ ...current, cycleDay: Number(event.currentTarget.value) }))}
+                    >
+                      {[0, 1, 2, 3, 4, 5, 6].map((day) => <option value={day} key={day}>{dayName(day)}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Reply-to</span>
+                    <input
+                      value={emailDraft.replyTo}
+                      onChange={(event) => setEmailDraft((current) => ({ ...current, replyTo: event.currentTarget.value }))}
+                    />
+                  </label>
+                </div>
+              </article>
+
+              <article className="budget-setup-section">
+                <div>
+                  <strong>Message template</strong>
+                  <p>NoA inserts each tenant's rent, utilities, total, and property details automatically.</p>
+                </div>
+                <div className="budget-email-fields single">
+                  <label>
+                    <span>Subject prefix</span>
+                    <input
+                      value={emailDraft.subjectPrefix}
+                      onChange={(event) => setEmailDraft((current) => ({ ...current, subjectPrefix: event.currentTarget.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Tenant note</span>
+                    <textarea
+                      value={emailDraft.notes}
+                      onChange={(event) => setEmailDraft((current) => ({ ...current, notes: event.currentTarget.value }))}
+                      rows={3}
+                    />
+                  </label>
+                </div>
+              </article>
+            </div>
+
+            {setupWarnings.length > 0 && (
+              <div className="budget-setup-warnings">
+                {setupWarnings.slice(0, 5).map((warning) => (
+                  <span key={warning}><CircleAlert size={14} />{warning}</span>
+                ))}
+              </div>
+            )}
+
+            <div className="budget-tenant-editor-head">
+              <div>
+                <strong>Tenants</strong>
+                <p>Configure rent, email, linked property, and billing status in one place.</p>
+              </div>
               <button className="secondary-action compact" onClick={addTenant}>
                 <Plus size={16} />
                 Add tenant
               </button>
+            </div>
+
+            <div className="budget-tenant-list">
+              {tenantBillingRows.map(({ tenant, mortgage, rentWeekly, utilitiesWeekly, totalWeekly, warnings }) => (
+                <article className="budget-tenant-config-card" key={tenant.id}>
+                  <div className="budget-tenant-config-top">
+                    <div>
+                      <span>{tenant.active === false ? 'Paused' : warnings.length ? 'Needs attention' : 'Ready'}</span>
+                      <strong>{tenant.name || 'Unnamed tenant'}</strong>
+                      <p>{mortgage?.name || 'No property linked'} - {formatMoney(totalWeekly)} weekly total</p>
+                    </div>
+                    <label className="toggle-row">
+                      <input type="checkbox" checked={tenant.active} onChange={(event) => updateTenant(tenant.id, { active: event.currentTarget.checked })} />
+                      Active
+                    </label>
+                  </div>
+                  <div className="budget-tenant-form-grid">
+                    <label>
+                      <span>Name</span>
+                      <input placeholder="Tenant name" value={tenant.name} onChange={(event) => updateTenant(tenant.id, { name: event.currentTarget.value })} />
+                    </label>
+                    <label>
+                      <span>Email</span>
+                      <input placeholder="tenant@email.com" value={tenant.email} onChange={(event) => updateTenant(tenant.id, { email: event.currentTarget.value })} />
+                    </label>
+                    <label>
+                      <span>Property</span>
+                      <select value={tenant.mortgageLocalId} onChange={(event) => updateTenant(tenant.id, { mortgageLocalId: event.currentTarget.value })}>
+                        <option value="">First mortgage</option>
+                        {report.mortgageSummary.mortgages.map((mortgageOption) => (
+                          <option value={mortgageOption.localId || ''} key={mortgageOption.id || mortgageOption.localId || mortgageOption.name}>{mortgageOption.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Rent</span>
+                      <input type="number" placeholder="Rent" value={tenant.rent || ''} onChange={(event) => updateTenant(tenant.id, { rent: Number(event.currentTarget.value || 0) })} />
+                    </label>
+                    <label>
+                      <span>Rent frequency</span>
+                      <select value={tenant.rentFrequency || 'weekly'} onChange={(event) => updateTenant(tenant.id, { rentFrequency: event.currentTarget.value })}>
+                        <option value="weekly">Weekly</option>
+                        <option value="fortnightly">Fortnightly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="budget-tenant-config-summary">
+                    <span>Rent <strong>{formatMoney(rentWeekly)}</strong></span>
+                    <span>Utilities <strong>{formatMoney(utilitiesWeekly)}</strong></span>
+                    <span>Total <strong>{formatMoney(totalWeekly)}</strong></span>
+                  </div>
+                  {warnings.length > 0 && (
+                    <div className="budget-tenant-warning-row">
+                      {warnings.map((warning) => <span key={warning}><CircleAlert size={13} />{warning}</span>)}
+                    </div>
+                  )}
+                  <div className="budget-tenant-config-actions">
+                    <button className="secondary-action compact" onClick={() => void previewTenantEmails(false, tenant.id)} disabled={isSendingEmail || tenant.active === false}>
+                      <Eye size={15} />
+                      Preview
+                    </button>
+                    <button className="secondary-action compact danger-action" onClick={() => removeTenant(tenant.id)} aria-label="Remove tenant">
+                      <Trash2 size={15} />
+                      Remove
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
             {emailMessage && <p className="form-message">{emailMessage}</p>}
             <div className="budget-email-actions">
@@ -3931,6 +4004,17 @@ function formatFrequencyLabel(frequency: string) {
   if (text.includes('month')) return 'monthly rent';
   if (text.includes('year') || text.includes('annual')) return 'annual rent';
   return 'weekly rent';
+}
+
+function budgetTenantWarnings(tenant: BudgetTenant, mortgage: BudgetMortgageBill | null, rentWeekly: number, utilitiesWeekly: number) {
+  const warnings: string[] = [];
+  if (tenant.active === false) return warnings;
+  if (!tenant.email.trim()) warnings.push('missing email');
+  if (!tenant.name.trim()) warnings.push('missing name');
+  if (!mortgage) warnings.push('no linked property');
+  if (rentWeekly <= 0) warnings.push('rent is zero');
+  if (mortgage && utilitiesWeekly <= 0) warnings.push('no tenant-offset utilities');
+  return warnings;
 }
 
 function filterBudgetTables(tables: BudgetTables, mode: BudgetModeFilter, showInactive: boolean): BudgetTables {
