@@ -143,6 +143,8 @@ type NotionTask = {
   priority: string;
   dueDate: string;
   dueState: string;
+  shootDate: string;
+  shootState: string;
   effortLevel: string;
   effortSize: string;
   taskTypes: string[];
@@ -157,11 +159,18 @@ type NotionTask = {
 
 type NotionItemKind = 'task' | 'job';
 type NotionEditorMode = 'create' | 'view' | 'edit';
+type NotionUpcomingJob = NotionJobsReport['upcomingJobs'][number];
+type CalendarJob = NotionUpcomingJob & {
+  sourceKind: NotionItemKind;
+  sourceLabel: string;
+  task?: NotionTask;
+};
 
 type NotionJobsReport = {
   tasks: NotionTask[];
   pipelineTasks: NotionTask[];
   taskList: NotionTask[];
+  calendarTasks: NotionTask[];
   upcomingJobs: Array<{
     id: string;
     title: string;
@@ -302,6 +311,7 @@ const emptyJobsReport: NotionJobsReport = {
   tasks: [],
   pipelineTasks: [],
   taskList: [],
+  calendarTasks: [],
   upcomingJobs: [],
   fetchedAt: '',
   mainJobsError: '',
@@ -2000,9 +2010,10 @@ function UpcomingJobsView({
   isLoading: boolean;
   refreshJobs: () => Promise<NotionJobsReport>;
 }) {
-  const jobs = report.upcomingJobs;
+  const jobs = useMemo(() => buildCalendarJobs(report), [report]);
   const dueSoonCount = jobs.filter((job) => ['Overdue', 'Due today', 'Tomorrow', 'Due soon'].includes(job.dueState)).length;
-  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionJobsReport['upcomingJobs'][number] | null } | null>(null);
+  const taskSourcedCount = jobs.filter((job) => job.sourceKind === 'task').length;
+  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionUpcomingJob | NotionTask | null } | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => brisbaneToday().slice(0, 7));
   const calendarDays = useMemo(() => buildJobsCalendarDays(jobs, calendarMonth), [jobs, calendarMonth]);
   const jobsThisMonth = jobs.filter((job) => job.jobDate?.startsWith(calendarMonth));
@@ -2011,7 +2022,7 @@ function UpcomingJobsView({
   const handleJobSave = async (values: Record<string, string>) => {
     if (!editor || !window.noa?.manageNotionItem) return;
     const result = await window.noa.manageNotionItem({
-      kind: 'job',
+      kind: editor.kind,
       action: editor.mode === 'create' ? 'create' : 'update',
       id: editor.item?.id,
       values
@@ -2026,7 +2037,7 @@ function UpcomingJobsView({
 
   const handleJobArchive = async () => {
     if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
-    const result = await window.noa.manageNotionItem({ kind: 'job', action: 'archive', id: editor.item.id });
+    const result = await window.noa.manageNotionItem({ kind: editor.kind, action: 'archive', id: editor.item.id });
     if (!result.ok) {
       window.alert(result.message);
       return;
@@ -2041,13 +2052,13 @@ function UpcomingJobsView({
         <div>
           <PanelTitle eyebrow="Notion jobs database" title="Upcoming Jobs" />
           <p className="section-copy">
-            Upcoming work pulled from your separate jobs database.
+            Job dates pulled from the Jobs database plus dated work in JOHN'S HUB tasks.
           </p>
         </div>
         <div className="jobs-actions">
           <div className="jobs-sync">
             <span>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleString()}` : 'Not synced yet'}</span>
-            <strong>{jobs.length} jobs</strong>
+            <strong>{jobs.length} calendar items</strong>
           </div>
           <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
             {isLoading ? 'Syncing...' : 'Sync jobs'}
@@ -2068,8 +2079,12 @@ function UpcomingJobsView({
 
       <section className="jobs-metrics">
         <article>
-          <span>Total</span>
+          <span>Calendar items</span>
           <strong>{jobs.length}</strong>
+        </article>
+        <article>
+          <span>From JOHN'S HUB</span>
+          <strong>{taskSourcedCount}</strong>
         </article>
         <article>
           <span>Due soon</span>
@@ -2078,10 +2093,6 @@ function UpcomingJobsView({
         <article>
           <span>High priority</span>
           <strong>{jobs.filter((job) => job.priority === 'High').length}</strong>
-        </article>
-        <article>
-          <span>Locations</span>
-          <strong>{new Set(jobs.map((job) => job.location).filter(Boolean)).size}</strong>
         </article>
       </section>
 
@@ -2110,9 +2121,10 @@ function UpcomingJobsView({
               </div>
               <div className="calendar-day-jobs">
                 {day.jobs.slice(0, 3).map((job) => (
-                  <button className={`calendar-job priority-${(job.priority || 'none').toLowerCase()}`} onClick={() => setEditor({ mode: 'view', kind: 'job', item: job })} key={job.id}>
+                  <button className={`calendar-job priority-${(job.priority || 'none').toLowerCase()}`} onClick={() => setEditor({ mode: 'view', kind: job.sourceKind, item: job.task || job })} key={`${job.sourceKind}-${job.id}`}>
                     <span>{job.title}</span>
                     {job.client && <small>{job.client}</small>}
+                    <small>{job.sourceLabel}</small>
                   </button>
                 ))}
                 {day.jobs.length > 3 && <em>+{day.jobs.length - 3} more</em>}
@@ -2135,9 +2147,9 @@ function UpcomingJobsView({
           featuredJobs.map((job) => (
             <UpcomingJobCard
               job={job}
-              key={job.id}
-              onOpen={() => setEditor({ mode: 'view', kind: 'job', item: job })}
-              onEdit={() => setEditor({ mode: 'edit', kind: 'job', item: job })}
+              key={`${job.sourceKind}-${job.id}`}
+              onOpen={() => setEditor({ mode: 'view', kind: job.sourceKind, item: job.task || job })}
+              onEdit={() => setEditor({ mode: 'edit', kind: job.sourceKind, item: job.task || job })}
             />
           ))
         )}
@@ -2145,7 +2157,7 @@ function UpcomingJobsView({
       {editor && (
         <NotionItemModal
           mode={editor.mode}
-          kind="job"
+          kind={editor.kind}
           item={editor.item}
           onClose={() => setEditor(null)}
           onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
@@ -2162,7 +2174,7 @@ function UpcomingJobCard({
   onOpen,
   onEdit
 }: {
-  job: NotionJobsReport['upcomingJobs'][number];
+  job: CalendarJob;
   onOpen: () => void;
   onEdit: () => void;
 }) {
@@ -2187,6 +2199,7 @@ function UpcomingJobCard({
           {job.jobDate ? `${job.dueState} · ${job.jobDate}` : 'No date'}
         </span>
         {job.client && <span>{job.client}</span>}
+        <span>{job.sourceLabel}</span>
       </div>
       {job.location && <p className="job-assignee">{job.location}</p>}
       {job.deliverableTypes.length > 0 && (
@@ -3274,6 +3287,10 @@ function NotionItemModal({
                 <input type="date" value={values.dueDate} onChange={(event) => updateValue('dueDate', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field">
+                <span>Shoot Date</span>
+                <input type="date" value={values.shootDate} onChange={(event) => updateValue('shootDate', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field">
                 <span>Priority</span>
                 <select value={values.priority} onChange={(event) => updateValue('priority', event.target.value)} disabled={isReadOnly}>
                   <option value="">No priority</option>
@@ -3368,6 +3385,7 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
     title: task?.title || '',
     status: task?.status || 'Not started',
     dueDate: task?.dueDate || '',
+    shootDate: task?.shootDate || '',
     priority: task?.priority || '',
     effortLevel: task?.effortLevel || '',
     taskTypes: task?.taskTypes?.join(', ') || '',
@@ -3395,6 +3413,54 @@ function parseAttachmentValue(value: string) {
     .filter((attachment): attachment is { name: string; url: string } => Boolean(attachment));
 }
 
+function buildCalendarJobs(report: NotionJobsReport): CalendarJob[] {
+  const dedicatedJobs: CalendarJob[] = (report.upcomingJobs || []).map((job) => ({
+    ...job,
+    sourceKind: 'job',
+    sourceLabel: 'Jobs database'
+  }));
+  const seenTaskIds = new Set<string>();
+  const sourceTasks = report.calendarTasks?.length
+    ? report.calendarTasks
+    : [...(report.pipelineTasks || []), ...(report.taskList || []), ...(report.tasks || [])];
+  const taskJobs = sourceTasks
+    .filter((task) => {
+      if (!task.id || seenTaskIds.has(task.id) || !task.shootDate || task.archived) return false;
+      seenTaskIds.add(task.id);
+      return Boolean(task.title);
+    })
+    .map<CalendarJob>((task) => ({
+      id: task.id,
+      title: task.title,
+      client: task.assignees?.[0]?.name || task.status || '',
+      jobDate: task.shootDate,
+      dueState: task.shootState,
+      priority: task.priority,
+      deliverableTypes: task.taskTypes || [],
+      location: [task.column || task.status, task.dueDate ? `Due ${task.dueDate}` : ''].filter(Boolean).join(' - '),
+      notes: task.description || '',
+      attachments: task.attachments || [],
+      url: task.url,
+      archived: task.archived,
+      sourceKind: 'task',
+      sourceLabel: "JOHN'S HUB task",
+      task
+    }));
+
+  return [...dedicatedJobs, ...taskJobs].sort(sortCalendarJobs);
+}
+
+function sortCalendarJobs(a: CalendarJob, b: CalendarJob) {
+  if (a.jobDate && !b.jobDate) return -1;
+  if (!a.jobDate && b.jobDate) return 1;
+  if (a.jobDate && b.jobDate && a.jobDate !== b.jobDate) return a.jobDate.localeCompare(b.jobDate);
+  return priorityWeight(a.priority) - priorityWeight(b.priority);
+}
+
+function priorityWeight(priority: string) {
+  return { High: 0, Medium: 1, Low: 2 }[priority] ?? 3;
+}
+
 function brisbaneToday() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Australia/Brisbane',
@@ -3419,13 +3485,13 @@ function formatCalendarMonth(monthKey: string) {
   });
 }
 
-function buildJobsCalendarDays(jobs: NotionJobsReport['upcomingJobs'], monthKey: string) {
+function buildJobsCalendarDays(jobs: CalendarJob[], monthKey: string) {
   const [year, month] = monthKey.split('-').map(Number);
   const firstOfMonth = new Date(Date.UTC(year, month - 1, 1));
   const startOffset = (firstOfMonth.getUTCDay() + 6) % 7;
   const start = new Date(firstOfMonth);
   start.setUTCDate(firstOfMonth.getUTCDate() - startOffset);
-  const jobsByDate = jobs.reduce<Record<string, NotionJobsReport['upcomingJobs']>>((groups, job) => {
+  const jobsByDate = jobs.reduce<Record<string, CalendarJob[]>>((groups, job) => {
     if (!job.jobDate) return groups;
     groups[job.jobDate] = [...(groups[job.jobDate] || []), job];
     return groups;

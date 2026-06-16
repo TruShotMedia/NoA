@@ -123,6 +123,8 @@ interface Window {
         priority: string;
         dueDate: string;
         dueState: string;
+        shootDate: string;
+        shootState: string;
         effortLevel: string;
         effortSize: string;
         taskTypes: string[];
@@ -141,6 +143,8 @@ interface Window {
         priority: string;
         dueDate: string;
         dueState: string;
+        shootDate: string;
+        shootState: string;
         effortLevel: string;
         effortSize: string;
         taskTypes: string[];
@@ -159,6 +163,28 @@ interface Window {
         priority: string;
         dueDate: string;
         dueState: string;
+        shootDate: string;
+        shootState: string;
+        effortLevel: string;
+        effortSize: string;
+        taskTypes: string[];
+        assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
+        description: string;
+        attachments: Array<{ name: string; url: string }>;
+        url: string;
+        archived: boolean;
+        complete: boolean;
+        column: string;
+      }>;
+      calendarTasks: Array<{
+        id: string;
+        title: string;
+        status: string;
+        priority: string;
+        dueDate: string;
+        dueState: string;
+        shootDate: string;
+        shootState: string;
         effortLevel: string;
         effortSize: string;
         taskTypes: string[];
@@ -202,6 +228,8 @@ interface Window {
         priority: string;
         dueDate: string;
         dueState: string;
+        shootDate: string;
+        shootState: string;
         effortLevel: string;
         effortSize: string;
         taskTypes: string[];
