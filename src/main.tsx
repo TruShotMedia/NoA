@@ -3819,6 +3819,57 @@ function priorityWeight(priority: string) {
   return { High: 0, Medium: 1, Low: 2 }[priority] ?? 3;
 }
 
+function dedupeTasks(tasks: NotionTask[]) {
+  const seen = new Set<string>();
+  return tasks.filter((task) => {
+    if (!task.id || seen.has(task.id)) return false;
+    seen.add(task.id);
+    return true;
+  });
+}
+
+function sortTodayTasks(a: NotionTask, b: NotionTask) {
+  const stateWeight = (task: NotionTask) => {
+    if (task.dueState === 'Overdue') return 0;
+    if (task.dueState === 'Due today') return 1;
+    if (task.dueState === 'Tomorrow') return 2;
+    return 3;
+  };
+  const stateDelta = stateWeight(a) - stateWeight(b);
+  if (stateDelta !== 0) return stateDelta;
+  const priorityDelta = priorityWeight(a.priority) - priorityWeight(b.priority);
+  if (priorityDelta !== 0) return priorityDelta;
+  return (a.dueDate || '9999-12-31').localeCompare(b.dueDate || '9999-12-31');
+}
+
+function isDateWithinDays(dateKey: string, startKey: string, days: number) {
+  if (!dateKey) return false;
+  const date = dateFromKey(dateKey).getTime();
+  const start = dateFromKey(startKey).getTime();
+  const end = start + (days * 24 * 60 * 60 * 1000);
+  return date >= start && date < end;
+}
+
+function buildSevenDayPulse(jobs: CalendarJob[], tasks: NotionTask[], todayKey: string) {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = dateFromKey(todayKey);
+    date.setUTCDate(date.getUTCDate() + index);
+    const key = date.toISOString().slice(0, 10);
+    const jobCount = jobs.filter((job) => job.jobDate === key).length;
+    const taskCount = tasks.filter((task) => task.dueDate === key || task.shootDate === key).length;
+    return {
+      date: key,
+      label: index === 0 ? 'Today' : date.toLocaleDateString('en-AU', { weekday: 'short', timeZone: 'UTC' }),
+      total: jobCount + taskCount
+    };
+  });
+}
+
+function dateFromKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
 function brisbaneToday() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Australia/Brisbane',
@@ -3907,87 +3958,84 @@ function Today({
   xeroReport: XeroReport;
   setScreen: (screen: Screen) => void;
 }) {
-  const nextJobs = jobsReport.upcomingJobs.filter((job) => job.jobDate).slice(0, 3);
-  const urgentTasks = [...jobsReport.pipelineTasks, ...jobsReport.taskList]
+  const todayKey = brisbaneToday();
+  const calendarJobs = buildCalendarJobs(jobsReport);
+  const todayJobs = calendarJobs.filter((job) => job.jobDate === todayKey).slice(0, 4);
+  const nextJobs = calendarJobs.filter((job) => job.jobDate && job.jobDate >= todayKey).slice(0, 4);
+  const allTasks = dedupeTasks([...jobsReport.pipelineTasks, ...jobsReport.taskList, ...jobsReport.tasks]);
+  const urgentTasks = allTasks
     .filter((task) => ['Overdue', 'Due today', 'Tomorrow'].includes(task.dueState) || task.priority === 'High')
-    .slice(0, 3);
+    .sort(sortTodayTasks)
+    .slice(0, 5);
   const moneyDue = xeroReport.totals.amountDue + xeroReport.totals.billsDue;
+  const currency = xeroReport.organisation?.baseCurrency || 'AUD';
+  const todayFocus = urgentTasks[0]?.title || todayJobs[0]?.title || nextJobs[0]?.title || smartBriefing.mainFocus;
+  const todayReason = urgentTasks[0]
+    ? `${urgentTasks[0].dueState || urgentTasks[0].status} ${urgentTasks[0].dueDate || ''}`.trim()
+    : todayJobs[0]
+      ? `Scheduled today from ${todayJobs[0].sourceLabel}`
+      : nextJobs[0]
+        ? `Next scheduled item is ${nextJobs[0].jobDate}`
+        : smartBriefing.risk;
+  const todayMetrics = [
+    { label: 'Today', value: String(todayJobs.length), detail: 'jobs/tasks scheduled', tone: 'blue' },
+    { label: 'Urgent', value: String(urgentTasks.length), detail: 'high or due soon', tone: urgentTasks.length ? 'amber' : 'green' },
+    { label: 'This week', value: String(calendarJobs.filter((job) => isDateWithinDays(job.jobDate, todayKey, 7)).length), detail: 'calendar items', tone: 'violet' },
+    { label: 'Finance', value: formatCompactMoney(moneyDue, currency), detail: 'invoices + bills due', tone: moneyDue > 0 ? 'amber' : 'green' }
+  ];
 
   return (
-    <section className="page-fade">
-      <div className="hero-grid">
-        <article className="hero-card">
-          <p className="eyebrow">Daily intelligence loop</p>
-          <h2>{greeting}. Here is what deserves your attention.</h2>
-          <p>
-            Noah is designed to reduce the number of things you need to hold in your head. Start with a question,
-            capture what matters, and keep every external action behind a clear approval.
-          </p>
-          <CommandBar command={command} setCommand={setCommand} sendCommand={sendCommand} />
-        </article>
-
-        <article className="core-card">
-          <div className="orb">
-            <BrainCircuit size={58} />
+    <section className="page-fade today-page">
+      <article className="today-briefing-card">
+        <div className="today-main">
+          <p className="eyebrow">{greeting} - {formatCalendarDay(todayKey)}</p>
+          <h2>Today starts with {todayFocus}</h2>
+          <p>{todayReason}</p>
+          <div className="today-actions">
+            <button className="primary-action" onClick={() => setScreen('upcoming-jobs')}>
+              <BriefcaseBusiness size={16} />
+              Open calendar
+            </button>
+            <button className="secondary-action" onClick={() => setScreen('tasks')}>
+              <ListTodo size={16} />
+              Review tasks
+            </button>
+            <button className="secondary-action" onClick={() => setScreen('xero')}>
+              <WalletCards size={16} />
+              Check Xero
+            </button>
           </div>
-          <h3>Noah is ready</h3>
-          <p>Your workspace is private. Typed requests, drafts, recommendations, and workflows stay review-first.</p>
-          <button className="secondary-action">
-            <Play size={16} />
-            Start briefing
-          </button>
-        </article>
-      </div>
-
-      <section className="home-command-strip">
-        <button onClick={() => setScreen('upcoming-jobs')}>
-          <BriefcaseBusiness size={18} />
-          <span>Next job</span>
-          <strong>{nextJobs[0]?.title || 'No dated job'}</strong>
-        </button>
-        <button onClick={() => setScreen('tasks')}>
-          <ListTodo size={18} />
-          <span>Task pressure</span>
-          <strong>{urgentTasks.length} active</strong>
-        </button>
-        <button onClick={() => setScreen('xero')}>
-          <WalletCards size={18} />
-          <span>Finance due</span>
-          <strong>{formatCompactMoney(moneyDue, xeroReport.organisation?.baseCurrency || 'AUD')}</strong>
-        </button>
-      </section>
-
-      <section className="briefing-strip">
-        {[
-          { label: 'Main focus', value: smartBriefing.mainFocus, detail: 'Based on the newest items in your memory inbox.' },
-          { label: 'Risk', value: smartBriefing.risk, detail: 'Noah is watching for scattered context, unresolved approvals, and loose tasks.' },
-          { label: 'First action', value: smartBriefing.firstAction, detail: 'The simplest useful move before connecting external systems.' }
-        ].map((item) => (
-          <article key={item.label}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <p>{item.detail}</p>
-          </article>
-        ))}
-      </section>
-
-      <div className="metric-grid">
-        {metricCards.map((card, index) => {
-          const Icon = card.icon;
-          const liveCard = inboxSummary[index] ?? card;
-          return (
-            <article className="glass-card metric-card" key={card.label}>
-              <Icon size={22} />
-              <p>{liveCard.label}</p>
-              <h3>{liveCard.value}</h3>
-              <span>{liveCard.detail}</span>
+        </div>
+        <div className="today-pulse">
+          {todayMetrics.map((metric) => (
+            <article className={`today-pulse-card ${metric.tone}`} key={metric.label}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <small>{metric.detail}</small>
             </article>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      </article>
 
-      <section className="split-grid">
-        <article className="glass-card wide">
+      <section className="today-grid">
+        <article className="glass-card wide today-panel">
+          <PanelTitle eyebrow="Today" title="Scheduled work" />
+          <div className="today-list">
+            {(todayJobs.length ? todayJobs : nextJobs.slice(0, 3)).map((job) => (
+              <button className="today-job-row" onClick={() => setScreen('upcoming-jobs')} key={`${job.sourceKind}-${job.id}`}>
+                <span className={`priority-dot priority-${(job.priority || 'none').toLowerCase()}`} />
+                <div>
+                  <strong>{job.title}</strong>
+                  <p>{[job.client, job.location, job.sourceLabel].filter(Boolean).join(' - ') || 'No details yet'}</p>
+                </div>
+                <em>{job.jobDate === todayKey ? 'Today' : job.jobDate}</em>
+              </button>
+            ))}
+            {!todayJobs.length && !nextJobs.length && <p className="empty-state">No dated jobs or Shoot Date tasks found yet.</p>}
+          </div>
+        </article>
+
+        <article className="glass-card wide today-panel">
           <PanelTitle eyebrow="Noah recommends" title="Priority stack" />
           <div className="priority-list">
             {(urgentTasks.length > 0 ? urgentTasks.map((task) => ({
@@ -4006,33 +4054,102 @@ function Today({
             ))}
           </div>
         </article>
+      </section>
 
-        <article className="glass-card wide">
-          <PanelTitle eyebrow="Job radar" title="What is coming up" />
-          <div className="focus-list">
-            {(nextJobs.length > 0 ? nextJobs.map((job) => ({
-              time: job.jobDate || 'No date',
-              title: job.title,
-              detail: [job.client, job.location, job.deliverableTypes.slice(0, 2).join(', ')].filter(Boolean).join(' - ') || 'No job details yet.',
-              tone: job.dueState === 'Overdue' ? 'red' : job.dueState === 'Due today' ? 'amber' : 'blue'
-            })) : focusItems).map((item) => (
-              <div className={`focus-row ${item.tone}`} key={item.title}>
-                <span>{item.time}</span>
+      <section className="today-analytics-row">
+        <article className="glass-card wide today-chart-panel">
+          <PanelTitle eyebrow="7 day shape" title="Workload pulse" />
+          <div className="today-mini-chart">
+            {buildSevenDayPulse(calendarJobs, allTasks, todayKey).map((day) => (
+              <div key={day.date}>
+                <span>{day.label}</span>
                 <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.detail}</p>
+                  <i style={{ height: `${Math.max(8, day.total * 18)}px` }} />
                 </div>
+                <strong>{day.total}</strong>
               </div>
             ))}
           </div>
         </article>
+
+        <article className="glass-card wide">
+          <PanelTitle eyebrow="Ask Noah" title="Plan the next move" />
+          <p className="section-copy">Ask for a priority call, a job summary, or what to move first today.</p>
+          <CommandBar command={command} setCommand={setCommand} sendCommand={sendCommand} />
+        </article>
+      </section>
+
+      <section className="briefing-strip">
+        {[
+          { label: 'Memory focus', value: smartBriefing.mainFocus, detail: smartBriefing.firstAction },
+          { label: 'Risk', value: smartBriefing.risk, detail: 'Noah is watching for scattered context and loose tasks.' },
+          { label: 'Inbox', value: inboxSummary[0]?.value || '0', detail: inboxSummary[0]?.detail || 'Captured items ready for review.' }
+        ].map((item) => (
+          <article key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <p>{item.detail}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="home-command-strip">
+        <button onClick={() => setScreen('pipeline')}>
+          <Kanban size={18} />
+          <span>Pipeline</span>
+          <strong>{jobsReport.pipelineTasks.length} active</strong>
+        </button>
+        <button onClick={() => setScreen('upcoming-jobs')}>
+          <BriefcaseBusiness size={18} />
+          <span>Next job</span>
+          <strong>{nextJobs[0]?.title || 'No dated job'}</strong>
+        </button>
+        <button onClick={() => setScreen('xero')}>
+          <WalletCards size={18} />
+          <span>Finance due</span>
+          <strong>{formatCompactMoney(moneyDue, currency)}</strong>
+        </button>
       </section>
 
       <section className="split-grid lower-grid">
         <article className="glass-card wide">
-          <PanelTitle eyebrow="Awaiting review" title="Approvals" />
+          <PanelTitle eyebrow="Capture" title="Give Noah something to remember" />
+          <div className="capture-input">
+            <input
+              value={capture}
+              onChange={(event) => setCapture(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') addCapture();
+              }}
+              placeholder="Capture a task, decision, client note, or loose thought..."
+            />
+            <button onClick={addCapture}>Save</button>
+          </div>
+          <div className="capture-list">
+            {notes.length === 0 ? (
+              <p className="empty-state">Nothing captured yet. Add one thought Noah should keep close.</p>
+            ) : (
+              notes.slice(0, 4).map((note) => (
+                <div className="capture-note" key={note.id}>
+                  <div>
+                    <span className={`memory-chip ${note.category}`}>{formatCategory(note.category)}</span>
+                    <p>{note.text}</p>
+                  </div>
+                  <time>{note.createdAt}</time>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="glass-card wide">
+          <PanelTitle eyebrow="Review" title="Awaiting attention" />
           <div className="approval-list">
-            {approvalItems.map((item) => (
+            {(urgentTasks.length ? urgentTasks.slice(0, 3).map((task) => ({
+              title: task.title,
+              detail: task.description || `${task.status} - ${task.dueState}`,
+              source: task.priority || 'Task'
+            })) : approvalItems).map((item) => (
               <div className="approval-row" key={item.title}>
                 <CircleAlert size={20} />
                 <div>
@@ -4044,46 +4161,7 @@ function Today({
             ))}
           </div>
         </article>
-
-        <article className="glass-card wide">
-          <PanelTitle eyebrow="Ready when you are" title="Connect the next layer" />
-          <div className="decision-list">
-            <Decision icon={Database} title="Memory" detail="Tasks, projects, clients, decisions, and recurring preferences." />
-            <Decision icon={Zap} title="Automations" detail="Scheduled briefings, event intake, and repeatable workflows through n8n." />
-            <Decision icon={MessageSquareText} title="Noah" detail="Advisor responses that use your context and respect approvals." />
-          </div>
-        </article>
       </section>
-
-      <article className="glass-card wide capture-panel">
-        <PanelTitle eyebrow="Private capture" title="Give Noah something to remember" />
-        <div className="capture-input">
-          <input
-            value={capture}
-            onChange={(event) => setCapture(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') addCapture();
-            }}
-            placeholder="Capture a task, decision, client note, or loose thought..."
-          />
-          <button onClick={addCapture}>Save</button>
-        </div>
-        <div className="capture-list">
-          {notes.length === 0 ? (
-            <p className="empty-state">Nothing captured yet. Add one thought Noah should keep close.</p>
-          ) : (
-            notes.slice(0, 4).map((note) => (
-              <div className="capture-note" key={note.id}>
-                <div>
-                  <span className={`memory-chip ${note.category}`}>{formatCategory(note.category)}</span>
-                  <p>{note.text}</p>
-                </div>
-                <time>{note.createdAt}</time>
-              </div>
-            ))
-          )}
-        </div>
-      </article>
     </section>
   );
 }

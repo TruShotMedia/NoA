@@ -1485,6 +1485,216 @@ h3 {
   gap: 18px;
 }
 
+.today-page {
+  display: grid;
+  gap: 16px;
+}
+
+.today-briefing-card {
+  background: linear-gradient(145deg, rgba(25, 35, 54, 0.94), rgba(8, 13, 25, 0.98));
+  border-radius: 28px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 24px 70px rgba(0, 0, 0, 0.24);
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  min-height: 330px;
+  overflow: hidden;
+  padding: 28px;
+}
+
+.today-main {
+  align-content: center;
+  display: grid;
+  gap: 14px;
+}
+
+.today-main h2 {
+  font-size: 52px;
+  line-height: 1;
+  margin: 0;
+  max-width: 980px;
+}
+
+.today-main p {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 760px;
+}
+
+.today-actions,
+.today-analytics-row,
+.today-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.today-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.today-actions .primary-action,
+.today-actions .secondary-action {
+  margin: 0;
+}
+
+.today-pulse {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.today-pulse-card {
+  align-content: end;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: grid;
+  gap: 5px;
+  min-height: 132px;
+  padding: 16px;
+}
+
+.today-pulse-card span {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.today-pulse-card strong {
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.today-pulse-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.today-pulse-card.blue {
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.22);
+}
+
+.today-pulse-card.amber {
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.24);
+}
+
+.today-pulse-card.green {
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.2);
+}
+
+.today-pulse-card.violet {
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.22);
+}
+
+.today-grid,
+.today-analytics-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.today-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.today-list {
+  display: grid;
+  gap: 10px;
+}
+
+.today-job-row {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.055);
+  border: 0;
+  border-radius: 18px;
+  color: inherit;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding: 14px;
+  text-align: left;
+}
+
+.today-job-row strong {
+  color: #fff;
+  display: block;
+  line-height: 1.25;
+}
+
+.today-job-row p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+
+.today-job-row em {
+  color: #bfdbfe;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.today-chart-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.today-mini-chart {
+  align-items: end;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-height: 176px;
+}
+
+.today-mini-chart > div {
+  align-items: center;
+  display: grid;
+  gap: 7px;
+  justify-items: center;
+}
+
+.today-mini-chart span,
+.today-mini-chart strong {
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.today-mini-chart span {
+  color: var(--faint);
+}
+
+.today-mini-chart strong {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.today-mini-chart div div {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  display: flex;
+  height: 112px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.today-mini-chart i {
+  background: linear-gradient(180deg, #bfdbfe, #60a5fa);
+  border-radius: inherit;
+  display: block;
+  max-height: 112px;
+  width: 100%;
+}
+
 .home-command-strip {
   display: grid;
   gap: 12px;
@@ -3282,6 +3492,9 @@ h3 {
     .integrations-grid,
     .jobs-metrics,
     .jobs-board,
+    .today-briefing-card,
+    .today-grid,
+    .today-analytics-row,
     .xero-overview,
     .xero-analytics-grid,
     .xero-intelligence-grid,
@@ -3306,6 +3519,10 @@ h3 {
 
   .jobs-sync {
     text-align: left;
+  }
+
+  .today-briefing-card {
+    min-height: 0;
   }
 
   .calendar-day-modal {
@@ -3537,6 +3754,59 @@ h3 {
   .context-panel {
     border-radius: 20px;
     padding: 16px;
+  }
+
+  .today-briefing-card {
+    border-radius: 22px;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .today-main h2 {
+    font-size: 34px;
+  }
+
+  .today-main p {
+    font-size: 15px;
+  }
+
+  .today-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .today-actions > * {
+    width: 100%;
+  }
+
+  .today-pulse {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .today-pulse-card {
+    min-height: 104px;
+    padding: 13px;
+  }
+
+  .today-pulse-card strong {
+    font-size: 23px;
+  }
+
+  .today-job-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .today-job-row em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .today-mini-chart {
+    min-height: 140px;
+  }
+
+  .today-mini-chart div div {
+    height: 86px;
   }
 
   .core-card {
