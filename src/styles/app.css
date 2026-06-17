@@ -1539,23 +1539,24 @@ h3 {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 42px;
+  padding: 40px 54px 58px;
   text-align: center;
 }
 
 .hubgauge-job-count {
   color: #dff3ff;
   display: block;
-  font-size: 92px;
+  font-size: 78px;
   line-height: 0.92;
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .hubgauge-job-metrics {
   display: grid;
   gap: 9px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 24px 0 16px;
+  margin: 18px 0 12px;
+  max-width: 268px;
   width: 100%;
 }
 
@@ -1564,7 +1565,7 @@ h3 {
   background: rgba(255, 255, 255, 0.085);
   border-radius: 18px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
-  padding: 12px;
+  padding: 10px;
 }
 
 .hubgauge-job-metrics b {
@@ -1581,12 +1582,25 @@ h3 {
 }
 
 .hubgauge-next-job {
+  max-width: 248px;
   width: 100%;
 }
 
 .hubgauge-next-job strong {
-  font-size: 18px;
+  display: -webkit-box;
+  font-size: 16px;
+  line-height: 1.12;
   margin: 6px 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hubgauge-next-job small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hubgauge-clock {

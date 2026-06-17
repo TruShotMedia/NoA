@@ -26,6 +26,7 @@ import {
   Menu,
   Plus,
   PieChart,
+  Pause,
   Play,
   ReceiptText,
   RefreshCw,
@@ -2529,11 +2530,22 @@ function HubGaugeView({
 }) {
   const [face, setFace] = useState<'spotify' | 'jobs' | 'clock'>('spotify');
   const [now, setNow] = useState(Date.now());
+  const refreshRef = useRef(refresh);
+  const isLoadingRef = useRef(isLoading);
+  const endRefreshRef = useRef('');
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   const spotify = payload.spotify || emptyHubGaugePayload.spotify;
   const elapsedMs = spotify.isPlaying
@@ -2542,6 +2554,51 @@ function HubGaugeView({
   const progress = spotify.durationMs ? Math.max(0, Math.min(1, elapsedMs / spotify.durationMs)) : 0;
   const progressDegrees = Math.round(progress * 360);
   const clock = new Date(now);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+
+    const scheduleNextRefresh = () => {
+      const delay = getHubGaugePollDelay(face, spotify);
+      timer = window.setTimeout(async () => {
+        if (cancelled) return;
+        if (!document.hidden && !isLoadingRef.current) {
+          await refreshRef.current().catch(() => undefined);
+        }
+        if (!cancelled) scheduleNextRefresh();
+      }, delay);
+    };
+
+    scheduleNextRefresh();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [face, spotify.configured, spotify.isPlaying, spotify.status, spotify.trackId]);
+
+  useEffect(() => {
+    const refreshVisibleHubGauge = () => {
+      if (!document.hidden && !isLoadingRef.current) void refreshRef.current().catch(() => undefined);
+    };
+
+    window.addEventListener('focus', refreshVisibleHubGauge);
+    document.addEventListener('visibilitychange', refreshVisibleHubGauge);
+    return () => {
+      window.removeEventListener('focus', refreshVisibleHubGauge);
+      document.removeEventListener('visibilitychange', refreshVisibleHubGauge);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (face !== 'spotify' || !spotify.isPlaying || !spotify.durationMs) return;
+    const remainingMs = spotify.durationMs - elapsedMs;
+    const refreshKey = `${spotify.trackId}:${spotify.durationMs}`;
+    if (remainingMs > 0 && remainingMs <= 1800 && endRefreshRef.current !== refreshKey && !isLoadingRef.current) {
+      endRefreshRef.current = refreshKey;
+      void refreshRef.current().catch(() => undefined);
+    }
+  }, [elapsedMs, face, spotify.durationMs, spotify.isPlaying, spotify.trackId]);
 
   return (
     <section className="page-fade hubgauge-page">
@@ -2576,7 +2633,7 @@ function HubGaugeView({
                   <div className="hubgauge-progress-ring" />
                   <div className="hubgauge-face-content">
                     <div className="hubgauge-chip">Noah Media</div>
-                    <div className="hubgauge-play-state"><Play size={26} /></div>
+                    <div className="hubgauge-play-state">{spotify.isPlaying ? <Pause size={26} /> : <Play size={26} />}</div>
                     <div className="hubgauge-track">
                       <strong>{spotify.title || 'Nothing playing'}</strong>
                       <span>{spotify.artist || 'Spotify waits server-side'}</span>
@@ -8918,6 +8975,12 @@ function formatDuration(value: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function getHubGaugePollDelay(face: 'spotify' | 'jobs' | 'clock', spotify: HubGaugePayload['spotify']) {
+  if (!spotify.configured) return 15000;
+  if (face === 'spotify') return spotify.isPlaying ? 4000 : 7000;
+  return spotify.isPlaying ? 12000 : 20000;
 }
 
 function formatMoney(value: number, currency = 'AUD') {
