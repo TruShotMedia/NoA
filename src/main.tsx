@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleAlert,
+  CalendarDays,
   Clock3,
   Copy,
   CreditCard,
@@ -55,12 +56,20 @@ import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
 const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
-type BudgetSection = 'overview' | 'tenant-billing' | 'mortgage-expenses' | 'ledger' | 'automation';
+type BudgetSection = 'overview' | 'income' | 'expenses' | 'calendar' | 'debts' | 'savings' | 'assets' | 'mortgage-expenses' | 'fuel' | 'tenant-billing' | 'ledger' | 'settings' | 'automation';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', detail: 'Cashflow, analytics, and attention cards', icon: PieChart },
-  { id: 'tenant-billing', label: 'Tenant Billing', detail: 'Tenants, rent, utilities, previews', icon: UsersRound },
+  { id: 'income', label: 'Income', detail: 'Personal and business income rows', icon: WalletCards },
+  { id: 'expenses', label: 'Expenses', detail: 'Bills, categories, and outgoing costs', icon: ReceiptText },
+  { id: 'calendar', label: 'Calendar', detail: 'Scheduled payments and transfer planning', icon: CalendarDays },
+  { id: 'debts', label: 'Debts', detail: 'Balances, repayments, and payoff pressure', icon: CreditCard },
+  { id: 'savings', label: 'Savings', detail: 'Savings goals and weekly commitments', icon: ShieldCheck },
+  { id: 'assets', label: 'Assets', detail: 'Net worth and owned asset values', icon: Building2 },
   { id: 'mortgage-expenses', label: 'Mortgage Expenses', detail: 'Owner costs and tenant offsets', icon: Building2 },
-  { id: 'ledger', label: 'Ledger Rows', detail: 'Income, expenses, debts, assets', icon: Database },
+  { id: 'fuel', label: 'Fuel', detail: 'Fuel budget calculator and expense setup', icon: Activity },
+  { id: 'tenant-billing', label: 'Tenant Billing', detail: 'Tenants, rent, utilities, previews', icon: UsersRound },
+  { id: 'ledger', label: 'All Rows', detail: 'Raw normalized Ledger tables', icon: Database },
+  { id: 'settings', label: 'Settings', detail: 'Categories, defaults, cloud status, and checklist', icon: ServerCog },
   { id: 'automation', label: 'Automation', detail: 'Email activity and schedule checks', icon: Zap }
 ];
 type XeroSection = 'overview' | 'invoices' | 'bills' | 'contacts' | 'intelligence' | 'drafts';
@@ -382,6 +391,7 @@ type BudgetRow = {
   schedule_date?: number | null;
   schedule_exact_date?: string;
   notes?: string;
+  raw_data?: Record<string, unknown>;
   sourceTable?: string;
   updated_at?: string;
 };
@@ -516,6 +526,17 @@ type BudgetEditorField = {
   label: string;
   type?: 'text' | 'number' | 'checkbox' | 'textarea' | 'select';
   options?: string[];
+};
+
+type BudgetScheduleOccurrence = {
+  id: string;
+  date: string;
+  title: string;
+  amount: number;
+  kind: BudgetItemKind;
+  kindLabel: string;
+  frequency: string;
+  source: BudgetRow;
 };
 
 const emptyJobsReport: NotionJobsReport = {
@@ -3435,21 +3456,21 @@ function BudgetingView({
         </article>
 
         <div className="overview-action-tiles" aria-label="Budget quick actions">
-          <button type="button" onClick={() => setSection('ledger')}>
-            <Database size={18} />
-            <span>Rows</span>
+          <button type="button" onClick={() => setSection('expenses')}>
+            <ReceiptText size={18} />
+            <span>Expenses</span>
           </button>
-          <button type="button" onClick={() => setSection('tenant-billing')}>
-            <UsersRound size={18} />
-            <span>Tenants</span>
+          <button type="button" onClick={() => setSection('calendar')}>
+            <CalendarDays size={18} />
+            <span>Calendar</span>
           </button>
           <button type="button" onClick={() => setSection('mortgage-expenses')}>
             <Building2 size={18} />
             <span>Offsets</span>
           </button>
-          <button type="button" onClick={() => void refreshBudget()} disabled={isLoading}>
-            <RefreshCw size={18} />
-            <span>{isLoading ? 'Syncing' : 'Sync'}</span>
+          <button type="button" onClick={() => setSection('fuel')}>
+            <Activity size={18} />
+            <span>Fuel</span>
           </button>
         </div>
       </section>
@@ -3909,6 +3930,109 @@ function BudgetingView({
       </section>
       )}
 
+      {section === 'income' && (
+        <BudgetLedgerPage
+          eyebrow="Ledger income"
+          title="Income"
+          copy="Manage the income streams Ledger used for personal and business cashflow, tax reserve context, and scheduled calendar events."
+          kind="income"
+          rows={filteredTables.income}
+          metrics={[
+            { label: 'Weekly income', value: formatMoney(analytics.weeklyIncome), detail: `${formatMoney(analytics.monthlyIncome)} monthly equivalent` },
+            { label: 'Rows', value: String(filteredTables.income.length), detail: 'income entries in the current filter' },
+            { label: 'Scheduled', value: String(countScheduledRows(filteredTables.income)), detail: 'income rows on the calendar' }
+          ]}
+          onEdit={(row) => setEditor({ kind: 'income', row })}
+          onCreate={() => setEditor({ kind: 'income', row: null })}
+        />
+      )}
+
+      {section === 'expenses' && (
+        <BudgetExpensePage
+          rows={[...filteredTables.expenses, ...filteredTables.mortgageExpenses]}
+          baseRows={filteredTables.expenses}
+          mortgageRows={filteredTables.mortgageExpenses}
+          analytics={analytics}
+          onEdit={(kind, row) => setEditor({ kind, row })}
+          onCreate={(kind) => setEditor({ kind, row: null })}
+        />
+      )}
+
+      {section === 'calendar' && (
+        <BudgetSchedulePage tables={filteredTables} />
+      )}
+
+      {section === 'debts' && (
+        <BudgetLedgerPage
+          eyebrow="Ledger debt strategy"
+          title="Debts"
+          copy="Track balances, repayment frequency, schedule timing, and weekly pressure exactly where Ledger expected debt rows to live."
+          kind="debts"
+          rows={filteredTables.debts}
+          metrics={[
+            { label: 'Debt balance', value: formatMoney(analytics.debtBalance), detail: 'active debt principal' },
+            { label: 'Weekly repayment', value: formatMoney(analytics.weeklyDebt), detail: 'current repayment pressure' },
+            { label: 'Scheduled', value: String(countScheduledRows(filteredTables.debts)), detail: 'debt rows on the calendar' }
+          ]}
+          onEdit={(row) => setEditor({ kind: 'debts', row })}
+          onCreate={() => setEditor({ kind: 'debts', row: null })}
+        />
+      )}
+
+      {section === 'savings' && (
+        <BudgetLedgerPage
+          eyebrow="Ledger savings"
+          title="Savings goals"
+          copy="Savings goals keep the same Ledger shape: recurring amount, optional target, and active/inactive tracking."
+          kind="savings"
+          rows={filteredTables.savings}
+          metrics={[
+            { label: 'Weekly saving', value: formatMoney(analytics.weeklySavings), detail: 'active savings commitments' },
+            { label: 'Goal value', value: formatMoney(sumNumbers(filteredTables.savings, (row) => row.goal_amount || 0)), detail: 'combined target amount' },
+            { label: 'Goals', value: String(filteredTables.savings.length), detail: 'savings rows in this filter' }
+          ]}
+          onEdit={(row) => setEditor({ kind: 'savings', row })}
+          onCreate={() => setEditor({ kind: 'savings', row: null })}
+        />
+      )}
+
+      {section === 'assets' && (
+        <BudgetLedgerPage
+          eyebrow="Ledger net worth"
+          title="Assets"
+          copy="Maintain the asset side of your Ledger model so NoA can reason about net worth alongside debts and mortgages."
+          kind="assets"
+          rows={filteredTables.assets}
+          metrics={[
+            { label: 'Asset value', value: formatMoney(totals.assetValue), detail: 'active asset rows' },
+            { label: 'Net worth', value: formatMoney(totals.netWorth), detail: 'assets minus debts and mortgages' },
+            { label: 'Assets', value: String(filteredTables.assets.length), detail: 'asset rows in this filter' }
+          ]}
+          onEdit={(row) => setEditor({ kind: 'assets', row })}
+          onCreate={() => setEditor({ kind: 'assets', row: null })}
+        />
+      )}
+
+      {section === 'fuel' && (
+        <BudgetFuelPage
+          settings={report.settings}
+          expenses={filteredTables.expenses}
+          onCreateExpense={() => setEditor({ kind: 'expenses', row: null })}
+        />
+      )}
+
+      {section === 'settings' && (
+        <BudgetSettingsPage
+          report={report}
+          modeFilter={modeFilter}
+          setModeFilter={setModeFilter}
+          showInactiveRows={showInactiveRows}
+          setShowInactiveRows={setShowInactiveRows}
+          refreshBudget={refreshBudget}
+          isLoading={isLoading}
+        />
+      )}
+
       {editor && (
         <BudgetEditorModal
           kind={editor.kind}
@@ -4180,6 +4304,312 @@ function BudgetTable({
         )}
       </div>
     </article>
+  );
+}
+
+function BudgetLedgerPage({
+  eyebrow,
+  title,
+  copy,
+  kind,
+  rows,
+  metrics,
+  onEdit,
+  onCreate
+}: {
+  eyebrow: string;
+  title: string;
+  copy: string;
+  kind: BudgetItemKind;
+  rows: BudgetRow[];
+  metrics: Array<{ label: string; value: string; detail: string }>;
+  onEdit: (row: BudgetRow) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <section className="ledger-subpage">
+      <article className="glass-card wide ledger-subpage-hero">
+        <div>
+          <PanelTitle eyebrow={eyebrow} title={title} />
+          <p>{copy}</p>
+        </div>
+        <button className="primary-action" onClick={onCreate}>
+          <Plus size={16} />
+          New {kindLabel(kind)}
+        </button>
+      </article>
+      <div className="ledger-metric-grid">
+        {metrics.map((metric) => (
+          <article className="ledger-mini-metric" key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+            <p>{metric.detail}</p>
+          </article>
+        ))}
+      </div>
+      <BudgetTable title={`${title} rows`} kind={kind} rows={rows} onEdit={onEdit} onCreate={onCreate} />
+    </section>
+  );
+}
+
+function BudgetExpensePage({
+  rows,
+  baseRows,
+  mortgageRows,
+  analytics,
+  onEdit,
+  onCreate
+}: {
+  rows: BudgetRow[];
+  baseRows: BudgetRow[];
+  mortgageRows: BudgetRow[];
+  analytics: ReturnType<typeof buildBudgetPageAnalytics>;
+  onEdit: (kind: BudgetItemKind, row: BudgetRow) => void;
+  onCreate: (kind: BudgetItemKind) => void;
+}) {
+  return (
+    <section className="ledger-subpage">
+      <article className="glass-card wide ledger-subpage-hero">
+        <div>
+          <PanelTitle eyebrow="Ledger expenses" title="Expenses" />
+          <p>Manage everyday expenses plus mortgage-linked costs while preserving Ledger categories, schedules, and tenant-offset semantics.</p>
+        </div>
+        <div className="ledger-hero-actions">
+          <button className="primary-action" onClick={() => onCreate('expenses')}><Plus size={16} />New expense</button>
+          <button className="secondary-action" onClick={() => onCreate('mortgageExpenses')}><Plus size={16} />Mortgage cost</button>
+        </div>
+      </article>
+      <div className="ledger-metric-grid">
+        <article className="ledger-mini-metric"><span>Weekly expenses</span><strong>{formatMoney(analytics.weeklyExpenses)}</strong><p>standard expense rows</p></article>
+        <article className="ledger-mini-metric"><span>Mortgage expenses</span><strong>{formatMoney(analytics.weeklyMortgageExpenses)}</strong><p>linked property costs</p></article>
+        <article className="ledger-mini-metric"><span>Tenant offsets</span><strong>{formatMoney(analytics.weeklyTenantOffsets)}</strong><p>split into tenant utilities</p></article>
+      </div>
+      <section className="budget-analytics-grid">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Categories" title="Expense pressure" />
+            <PieChart size={20} />
+          </div>
+          <BudgetCategoryBars rows={analytics.expenseCategories} />
+        </article>
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Schedule" title="Upcoming outgoings" />
+            <CalendarDays size={20} />
+          </div>
+          <BudgetUpcomingSchedule rows={budgetScheduledItems({ ...emptyBudgetTables(), expenses: baseRows, mortgageExpenses: mortgageRows }).filter((item) => item.kind !== 'income').slice(0, 6)} />
+        </article>
+      </section>
+      <section className="budget-table-grid">
+        <BudgetTable title="Expense rows" kind="expenses" rows={baseRows} onEdit={(row) => onEdit('expenses', row)} onCreate={() => onCreate('expenses')} />
+        <BudgetTable title="Mortgage expense rows" kind="mortgageExpenses" rows={mortgageRows} onEdit={(row) => onEdit('mortgageExpenses', row)} onCreate={() => onCreate('mortgageExpenses')} />
+      </section>
+    </section>
+  );
+}
+
+function BudgetSchedulePage({ tables }: { tables: BudgetTables }) {
+  const scheduled = budgetScheduledItems(tables);
+  const upcoming = buildBudgetUpcomingSchedule(scheduled, 45);
+  const transfer = buildBudgetTransferSuggestion(scheduled);
+
+  return (
+    <section className="ledger-subpage">
+      <article className="glass-card wide ledger-subpage-hero">
+        <div>
+          <PanelTitle eyebrow="Ledger calendar" title="Scheduled payments" />
+          <p>Ledger's calendar logic is now inside NoA: scheduled income, expenses, debts, mortgages, and mortgage costs all roll into one planning view.</p>
+        </div>
+        <div className="ledger-transfer-card">
+          <span>Smart bills transfer</span>
+          <strong>{formatMoney(transfer.weeklyAmount)}</strong>
+          <p>{transfer.message}</p>
+        </div>
+      </article>
+      <section className="budget-analytics-grid">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Next 45 days" title="Upcoming schedule" />
+            <Clock3 size={20} />
+          </div>
+          <BudgetUpcomingSchedule rows={upcoming} />
+        </article>
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Coverage" title="Scheduled rows" />
+            <Database size={20} />
+          </div>
+          <div className="ledger-schedule-groups">
+            {budgetScheduleCoverage(tables).map((item) => (
+              <div className="budget-action" key={item.label}>
+                <span />
+                <div>
+                  <strong>{item.label}: {item.scheduled}/{item.total}</strong>
+                  <p>{item.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+    </section>
+  );
+}
+
+function BudgetUpcomingSchedule({ rows }: { rows: BudgetScheduleOccurrence[] }) {
+  if (rows.length === 0) return <p className="empty-state">No scheduled rows found. Add schedules to income, expenses, debts, or mortgage rows.</p>;
+  return (
+    <div className="ledger-schedule-list">
+      {rows.map((item) => (
+        <article className={`ledger-schedule-row ${item.kind}`} key={`${item.id}-${item.date}`}>
+          <span>{formatShortDate(item.date)}</span>
+          <div>
+            <strong>{item.title}</strong>
+            <p>{item.kindLabel} · {item.frequency || 'no frequency'}</p>
+          </div>
+          <strong>{item.kind === 'income' ? '+' : '-'}{formatMoney(item.amount)}</strong>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function BudgetFuelPage({
+  settings,
+  expenses,
+  onCreateExpense
+}: {
+  settings: Record<string, unknown> | null;
+  expenses: BudgetRow[];
+  onCreateExpense: () => void;
+}) {
+  const rawFuel = (settings?.raw_data as Record<string, unknown> | undefined)?.fuelCalculator as Record<string, unknown> | undefined;
+  const [efficiency, setEfficiency] = useState(String(rawFuel?.efficiency || '6.3'));
+  const [dailyKm, setDailyKm] = useState(String(rawFuel?.dailyKm || '40'));
+  const [tankSize, setTankSize] = useState(String(rawFuel?.tankSize || '60'));
+  const [fuelPrice, setFuelPrice] = useState(String(rawFuel?.fuelPrice || ''));
+  const litresPer100 = Number(efficiency) || 0;
+  const kmPerDay = Number(dailyKm) || 0;
+  const price = Number(fuelPrice) || 0;
+  const weeklyLitres = litresPer100 > 0 ? (kmPerDay * 7 * litresPer100) / 100 : 0;
+  const weeklyCost = weeklyLitres * price;
+  const monthlyCost = weeklyCost * 52 / 12;
+  const matchingFuelExpense = expenses.find((row) => /fuel|petrol|diesel/i.test(`${row.name || ''} ${row.category || ''}`));
+
+  return (
+    <section className="ledger-subpage">
+      <article className="glass-card wide ledger-subpage-hero">
+        <div>
+          <PanelTitle eyebrow="Ledger fuel calculator" title="Fuel" />
+          <p>Estimate fuel from efficiency, daily kilometres, and price. Create or edit a Fuel expense row to make it part of the live budget.</p>
+        </div>
+        <button className="primary-action" onClick={onCreateExpense}>
+          <Plus size={16} />
+          Add fuel expense
+        </button>
+      </article>
+      <section className="ledger-fuel-grid">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Calculator" title="Fuel assumptions" />
+            <Activity size={20} />
+          </div>
+          <div className="notion-form-grid">
+            <label><span>L/100km</span><input type="number" value={efficiency} onChange={(event) => setEfficiency(event.currentTarget.value)} /></label>
+            <label><span>Daily km</span><input type="number" value={dailyKm} onChange={(event) => setDailyKm(event.currentTarget.value)} /></label>
+            <label><span>Tank size</span><input type="number" value={tankSize} onChange={(event) => setTankSize(event.currentTarget.value)} /></label>
+            <label><span>Fuel price</span><input type="number" value={fuelPrice} onChange={(event) => setFuelPrice(event.currentTarget.value)} /></label>
+          </div>
+        </article>
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Budget result" title="Fuel estimate" />
+            <WalletCards size={20} />
+          </div>
+          <div className="ledger-metric-grid compact">
+            <article className="ledger-mini-metric"><span>Weekly</span><strong>{weeklyCost ? formatMoney(weeklyCost) : 'Add price'}</strong><p>{weeklyLitres.toFixed(1)}L estimated</p></article>
+            <article className="ledger-mini-metric"><span>Monthly</span><strong>{weeklyCost ? formatMoney(monthlyCost) : 'Not budgeting'}</strong><p>{tankSize ? `${Math.max(0, Number(tankSize)).toFixed(0)}L tank reference` : 'No tank size'}</p></article>
+          </div>
+          <div className="budget-action info">
+            <span />
+            <div>
+              <strong>{matchingFuelExpense ? `Linked-looking expense: ${budgetRowTitle(matchingFuelExpense)}` : 'No obvious Fuel expense row found'}</strong>
+              <p>{matchingFuelExpense ? `${formatMoney(budgetWeeklyValue(matchingFuelExpense, 'amount'))} weekly from Ledger data.` : 'Use Add fuel expense to create a row, then enter the calculated weekly or monthly amount.'}</p>
+            </div>
+          </div>
+        </article>
+      </section>
+    </section>
+  );
+}
+
+function BudgetSettingsPage({
+  report,
+  modeFilter,
+  setModeFilter,
+  showInactiveRows,
+  setShowInactiveRows,
+  refreshBudget,
+  isLoading
+}: {
+  report: BudgetReport;
+  modeFilter: BudgetModeFilter;
+  setModeFilter: (mode: BudgetModeFilter) => void;
+  showInactiveRows: boolean;
+  setShowInactiveRows: (show: boolean) => void;
+  refreshBudget: () => Promise<BudgetReport>;
+  isLoading: boolean;
+}) {
+  const settings = report.settings || {};
+  const rawData = (settings.raw_data as Record<string, unknown> | undefined) || {};
+  const categories = Array.isArray(rawData.categories) ? rawData.categories : Array.isArray(settings.categories) ? settings.categories : [];
+
+  return (
+    <section className="ledger-subpage">
+      <article className="glass-card wide ledger-subpage-hero">
+        <div>
+          <PanelTitle eyebrow="Ledger settings" title="Budget settings" />
+          <p>Review the Ledger configuration NoA is reading from Optra Studio. Editing categories and defaults can come next as a backend settings mutation.</p>
+        </div>
+        <button className="secondary-action" onClick={() => void refreshBudget()} disabled={isLoading}>
+          <RefreshCw size={16} />
+          {isLoading ? 'Syncing...' : 'Sync budget'}
+        </button>
+      </article>
+      <section className="budget-analytics-grid">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="View controls" title="Current filter" />
+            <ServerCog size={20} />
+          </div>
+          <div className="budget-filter-controls vertical">
+            <div className="segmented-control">
+              {(['all', 'personal', 'business'] as BudgetModeFilter[]).map((mode) => (
+                <button key={mode} className={modeFilter === mode ? 'active' : ''} onClick={() => setModeFilter(mode)}>
+                  {mode === 'all' ? 'All' : mode[0].toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
+            </div>
+            <label className="toggle-row">
+              <input type="checkbox" checked={showInactiveRows} onChange={(event) => setShowInactiveRows(event.currentTarget.checked)} />
+              Show inactive rows
+            </label>
+          </div>
+        </article>
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Ledger setup" title="Stored settings" />
+            <Database size={20} />
+          </div>
+          <div className="ledger-settings-list">
+            <div><span>Owner</span><strong>{report.owner.email}</strong></div>
+            <div><span>Default mode</span><strong>{String(settings.default_mode || rawData.defaultMode || 'personal')}</strong></div>
+            <div><span>Categories</span><strong>{categories.length || 'Not returned'}</strong></div>
+            <div><span>Last synced</span><strong>{report.fetchedAt ? new Date(report.fetchedAt).toLocaleString() : 'Not synced'}</strong></div>
+          </div>
+        </article>
+      </section>
+    </section>
   );
 }
 
@@ -4856,6 +5286,143 @@ function toWeeklyBudgetAmount(amount: number, frequency: string) {
   if (text.includes('month')) return value * 12 / 52;
   if (text.includes('year') || text.includes('annual')) return value / 52;
   return value;
+}
+
+function emptyBudgetTables(): BudgetTables {
+  return { income: [], expenses: [], debts: [], mortgages: [], mortgageExpenses: [], assets: [], savings: [] };
+}
+
+function countScheduledRows(rows: BudgetRow[]) {
+  return rows.filter((row) => row.active !== false && normaliseScheduleType(row.schedule_type) !== '').length;
+}
+
+function budgetScheduledItems(tables: BudgetTables) {
+  const mapRow = (kind: BudgetItemKind, row: BudgetRow): BudgetScheduleOccurrence | null => {
+    if (row.active === false) return null;
+    if (!normaliseScheduleType(row.schedule_type)) return null;
+    const amountKey: keyof BudgetRow = kind === 'debts' || kind === 'mortgages' ? 'repayment' : 'amount';
+    return {
+      id: row.id || row.local_id || `${kind}-${budgetRowTitle(row)}`,
+      date: '',
+      title: budgetRowTitle(row),
+      amount: budgetWeeklyValue(row, amountKey),
+      kind,
+      kindLabel: kindLabel(kind),
+      frequency: String(row.frequency || ''),
+      source: row
+    };
+  };
+
+  return ([
+    ...tables.income.map((row) => mapRow('income', row)),
+    ...tables.expenses.map((row) => mapRow('expenses', row)),
+    ...tables.debts.map((row) => mapRow('debts', row)),
+    ...tables.mortgages.map((row) => mapRow('mortgages', row)),
+    ...tables.mortgageExpenses.map((row) => mapRow('mortgageExpenses', row))
+  ].filter(Boolean) as BudgetScheduleOccurrence[]);
+}
+
+function buildBudgetUpcomingSchedule(items: BudgetScheduleOccurrence[], days = 45) {
+  const today = startOfLocalDay(new Date());
+  const out: BudgetScheduleOccurrence[] = [];
+  for (let offset = 0; offset <= days; offset += 1) {
+    const date = addLocalDays(today, offset);
+    const key = toLocalDateKey(date);
+    for (const item of items) {
+      if (budgetItemOccursOn(item.source, date)) out.push({ ...item, date: key });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 24);
+}
+
+function buildBudgetTransferSuggestion(items: BudgetScheduleOccurrence[]) {
+  const weeklyAmount = sumNumbers(items.filter((item) => item.kind !== 'income'), (item) => item.amount);
+  const nextBills = buildBudgetUpcomingSchedule(items.filter((item) => item.kind !== 'income'), 21);
+  if (weeklyAmount <= 0) {
+    return {
+      weeklyAmount: 0,
+      message: 'Add payment schedules to expenses, debts, or mortgage costs and NoA will suggest a weekly bills transfer.'
+    };
+  }
+  const pressure = nextBills.slice(0, 3).map((item) => `${item.title} on ${formatShortDate(item.date)}`).join(', ');
+  return {
+    weeklyAmount,
+    message: pressure ? `Move this into bills weekly. Next pressure: ${pressure}.` : 'Weekly amount is based on all active scheduled outgoings.'
+  };
+}
+
+function budgetScheduleCoverage(tables: BudgetTables) {
+  return [
+    { label: 'Income', rows: tables.income, detail: 'income events help find pay-day context' },
+    { label: 'Expenses', rows: tables.expenses, detail: 'standard bills and recurring costs' },
+    { label: 'Debts', rows: tables.debts, detail: 'repayments included in bills transfer pressure' },
+    { label: 'Mortgage', rows: [...tables.mortgages, ...tables.mortgageExpenses], detail: 'repayments and property costs' }
+  ].map((item) => ({ ...item, total: item.rows.length, scheduled: countScheduledRows(item.rows) }));
+}
+
+function normaliseScheduleType(value: unknown) {
+  const raw = String(value || '').toLowerCase();
+  if (!raw || raw === 'none') return '';
+  if (raw === 'exact_date') return 'date';
+  if (raw === 'monthly') return 'monthdate';
+  if (raw === 'weekly' || raw === 'fortnightly') return 'weekday';
+  return raw;
+}
+
+function budgetItemOccursOn(row: BudgetRow, date: Date) {
+  const type = normaliseScheduleType(row.schedule_type);
+  if (!type) return false;
+  const frequency = String(row.frequency || '').toLowerCase();
+  if (type === 'weekday') {
+    const day = Number(row.schedule_day ?? 0);
+    if (date.getDay() !== day) return false;
+    if (frequency.includes('fortnight')) {
+      const anchor = row.schedule_exact_date ? parseLocalDate(row.schedule_exact_date) : null;
+      if (!anchor) return true;
+      return Math.abs(Math.floor((startOfLocalDay(date).getTime() - anchor.getTime()) / 86400000)) % 14 === 0;
+    }
+    return true;
+  }
+  if (type === 'monthdate') {
+    const target = Math.max(1, Math.min(31, Number(row.schedule_date || 1)));
+    return date.getDate() === Math.min(target, daysInMonth(date));
+  }
+  if (type === 'date') {
+    return row.schedule_exact_date === toLocalDateKey(date);
+  }
+  return false;
+}
+
+function parseLocalDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addLocalDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function daysInMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function toLocalDateKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function formatShortDate(value: string) {
+  const date = parseLocalDate(value);
+  if (!date) return value || 'No date';
+  return date.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function formatFrequencyLabel(frequency: string) {
