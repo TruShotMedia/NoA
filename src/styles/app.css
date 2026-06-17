@@ -6444,6 +6444,7 @@ h3 {
   .mobile-sidebar-menu {
     display: block;
     inset: 0;
+    overscroll-behavior-x: contain;
     position: fixed;
     z-index: 45;
   }

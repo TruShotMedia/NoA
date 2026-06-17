@@ -1009,6 +1009,14 @@ function App() {
   const xeroRequestRef = useRef<Promise<XeroReport> | null>(null);
   const budgetRequestRef = useRef<Promise<BudgetReport> | null>(null);
   const lockTimerRef = useRef<number | null>(null);
+  const mobileMenuSwipeRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    acted: false
+  });
   const voiceSupported = false;
   const recordingSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
 
@@ -1071,6 +1079,94 @@ function App() {
     } finally {
       setIsUnlocking(false);
     }
+  };
+
+  const resetMobileMenuSwipe = () => {
+    mobileMenuSwipeRef.current = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      lastX: 0,
+      lastY: 0,
+      acted: false
+    };
+  };
+
+  const shouldIgnoreMobileMenuSwipe = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(target.closest('input, textarea, select, button, a, [role="button"], [data-swipe-ignore="true"]'));
+  };
+
+  const handleMobileMenuTouchStart = (event: React.TouchEvent<HTMLElement>) => {
+    if (event.touches.length !== 1 || window.innerWidth > 920 || shouldIgnoreMobileMenuSwipe(event.target)) {
+      resetMobileMenuSwipe();
+      return;
+    }
+
+    const touch = event.touches[0];
+    const sheetWidth = Math.min(window.innerWidth * 0.86, 360);
+    const canOpenFromEdge = !isMoreMenuOpen && touch.clientX <= 28;
+    const canCloseFromSheet = isMoreMenuOpen && touch.clientX <= sheetWidth;
+
+    if (!canOpenFromEdge && !canCloseFromSheet) {
+      resetMobileMenuSwipe();
+      return;
+    }
+
+    mobileMenuSwipeRef.current = {
+      active: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      lastY: touch.clientY,
+      acted: false
+    };
+  };
+
+  const handleMobileMenuTouchMove = (event: React.TouchEvent<HTMLElement>) => {
+    const gesture = mobileMenuSwipeRef.current;
+    if (!gesture.active || event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    gesture.lastX = touch.clientX;
+    gesture.lastY = touch.clientY;
+    const deltaX = touch.clientX - gesture.startX;
+    const deltaY = touch.clientY - gesture.startY;
+    const horizontalIntent = Math.abs(deltaX) > 28 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35;
+
+    if (Math.abs(deltaY) > 46 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      resetMobileMenuSwipe();
+      return;
+    }
+
+    if (!horizontalIntent || gesture.acted) return;
+
+    if (!isMoreMenuOpen && deltaX > 72) {
+      setIsMoreMenuOpen(true);
+      gesture.acted = true;
+      return;
+    }
+
+    if (isMoreMenuOpen && deltaX < -72) {
+      setIsMoreMenuOpen(false);
+      gesture.acted = true;
+    }
+  };
+
+  const handleMobileMenuTouchEnd = () => {
+    const gesture = mobileMenuSwipeRef.current;
+    if (!gesture.active || gesture.acted) {
+      resetMobileMenuSwipe();
+      return;
+    }
+
+    const deltaX = gesture.lastX - gesture.startX;
+    const deltaY = gesture.lastY - gesture.startY;
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      if (!isMoreMenuOpen && deltaX > 58) setIsMoreMenuOpen(true);
+      if (isMoreMenuOpen && deltaX < -58) setIsMoreMenuOpen(false);
+    }
+    resetMobileMenuSwipe();
   };
 
   useEffect(() => {
@@ -1989,7 +2085,13 @@ function App() {
   }
 
   return (
-    <main className="shell">
+    <main
+      className="shell"
+      onTouchStart={handleMobileMenuTouchStart}
+      onTouchMove={handleMobileMenuTouchMove}
+      onTouchEnd={handleMobileMenuTouchEnd}
+      onTouchCancel={resetMobileMenuSwipe}
+    >
       <aside className="rail">
         <div className="brand">
           <div className="brand-mark">NoA</div>
