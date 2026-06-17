@@ -63,6 +63,16 @@ const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; 
   { id: 'ledger', label: 'Ledger Rows', detail: 'Income, expenses, debts, assets', icon: Database },
   { id: 'automation', label: 'Automation', detail: 'Email activity and schedule checks', icon: Zap }
 ];
+type XeroSection = 'overview' | 'invoices' | 'bills' | 'contacts' | 'intelligence' | 'drafts';
+const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon: React.ElementType }> = [
+  { id: 'overview', label: 'Overview', detail: 'Cashflow, trends, and health checks', icon: PieChart },
+  { id: 'invoices', label: 'Invoices', detail: 'Client invoices, due balances, and collections', icon: CreditCard },
+  { id: 'bills', label: 'Bills', detail: 'Supplier bills and payable pressure', icon: ReceiptText },
+  { id: 'contacts', label: 'Contacts', detail: 'Customer balances and top clients', icon: UsersRound },
+  { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
+  { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
+];
+const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -788,6 +798,7 @@ const integrationSetups: IntegrationSetup[] = [
 function App() {
   const [screen, setScreen] = useState<Screen>('today');
   const [budgetSection, setBudgetSection] = useState<BudgetSection>('overview');
+  const [xeroSection, setXeroSection] = useState<XeroSection>('overview');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [command, setCommand] = useState('');
   const [capture, setCapture] = useState('');
@@ -1725,40 +1736,33 @@ function App() {
           </div>
         </div>
 
-        <nav className="nav-list">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <div className="nav-item-group" key={item.id}>
-                <button
-                  className={screen === item.id ? 'active' : ''}
-                  onClick={() => {
-                    if (item.id === 'budgeting') {
-                      setBudgetSection('overview');
-                    }
-                    setScreen(item.id);
-                  }}
-                >
-                  <Icon size={18} />
-                  <span>{item.label}</span>
-                  {item.id === 'budgeting' && <ChevronRight className="nav-chevron" size={15} />}
-                </button>
-                {item.id === 'budgeting' && screen === 'budgeting' && (
-                  <div className="nav-sub-list">
-                    {budgetSections.map((section) => {
-                      const SectionIcon = section.icon;
-                      return (
-                        <button key={section.id} className={budgetSection === section.id ? 'active' : ''} onClick={() => setBudgetSection(section.id)}>
-                          <SectionIcon size={15} />
-                          <span>{section.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <nav className="nav-list" aria-label="Primary navigation">
+          <NavGroupLabel label="Workspace" />
+          {navItems.filter((item) => workspaceScreenIds.includes(item.id)).map((item) => (
+            <RailNavItem
+              key={item.id}
+              item={item}
+              screen={screen}
+              setScreen={setScreen}
+              budgetSection={budgetSection}
+              setBudgetSection={setBudgetSection}
+              xeroSection={xeroSection}
+              setXeroSection={setXeroSection}
+            />
+          ))}
+          <NavGroupLabel label="More" />
+          {navItems.filter((item) => !workspaceScreenIds.includes(item.id)).map((item) => (
+            <RailNavItem
+              key={item.id}
+              item={item}
+              screen={screen}
+              setScreen={setScreen}
+              budgetSection={budgetSection}
+              setBudgetSection={setBudgetSection}
+              xeroSection={xeroSection}
+              setXeroSection={setXeroSection}
+            />
+          ))}
         </nav>
 
         <div className="rail-status">
@@ -1769,15 +1773,15 @@ function App() {
 
       <section className="workspace">
         <header className="topbar">
-          <div>
+          <button className="mobile-more-trigger" onClick={() => setIsMoreMenuOpen((current) => !current)} aria-label="Open navigation">
+            <Menu size={18} />
+            Menu
+          </button>
+          <div className="topbar-title">
             <p className="eyebrow">Noetic Advisor</p>
             <h1>{screenTitle(screen)}</h1>
           </div>
           <div className="top-actions">
-            <button className="mobile-more-trigger" onClick={() => setIsMoreMenuOpen((current) => !current)} aria-label="Open more pages">
-              <Menu size={18} />
-              Menu
-            </button>
             <StatusPill tone="success" icon={ShieldCheck} label="Protected actions" />
             <StatusPill tone={syncStatusPill.tone} icon={syncStatusPill.icon} label={syncStatusPill.label} />
             <StatusPill tone="info" icon={Bot} label="Noah ready" />
@@ -1790,6 +1794,8 @@ function App() {
           setScreen={setScreen}
           budgetSection={budgetSection}
           setBudgetSection={setBudgetSection}
+          xeroSection={xeroSection}
+          setXeroSection={setXeroSection}
         />
 
         {screen === 'today' && (
@@ -1849,6 +1855,8 @@ function App() {
             isLoadingNotion={isLoadingJobs}
             refreshXero={loadXeroSummary}
             refreshNotion={loadNotionJobs}
+            section={xeroSection}
+            setSection={setXeroSection}
           />
         )}
         {screen === 'budgeting' && (
@@ -1890,6 +1898,12 @@ function App() {
           setScreen('budgeting');
           setIsMoreMenuOpen(false);
         }}
+        xeroSection={xeroSection}
+        setXeroSection={(nextSection) => {
+          setXeroSection(nextSection);
+          setScreen('xero');
+          setIsMoreMenuOpen(false);
+        }}
         isMoreMenuOpen={isMoreMenuOpen}
         closeMoreMenu={() => setIsMoreMenuOpen(false)}
       />
@@ -1897,16 +1911,89 @@ function App() {
   );
 }
 
+function NavGroupLabel({ label }: { label: string }) {
+  return <span className="nav-group-label">{label}</span>;
+}
+
+function RailNavItem({
+  item,
+  screen,
+  setScreen,
+  budgetSection,
+  setBudgetSection,
+  xeroSection,
+  setXeroSection
+}: {
+  item: typeof navItems[number];
+  screen: Screen;
+  setScreen: (screen: Screen) => void;
+  budgetSection: BudgetSection;
+  setBudgetSection: (section: BudgetSection) => void;
+  xeroSection: XeroSection;
+  setXeroSection: (section: XeroSection) => void;
+}) {
+  const Icon = item.icon;
+  const isBudgeting = item.id === 'budgeting';
+  const isXero = item.id === 'xero';
+
+  return (
+    <div className="nav-item-group">
+      <button
+        className={screen === item.id ? 'active' : ''}
+        onClick={() => {
+          if (isBudgeting) setBudgetSection('overview');
+          if (isXero) setXeroSection('overview');
+          setScreen(item.id);
+        }}
+      >
+        <Icon size={18} />
+        <span>{item.label}</span>
+        {(isBudgeting || isXero) && <ChevronRight className="nav-chevron" size={15} />}
+      </button>
+      {isBudgeting && screen === 'budgeting' && (
+        <div className="nav-sub-list">
+          {budgetSections.map((section) => {
+            const SectionIcon = section.icon;
+            return (
+              <button key={section.id} className={budgetSection === section.id ? 'active' : ''} onClick={() => setBudgetSection(section.id)}>
+                <SectionIcon size={15} />
+                <span>{section.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {isXero && screen === 'xero' && (
+        <div className="nav-sub-list">
+          {xeroSections.map((section) => {
+            const SectionIcon = section.icon;
+            return (
+              <button key={section.id} className={xeroSection === section.id ? 'active' : ''} onClick={() => setXeroSection(section.id)}>
+                <SectionIcon size={15} />
+                <span>{section.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ResponsivePageNav({
   screen,
   setScreen,
   budgetSection,
-  setBudgetSection
+  setBudgetSection,
+  xeroSection,
+  setXeroSection
 }: {
   screen: Screen;
   setScreen: (screen: Screen) => void;
   budgetSection: BudgetSection;
   setBudgetSection: (section: BudgetSection) => void;
+  xeroSection: XeroSection;
+  setXeroSection: (section: XeroSection) => void;
 }) {
   const quickItems = tabletQuickScreens
     .map((id) => navItems.find((item) => item.id === id))
@@ -1923,6 +2010,9 @@ function ResponsivePageNav({
             onClick={() => {
               if (item.id === 'budgeting') {
                 setBudgetSection('overview');
+              }
+              if (item.id === 'xero') {
+                setXeroSection('overview');
               }
               setScreen(item.id);
             }}
@@ -1941,6 +2031,15 @@ function ResponsivePageNav({
           </button>
         );
       })}
+      {screen === 'xero' && xeroSections.map((section) => {
+        const Icon = section.icon;
+        return (
+          <button key={section.id} className={`sub-page ${xeroSection === section.id ? 'active' : ''}`} onClick={() => setXeroSection(section.id)}>
+            <Icon size={16} />
+            <span>{section.label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 }
@@ -1950,6 +2049,8 @@ function MobileNav({
   setScreen,
   budgetSection,
   setBudgetSection,
+  xeroSection,
+  setXeroSection,
   isMoreMenuOpen,
   closeMoreMenu,
 }: {
@@ -1957,10 +2058,12 @@ function MobileNav({
   setScreen: (screen: Screen) => void;
   budgetSection: BudgetSection;
   setBudgetSection: (section: BudgetSection) => void;
+  xeroSection: XeroSection;
+  setXeroSection: (section: XeroSection) => void;
   isMoreMenuOpen: boolean;
   closeMoreMenu: () => void;
 }) {
-  const primaryItems = navItems.filter((item) => ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'].includes(item.id));
+  const primaryItems = navItems.filter((item) => workspaceScreenIds.includes(item.id));
   const secondaryItems = navItems.filter((item) => !primaryItems.some((primary) => primary.id === item.id));
 
   return (
@@ -1992,6 +2095,9 @@ function MobileNav({
                         if (item.id === 'budgeting') {
                           setBudgetSection('overview');
                         }
+                        if (item.id === 'xero') {
+                          setXeroSection('overview');
+                        }
                         setScreen(item.id);
                       }}
                     >
@@ -2007,6 +2113,23 @@ function MobileNav({
                               key={section.id}
                               className={screen === 'budgeting' && budgetSection === section.id ? 'active' : ''}
                               onClick={() => setBudgetSection(section.id)}
+                            >
+                              <SectionIcon size={16} />
+                              <span>{section.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {item.id === 'xero' && (
+                      <div className="mobile-sidebar-subpages">
+                        {xeroSections.map((section) => {
+                          const SectionIcon = section.icon;
+                          return (
+                            <button
+                              key={section.id}
+                              className={screen === 'xero' && xeroSection === section.id ? 'active' : ''}
+                              onClick={() => setXeroSection(section.id)}
                             >
                               <SectionIcon size={16} />
                               <span>{section.label}</span>
@@ -3960,7 +4083,9 @@ function XeroView({
   isLoading,
   isLoadingNotion,
   refreshXero,
-  refreshNotion
+  refreshNotion,
+  section,
+  setSection
 }: {
   report: XeroReport;
   notionReport: NotionJobsReport;
@@ -3968,6 +4093,8 @@ function XeroView({
   isLoadingNotion: boolean;
   refreshXero: () => Promise<XeroReport>;
   refreshNotion: () => Promise<NotionJobsReport>;
+  section: XeroSection;
+  setSection: (section: XeroSection) => void;
 }) {
   const customerInvoices = report.customerInvoices.length > 0
     ? report.customerInvoices
@@ -4056,6 +4183,20 @@ function XeroView({
         </article>
       )}
 
+      <nav className="budget-section-tabs xero-section-tabs" aria-label="Xero sections">
+        {xeroSections.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button key={item.id} className={section === item.id ? 'active' : ''} onClick={() => setSection(item.id)}>
+              <Icon size={17} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {section === 'overview' && (
+        <>
       <section className="xero-overview">
         <article className="xero-org-card">
           <div className="xero-card-icon"><Building2 size={22} /></div>
@@ -4131,7 +4272,12 @@ function XeroView({
             />
           </div>
         </article>
+      </section>
+        </>
+      )}
 
+      {section === 'contacts' && (
+      <section className="xero-grid">
         <article className="glass-card xero-panel">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Customers" title="Customer balances" />
@@ -4153,8 +4299,24 @@ function XeroView({
             )}
           </div>
         </article>
+        <article className="glass-card xero-panel xero-chart-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Client value" title="Top clients" />
+            <UsersRound size={20} />
+          </div>
+          <XeroClientChart data={report.analytics.topClients} currency={currency} emptyLabel="No customer invoice revenue data returned yet." />
+        </article>
+        <article className="glass-card xero-panel xero-chart-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Suppliers" title="Top billers" />
+            <Building2 size={20} />
+          </div>
+          <XeroClientChart data={report.analytics.topSuppliers} currency={currency} valueLabel="billed" emptyLabel="No supplier bill data returned yet." />
+        </article>
       </section>
+      )}
 
+      {section === 'bills' && (
       <section className="xero-grid">
         <article className="glass-card xero-panel">
           <div className="panel-row-head">
@@ -4188,7 +4350,9 @@ function XeroView({
           </div>
         </article>
       </section>
+      )}
 
+      {section === 'intelligence' && (
       <article className="glass-card wide xero-panel xero-intelligence-panel">
         <div className="panel-row-head">
           <PanelTitle eyebrow="NoA cross-check" title="Finance intelligence" />
@@ -4209,7 +4373,9 @@ function XeroView({
           )}
         </div>
       </article>
+      )}
 
+      {section === 'drafts' && (
       <article className="glass-card wide xero-panel xero-draft-panel">
         <div className="panel-row-head">
           <PanelTitle eyebrow="Approval gated" title="Draft invoice from Notion" />
@@ -4234,7 +4400,9 @@ function XeroView({
           </div>
         )}
       </article>
+      )}
 
+      {section === 'invoices' && (
       <article className="glass-card wide xero-panel">
         <div className="panel-row-head">
           <PanelTitle eyebrow="Invoices" title="Recent invoice activity" />
@@ -4266,7 +4434,9 @@ function XeroView({
           )}
         </div>
       </article>
+      )}
 
+      {section === 'bills' && (
       <article className="glass-card wide xero-panel">
         <div className="panel-row-head">
           <PanelTitle eyebrow="Bills" title="Supplier bill activity" />
@@ -4298,6 +4468,7 @@ function XeroView({
           )}
         </div>
       </article>
+      )}
       {selectedInvoice && (
         <XeroInvoiceDrawer
           invoice={selectedInvoice}
