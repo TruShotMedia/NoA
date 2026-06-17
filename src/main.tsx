@@ -527,8 +527,11 @@ type BudgetReport = {
 type BudgetEditorField = {
   key: keyof BudgetRow | string;
   label: string;
-  type?: 'text' | 'number' | 'checkbox' | 'textarea' | 'select';
+  type?: 'text' | 'number' | 'checkbox' | 'textarea' | 'select' | 'date' | 'mortgage';
   options?: string[];
+  placeholder?: string;
+  help?: string;
+  wide?: boolean;
 };
 
 type BudgetScheduleOccurrence = {
@@ -4054,6 +4057,7 @@ function BudgetingView({
         <BudgetEditorModal
           kind={editor.kind}
           row={editor.row}
+          mortgages={report.mortgageSummary.mortgages}
           onClose={() => setEditor(null)}
           onSaved={() => {
             setEditor(null);
@@ -4633,22 +4637,46 @@ function BudgetSettingsPage({
 function BudgetEditorModal({
   kind,
   row,
+  mortgages,
   onClose,
   onSaved
 }: {
   kind: BudgetItemKind;
   row: BudgetRow | null;
+  mortgages: BudgetMortgageBill[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [draft, setDraft] = useState<Record<string, string | boolean>>(() => budgetDraftFromRow(kind, row));
   const [message, setMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const fields = budgetFieldsForKind(kind);
   const isEditing = Boolean(row?.id);
+  const form = budgetFormForKind(kind);
+  const scheduleSummary = budgetScheduleSummary(draft);
+  const primaryValue = budgetDraftPrimaryValue(kind, draft);
+  const monthlyEquivalent = budgetWeeklyDraftValue(kind, draft) * 52 / 12;
+  const modalTitle = `${isEditing ? 'Edit' : 'Create'} ${kindLabel(kind).toLowerCase()}`;
 
   const updateDraft = (key: string, value: string | boolean) => {
     setDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const updateScheduleType = (value: string) => {
+    setDraft((current) => {
+      const next: Record<string, string | boolean> = { ...current, schedule_type: value };
+      if (!value) {
+        next.schedule_day = '';
+        next.schedule_date = '';
+        next.schedule_exact_date = '';
+      } else if ((value === 'weekly' || value === 'fortnightly') && !next.schedule_day) {
+        next.schedule_day = String(new Date().getDay());
+      } else if (value === 'monthly' && !next.schedule_date) {
+        next.schedule_date = '1';
+      } else if (value === 'exact_date' && !next.schedule_exact_date) {
+        next.schedule_exact_date = toLocalDateKey(new Date());
+      }
+      return next;
+    });
   };
 
   const save = async () => {
@@ -4691,47 +4719,76 @@ function BudgetEditorModal({
         <div className="modal-head">
           <div>
             <p className="eyebrow">{kindLabel(kind)}</p>
-            <h3>{isEditing ? 'Edit budget row' : 'Create budget row'}</h3>
+            <h3>{modalTitle}</h3>
           </div>
           <button onClick={onClose} aria-label="Close budget editor"><X size={18} /></button>
         </div>
 
-        <div className="notion-form-grid">
-          {fields.map((field) => (
-            <label key={field.key} className={field.type === 'textarea' ? 'span-2' : ''}>
-              <span>{field.label}</span>
-              {field.type === 'checkbox' ? (
-                <input
-                  type="checkbox"
-                  checked={Boolean(draft[field.key])}
-                  onChange={(event) => updateDraft(field.key, event.currentTarget.checked)}
-                />
-              ) : field.type === 'select' ? (
-                <select
-                  value={String(draft[field.key] || '')}
-                  onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
-                >
-                  <option value="">Select...</option>
-                  {(field.options || []).map((option) => (
-                    <option value={option} key={option}>{option}</option>
-                  ))}
-                </select>
-              ) : field.type === 'textarea' ? (
-                <textarea
-                  value={String(draft[field.key] || '')}
-                  onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
-                  rows={4}
-                />
-              ) : (
-                <input
-                  type={field.type === 'number' ? 'number' : 'text'}
-                  value={String(draft[field.key] || '')}
-                  onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
-                />
-              )}
-            </label>
-          ))}
-        </div>
+        <section className="budget-editor-summary">
+          <div>
+            <span>{form.summaryLabel}</span>
+            <strong>{primaryValue ? formatMoney(primaryValue) : 'No amount yet'}</strong>
+            <p>{primaryValue ? `${formatMoney(monthlyEquivalent)} monthly equivalent` : form.summaryHint}</p>
+          </div>
+          <label className="budget-editor-active">
+            <input
+              type="checkbox"
+              checked={draft.active !== false}
+              onChange={(event) => updateDraft('active', event.currentTarget.checked)}
+            />
+            <span>{draft.active !== false ? 'Active' : 'Inactive'}</span>
+          </label>
+        </section>
+
+        <section className="budget-editor-section">
+          <div className="budget-editor-section-head">
+            <strong>Details</strong>
+            <p>{form.detailHint}</p>
+          </div>
+          <div className="notion-form-grid">
+            {form.detailFields.map((field) => (
+              <BudgetEditorFieldControl key={field.key} field={field} draft={draft} mortgages={mortgages} updateDraft={updateDraft} />
+            ))}
+          </div>
+        </section>
+
+        {form.moneyFields.length > 0 && (
+          <section className="budget-editor-section">
+            <div className="budget-editor-section-head">
+              <strong>Money</strong>
+              <p>{form.moneyHint}</p>
+            </div>
+            <div className="notion-form-grid">
+              {form.moneyFields.map((field) => (
+                <BudgetEditorFieldControl key={field.key} field={field} draft={draft} mortgages={mortgages} updateDraft={updateDraft} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {form.showSchedule && (
+          <section className="budget-editor-section">
+            <div className="budget-editor-section-head">
+              <strong>Payment schedule</strong>
+              <p>{scheduleSummary}</p>
+            </div>
+            <BudgetScheduleControl draft={draft} updateDraft={updateDraft} updateScheduleType={updateScheduleType} />
+          </section>
+        )}
+
+        {form.noteFields.length > 0 && (
+          <section className="budget-editor-section">
+            <div className="budget-editor-section-head">
+              <strong>Notes</strong>
+              <p>Keep any context Noah should preserve with this Ledger item.</p>
+            </div>
+            <div className="notion-form-grid">
+              {form.noteFields.map((field) => (
+                <BudgetEditorFieldControl key={field.key} field={field} draft={draft} mortgages={mortgages} updateDraft={updateDraft} />
+              ))}
+            </div>
+          </section>
+        )}
 
         {message && <p className="form-message error">{message}</p>}
         <div className="modal-actions">
@@ -4748,6 +4805,137 @@ function BudgetEditorModal({
           </button>
         </div>
       </article>
+    </div>
+  );
+}
+
+function BudgetEditorFieldControl({
+  field,
+  draft,
+  mortgages,
+  updateDraft
+}: {
+  field: BudgetEditorField;
+  draft: Record<string, string | boolean>;
+  mortgages: BudgetMortgageBill[];
+  updateDraft: (key: string, value: string | boolean) => void;
+}) {
+  const value = draft[field.key];
+  const labelClass = `${field.type === 'textarea' || field.wide ? 'span-2 ' : ''}${field.type === 'checkbox' ? 'budget-check-field' : ''}`.trim();
+
+  if (field.type === 'checkbox') {
+    return (
+      <label className={labelClass}>
+        <input
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(event) => updateDraft(field.key, event.currentTarget.checked)}
+        />
+        <span>{field.label}</span>
+        {field.help && <small>{field.help}</small>}
+      </label>
+    );
+  }
+
+  if (field.type === 'mortgage') {
+    return (
+      <label className={labelClass}>
+        <span>{field.label}</span>
+        <select value={String(value || '')} onChange={(event) => updateDraft(field.key, event.currentTarget.value)}>
+          <option value="">No property linked</option>
+          {mortgages.map((mortgage) => (
+            <option value={mortgage.localId || mortgage.id || mortgage.name} key={mortgage.id || mortgage.localId || mortgage.name}>
+              {mortgage.name}
+            </option>
+          ))}
+        </select>
+        {field.help && <small>{field.help}</small>}
+      </label>
+    );
+  }
+
+  return (
+    <label className={labelClass}>
+      <span>{field.label}</span>
+      {field.type === 'select' ? (
+        <select value={String(value || '')} onChange={(event) => updateDraft(field.key, event.currentTarget.value)}>
+          <option value="">Select...</option>
+          {(field.options || []).map((option) => (
+            <option value={option} key={option}>{formatBudgetOption(option)}</option>
+          ))}
+        </select>
+      ) : field.type === 'textarea' ? (
+        <textarea
+          value={String(value || '')}
+          onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
+          placeholder={field.placeholder}
+          rows={4}
+        />
+      ) : (
+        <input
+          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+          value={String(value || '')}
+          onChange={(event) => updateDraft(field.key, event.currentTarget.value)}
+          placeholder={field.placeholder}
+        />
+      )}
+      {field.help && <small>{field.help}</small>}
+    </label>
+  );
+}
+
+function BudgetScheduleControl({
+  draft,
+  updateDraft,
+  updateScheduleType
+}: {
+  draft: Record<string, string | boolean>;
+  updateDraft: (key: string, value: string | boolean) => void;
+  updateScheduleType: (value: string) => void;
+}) {
+  const type = String(draft.schedule_type || '');
+  return (
+    <div className="budget-schedule-control">
+      <div className="budget-schedule-options" aria-label="Payment schedule options">
+        {[
+          { value: '', label: 'No schedule' },
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'fortnightly', label: 'Fortnightly' },
+          { value: 'monthly', label: 'Monthly' },
+          { value: 'exact_date', label: 'One-off date' }
+        ].map((option) => (
+          <button type="button" key={option.value || 'none'} className={type === option.value ? 'active' : ''} onClick={() => updateScheduleType(option.value)}>
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {(type === 'weekly' || type === 'fortnightly') && (
+        <div className="budget-schedule-detail">
+          <span>Payment day</span>
+          <div className="budget-weekday-grid">
+            {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+              <button type="button" key={day} className={String(draft.schedule_day || '') === String(day) ? 'active' : ''} onClick={() => updateDraft('schedule_day', String(day))}>
+                {dayName(day).slice(0, 3)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {type === 'monthly' && (
+        <label className="budget-schedule-detail">
+          <span>Day of month</span>
+          <input type="number" min="1" max="31" value={String(draft.schedule_date || '')} onChange={(event) => updateDraft('schedule_date', event.currentTarget.value)} />
+        </label>
+      )}
+
+      {type === 'exact_date' && (
+        <label className="budget-schedule-detail">
+          <span>Payment date</span>
+          <input type="date" value={String(draft.schedule_exact_date || '')} onChange={(event) => updateDraft('schedule_exact_date', event.currentTarget.value)} />
+        </label>
+      )}
     </div>
   );
 }
@@ -5807,6 +5995,128 @@ function budgetPrimaryAmount(kind: BudgetItemKind, row: BudgetRow) {
   return row.amount || row.weekly_amount || 0;
 }
 
+function budgetFormForKind(kind: BudgetItemKind): {
+  summaryLabel: string;
+  summaryHint: string;
+  detailHint: string;
+  moneyHint: string;
+  showSchedule: boolean;
+  detailFields: BudgetEditorField[];
+  moneyFields: BudgetEditorField[];
+  noteFields: BudgetEditorField[];
+} {
+  const mode: BudgetEditorField = { key: 'mode', label: 'Budget mode', type: 'select', options: ['personal', 'business'] };
+  const frequency: BudgetEditorField = { key: 'frequency', label: 'Repeats', type: 'select', options: ['weekly', 'fortnightly', 'monthly', 'annually'] };
+  const activeNotes: BudgetEditorField = { key: 'notes', label: 'Notes', type: 'textarea', wide: true, placeholder: 'Anything Noah should remember about this item...' };
+
+  if (kind === 'income') return {
+    summaryLabel: 'Income amount',
+    summaryHint: 'Add an amount and frequency to calculate its budget impact.',
+    detailHint: 'Describe where this income comes from and whether it is personal or business.',
+    moneyHint: 'Ledger uses this amount and frequency to calculate weekly and monthly cashflow.',
+    showSchedule: true,
+    detailFields: [{ key: 'name', label: 'Income name', placeholder: 'Salary, client retainer, dividends...' }, mode],
+    moneyFields: [{ key: 'amount', label: 'Amount', type: 'number' }, frequency, { key: 'tax_rate', label: 'Tax reserve %', type: 'number', help: 'Optional. Used as context for income planning.' }],
+    noteFields: [activeNotes]
+  };
+
+  if (kind === 'expenses') return {
+    summaryLabel: 'Expense amount',
+    summaryHint: 'Add the recurring cost and frequency.',
+    detailHint: 'Name the bill or cost and assign the Ledger category that should carry it.',
+    moneyHint: 'This feeds expense totals, category pressure, and scheduled bills.',
+    showSchedule: true,
+    detailFields: [{ key: 'name', label: 'Expense name', placeholder: 'Google Workspace, groceries, insurance...' }, mode, { key: 'category', label: 'Category', type: 'select', options: ['Housing', 'Utilities', 'Subscriptions', 'Transport', 'Food', 'Insurance', 'Business', 'Equipment', 'Other'] }],
+    moneyFields: [{ key: 'amount', label: 'Amount', type: 'number' }, frequency],
+    noteFields: [activeNotes]
+  };
+
+  if (kind === 'debts') return {
+    summaryLabel: 'Repayment',
+    summaryHint: 'Add the repayment amount to include this in weekly pressure.',
+    detailHint: 'Track the debt type, balance, and repayment rhythm.',
+    moneyHint: 'Debt repayments feed the smart bills transfer and payoff pressure.',
+    showSchedule: true,
+    detailFields: [{ key: 'name', label: 'Debt name', placeholder: 'Credit card, car loan, ATO...' }, mode, { key: 'debt_type', label: 'Debt type', type: 'select', options: ['credit_card', 'loan', 'tax', 'personal', 'business', 'other'] }],
+    moneyFields: [{ key: 'balance', label: 'Current balance', type: 'number' }, { key: 'repayment', label: 'Repayment', type: 'number' }, frequency, { key: 'interest_rate', label: 'Interest rate %', type: 'number' }],
+    noteFields: [activeNotes]
+  };
+
+  if (kind === 'mortgages') return {
+    summaryLabel: 'Repayment',
+    summaryHint: 'Add repayment and property values to calculate property pressure.',
+    detailHint: 'Keep property, tenant count, and mortgage context together.',
+    moneyHint: 'Mortgage repayments stay separate from tenant-offset utilities.',
+    showSchedule: true,
+    detailFields: [{ key: 'name', label: 'Property name', placeholder: 'Home loan, investment property...' }, mode, { key: 'property_address', label: 'Property address', wide: true }, { key: 'tenant_count', label: 'Number of tenants', type: 'number' }],
+    moneyFields: [{ key: 'balance', label: 'Mortgage balance', type: 'number' }, { key: 'property_value', label: 'Property value', type: 'number' }, { key: 'repayment', label: 'Repayment', type: 'number' }, frequency, { key: 'interest_rate', label: 'Interest rate %', type: 'number' }],
+    noteFields: [activeNotes]
+  };
+
+  if (kind === 'mortgageExpenses') return {
+    summaryLabel: 'Property cost',
+    summaryHint: 'Add a property cost and decide whether tenants should offset it.',
+    detailHint: 'Link the cost to a property and classify whether it is owner-only or tenant-offset.',
+    moneyHint: 'Offset expenses are split evenly into tenant utility bills.',
+    showSchedule: true,
+    detailFields: [{ key: 'name', label: 'Cost name', placeholder: 'Water, council rates, strata...' }, mode, { key: 'mortgage_local_id', label: 'Linked property', type: 'mortgage', wide: true }, { key: 'category', label: 'Category', type: 'select', options: ['Utilities', 'Rates', 'Insurance', 'Maintenance', 'Strata', 'Repairs', 'Other'] }, { key: 'offset_to_tenants', label: 'Offset this expense to tenants', type: 'checkbox', help: 'When enabled, NoA splits this cost evenly across configured tenants.' }],
+    moneyFields: [{ key: 'amount', label: 'Amount', type: 'number' }, frequency],
+    noteFields: [activeNotes]
+  };
+
+  if (kind === 'assets') return {
+    summaryLabel: 'Asset value',
+    summaryHint: 'Add the current value to include this in net worth.',
+    detailHint: 'Assets are not scheduled; they support net worth and planning context.',
+    moneyHint: 'The current value contributes to net worth.',
+    showSchedule: false,
+    detailFields: [{ key: 'name', label: 'Asset name', placeholder: 'Vehicle, equipment, shares...' }, mode, { key: 'asset_type', label: 'Asset type', type: 'select', options: ['property', 'vehicle', 'cash', 'investment', 'equipment', 'other'] }],
+    moneyFields: [{ key: 'value', label: 'Current value', type: 'number' }],
+    noteFields: [activeNotes]
+  };
+
+  return {
+    summaryLabel: 'Savings amount',
+    summaryHint: 'Add an amount and target to track savings pressure.',
+    detailHint: 'Savings goals are lightweight Ledger commitments.',
+    moneyHint: 'Savings rows are included in weekly outgoing pressure.',
+    showSchedule: false,
+    detailFields: [{ key: 'goal_name', label: 'Goal name', placeholder: 'Emergency fund, tax buffer...' }, mode],
+    moneyFields: [{ key: 'amount', label: 'Saving amount', type: 'number' }, frequency, { key: 'goal_amount', label: 'Goal amount', type: 'number' }],
+    noteFields: []
+  };
+}
+
+function budgetDraftPrimaryValue(kind: BudgetItemKind, draft: Record<string, string | boolean>) {
+  if (kind === 'debts' || kind === 'mortgages') return numberOrZero(draft.repayment);
+  if (kind === 'assets') return numberOrZero(draft.value);
+  return numberOrZero(draft.amount);
+}
+
+function budgetWeeklyDraftValue(kind: BudgetItemKind, draft: Record<string, string | boolean>) {
+  if (kind === 'assets') return numberOrZero(draft.value);
+  const key = kind === 'debts' || kind === 'mortgages' ? 'repayment' : 'amount';
+  return toWeeklyBudgetAmount(numberOrZero(draft[key]), String(draft.frequency || 'weekly'));
+}
+
+function budgetScheduleSummary(draft: Record<string, string | boolean>) {
+  const type = String(draft.schedule_type || '');
+  if (!type) return 'No payment schedule. This item will not appear on the budget calendar.';
+  if (type === 'weekly') return `Repeats weekly on ${dayName(Number(draft.schedule_day || 0))}.`;
+  if (type === 'fortnightly') return `Repeats fortnightly on ${dayName(Number(draft.schedule_day || 0))}.`;
+  if (type === 'monthly') return `Repeats monthly on day ${draft.schedule_date || 1}.`;
+  if (type === 'exact_date') return draft.schedule_exact_date ? `One-off payment on ${formatShortDate(String(draft.schedule_exact_date))}.` : 'Pick the one-off payment date.';
+  return 'Choose how this payment should appear on the calendar.';
+}
+
+function formatBudgetOption(option: string) {
+  if (!option) return option;
+  return option
+    .split(/[_-]/g)
+    .map((part) => part ? `${part[0].toUpperCase()}${part.slice(1)}` : part)
+    .join(' ');
+}
+
 function budgetDraftFromRow(kind: BudgetItemKind, row: BudgetRow | null): Record<string, string | boolean> {
   const draft: Record<string, string | boolean> = {};
   for (const field of budgetFieldsForKind(kind)) {
@@ -5828,6 +6138,7 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     { key: 'schedule_type', label: 'Schedule type', type: 'select' as const, options: ['weekly', 'fortnightly', 'monthly', 'exact_date'] },
     { key: 'schedule_day', label: 'Schedule day', type: 'select' as const, options: ['0', '1', '2', '3', '4', '5', '6'] },
     { key: 'schedule_date', label: 'Schedule date', type: 'number' as const },
+    { key: 'schedule_exact_date', label: 'Schedule exact date', type: 'date' as const },
     { key: 'active', label: 'Active', type: 'checkbox' as const },
     { key: 'notes', label: 'Notes', type: 'textarea' as const }
   ];
@@ -5842,7 +6153,8 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     common[4],
     common[5],
     common[6],
-    common[7]
+    common[7],
+    common[8]
   ];
 
   if (kind === 'expenses') return [
@@ -5855,7 +6167,8 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     common[4],
     common[5],
     common[6],
-    common[7]
+    common[7],
+    common[8]
   ];
 
   if (kind === 'debts') return [
@@ -5870,7 +6183,8 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     common[4],
     common[5],
     common[6],
-    common[7]
+    common[7],
+    common[8]
   ];
 
   if (kind === 'mortgages') return [
@@ -5887,7 +6201,8 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     common[4],
     common[5],
     common[6],
-    common[7]
+    common[7],
+    common[8]
   ];
 
   if (kind === 'mortgageExpenses') return [
@@ -5902,7 +6217,8 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     common[4],
     common[5],
     common[6],
-    common[7]
+    common[7],
+    common[8]
   ];
 
   if (kind === 'assets') return [
@@ -5910,8 +6226,8 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     common[1],
     { key: 'asset_type', label: 'Asset type', type: 'select', options: ['property', 'vehicle', 'cash', 'investment', 'equipment', 'other'] },
     { key: 'value', label: 'Value', type: 'number' },
-    common[6],
-    common[7]
+    common[7],
+    common[8]
   ];
 
   return [
@@ -5920,7 +6236,7 @@ function budgetFieldsForKind(kind: BudgetItemKind): BudgetEditorField[] {
     { key: 'amount', label: 'Amount', type: 'number' },
     { key: 'goal_amount', label: 'Goal amount', type: 'number' },
     common[2],
-    common[6]
+    common[7]
   ];
 }
 
