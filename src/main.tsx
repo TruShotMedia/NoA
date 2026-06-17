@@ -195,6 +195,7 @@ type NotionJobsReport = {
     id: string;
     title: string;
     client: string;
+    status: string;
     jobDate: string;
     dueState: string;
     priority: string;
@@ -5415,7 +5416,7 @@ function getInvoiceCandidateJobs(report: XeroReport, notionReport: NotionJobsRep
 
   return (notionReport.upcomingJobs || [])
     .filter((job) => job.title && !job.archived)
-    .filter((job) => !['Done', 'Archived'].includes(job.dueState))
+    .filter((job) => !['Posted / Done', 'Archived'].includes(normalizeNotionStatusName(job.status)))
     .filter((job) => !invoiceMatchText.some((text) => textIncludes(text, job.title) || textIncludes(text, job.client)))
     .sort((a, b) => {
       if (a.jobDate && !b.jobDate) return -1;
@@ -5566,6 +5567,17 @@ function NotionItemModal({
                 <input value={values.client} onChange={(event) => updateValue('client', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field">
+                <span>Status</span>
+                <select value={values.status} onChange={(event) => updateValue('status', event.target.value)} disabled={isReadOnly}>
+                  <option value="">No status</option>
+                  <option>Not started</option>
+                  <option>In progress</option>
+                  <option>Ready For Revision</option>
+                  <option>Final Draft/Notes</option>
+                  <option>Posted / Done</option>
+                </select>
+              </label>
+              <label className="notion-field">
                 <span>Job date</span>
                 <input type="date" value={values.jobDate} onChange={(event) => updateValue('jobDate', event.target.value)} readOnly={isReadOnly} />
               </label>
@@ -5600,7 +5612,7 @@ function NotionItemModal({
                   <option>In progress</option>
                   <option>Ready For Revision</option>
                   <option>Final Draft/Notes</option>
-                  <option>Done</option>
+                  <option>Posted / Done</option>
                 </select>
               </label>
               <label className="notion-field">
@@ -5758,6 +5770,7 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
     return {
       title: job?.title || '',
       client: job?.client || '',
+      status: normalizeNotionStatusName(job?.status || ''),
       jobDate: job?.jobDate || '',
       priority: job?.priority || '',
       location: job?.location || '',
@@ -5770,7 +5783,7 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
   const task = item as NotionTask | null | undefined;
   return {
     title: task?.title || '',
-    status: task?.status || 'Not started',
+    status: normalizeNotionStatusName(task?.status || 'Not started'),
     dueDate: task?.dueDate || '',
     shootDate: task?.shootDate || '',
     complete: task?.complete ? 'true' : 'false',
@@ -5836,6 +5849,7 @@ function buildCalendarJobs(report: NotionJobsReport): CalendarJob[] {
       id: task.id,
       title: task.title,
       client: task.assignees?.[0]?.name || task.status || '',
+      status: normalizeNotionStatusName(task.status || ''),
       jobDate: task.shootDate,
       dueState: task.shootState,
       priority: task.priority,
@@ -6936,6 +6950,10 @@ function statusForColumn(column: string) {
     'Ready for Revision': 'Ready For Revision',
     'Final Draft/Notes': 'Final Draft/Notes'
   }[column] || column;
+}
+
+function normalizeNotionStatusName(status: string) {
+  return /^done$/i.test(String(status || '').trim()) ? 'Posted / Done' : String(status || '').trim();
 }
 
 function getLocalNoahReply(input: string, notes: CaptureNote[], briefing: SmartBriefing) {

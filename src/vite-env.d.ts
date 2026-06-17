@@ -200,6 +200,7 @@ interface Window {
         id: string;
         title: string;
         client: string;
+        status: string;
         jobDate: string;
         dueState: string;
         priority: string;
