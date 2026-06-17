@@ -3407,6 +3407,53 @@ function BudgetingView({
 
       {section === 'overview' && (
         <>
+      <section className="overview-hero budget-overview-hero">
+        <article className="overview-balance-card budget-balance-card">
+          <div>
+            <span>Net weekly position</span>
+            <strong>{formatMoney(totals.netWeekly)}</strong>
+            <p>Income after active expenses, debts, mortgages, savings, and property offsets.</p>
+          </div>
+          <div className="overview-card-meta">
+            <div>
+              <span>Income</span>
+              <strong>{formatMoney(totals.weeklyIncome)}</strong>
+            </div>
+            <div>
+              <span>Outgoing</span>
+              <strong>{formatMoney(totals.weeklyExpenses + totals.weeklyDebtRepayments + totals.weeklyMortgageRepayments + totals.weeklyMortgageExpenses + totals.weeklySavings)}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="overview-chart-card">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Budget shape" title="Monthly projection" />
+            <BarChart3 size={20} />
+          </div>
+          <BudgetProjectionChart analytics={analytics} />
+        </article>
+
+        <div className="overview-action-tiles" aria-label="Budget quick actions">
+          <button type="button" onClick={() => setSection('ledger')}>
+            <Database size={18} />
+            <span>Rows</span>
+          </button>
+          <button type="button" onClick={() => setSection('tenant-billing')}>
+            <UsersRound size={18} />
+            <span>Tenants</span>
+          </button>
+          <button type="button" onClick={() => setSection('mortgage-expenses')}>
+            <Building2 size={18} />
+            <span>Offsets</span>
+          </button>
+          <button type="button" onClick={() => void refreshBudget()} disabled={isLoading}>
+            <RefreshCw size={18} />
+            <span>{isLoading ? 'Syncing' : 'Sync'}</span>
+          </button>
+        </div>
+      </section>
+
       <section className="budget-overview">
         <BudgetMetric icon={WalletCards} label="Weekly income" value={formatMoney(totals.weeklyIncome)} detail={formatMoney(totals.monthlyIncome) + ' monthly equivalent'} />
         <BudgetMetric icon={ReceiptText} label="Weekly outgoings" value={formatMoney(totals.weeklyExpenses + totals.weeklyDebtRepayments + totals.weeklyMortgageRepayments + totals.weeklyMortgageExpenses + totals.weeklySavings)} detail="expenses, debts, mortgage, savings" />
@@ -3442,10 +3489,10 @@ function BudgetingView({
 
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Forecast" title="Monthly projection" />
-            <BarChart3 size={20} />
+            <PanelTitle eyebrow="Forecast" title="Cashflow pressure" />
+            <WalletCards size={20} />
           </div>
-          <BudgetProjectionChart analytics={analytics} />
+          <BudgetPressureList analytics={analytics} />
         </article>
       </section>
 
@@ -4291,6 +4338,7 @@ function XeroView({
   const topRisk = overdueInvoices[0] || awaitingInvoices[0] || null;
   const monthlyTotal = report.analytics.monthlyRevenue.reduce((sum, month) => sum + month.total, 0);
   const monthlyBillsTotal = report.analytics.monthlyBills.reduce((sum, month) => sum + month.total, 0);
+  const totalDue = report.totals.amountDue + report.totals.billsDue;
   const topClient = report.analytics.topClients[0];
   const topSupplier = report.analytics.topSuppliers[0];
   const [selectedInvoice, setSelectedInvoice] = useState<XeroInvoice | null>(null);
@@ -4378,6 +4426,53 @@ function XeroView({
 
       {section === 'overview' && (
         <>
+      <section className="overview-hero xero-overview-hero">
+        <article className="overview-balance-card xero-balance-card">
+          <div>
+            <span>Total due snapshot</span>
+            <strong>{formatMoney(totalDue, currency)}</strong>
+            <p>Client invoices and supplier bills stay separated so receivables never get confused with expenses.</p>
+          </div>
+          <div className="overview-card-meta">
+            <div>
+              <span>Invoices</span>
+              <strong>{formatMoney(report.totals.amountDue, currency)}</strong>
+            </div>
+            <div>
+              <span>Bills</span>
+              <strong>{formatMoney(report.totals.billsDue, currency)}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="overview-chart-card">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Performance" title="Revenue trend" />
+            <BarChart3 size={20} />
+          </div>
+          <XeroRevenueChart data={report.analytics.monthlyRevenue} currency={currency} />
+        </article>
+
+        <div className="overview-action-tiles" aria-label="Xero quick actions">
+          <button type="button" onClick={() => setSection('invoices')}>
+            <CreditCard size={18} />
+            <span>Invoices</span>
+          </button>
+          <button type="button" onClick={() => setSection('bills')}>
+            <ReceiptText size={18} />
+            <span>Bills</span>
+          </button>
+          <button type="button" onClick={() => setSection('contacts')}>
+            <UsersRound size={18} />
+            <span>Contacts</span>
+          </button>
+          <button type="button" onClick={() => void refreshXero()} disabled={isLoading}>
+            <RefreshCw size={18} />
+            <span>{isLoading ? 'Syncing' : 'Sync'}</span>
+          </button>
+        </div>
+      </section>
+
       <section className="xero-overview">
         <article className="xero-org-card">
           <div className="xero-card-icon"><Building2 size={22} /></div>
@@ -4393,10 +4488,10 @@ function XeroView({
       <section className="xero-analytics-grid">
         <article className="glass-card xero-panel xero-chart-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Revenue trend" title="Monthly invoiced" />
-            <BarChart3 size={20} />
+            <PanelTitle eyebrow="Revenue quality" title="Top clients" />
+            <UsersRound size={20} />
           </div>
-          <XeroRevenueChart data={report.analytics.monthlyRevenue} currency={currency} />
+          <XeroClientChart data={report.analytics.topClients} currency={currency} emptyLabel="No customer invoice revenue data returned yet." />
         </article>
 
         <article className="glass-card xero-panel xero-chart-panel">
@@ -4409,10 +4504,10 @@ function XeroView({
 
         <article className="glass-card xero-panel xero-chart-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Client value" title="Top clients" />
-            <UsersRound size={20} />
+            <PanelTitle eyebrow="Receivables" title="Monthly invoiced" />
+            <BarChart3 size={20} />
           </div>
-          <XeroClientChart data={report.analytics.topClients} currency={currency} emptyLabel="No customer invoice revenue data returned yet." />
+          <XeroRevenueChart data={report.analytics.monthlyRevenue} currency={currency} />
         </article>
 
         <article className="glass-card xero-panel xero-chart-panel">
@@ -6407,12 +6502,16 @@ function Today({
     { label: 'This week', value: String(calendarJobs.filter((job) => isDateWithinDays(job.jobDate, todayKey, 7)).length), detail: 'calendar items', tone: 'violet' },
     { label: 'Finance', value: formatCompactMoney(moneyDue, currency), detail: 'invoices + bills due', tone: moneyDue > 0 ? 'amber' : 'green' }
   ];
+  const sevenDayPulse = buildSevenDayPulse(calendarJobs, allTasks, todayKey);
 
   return (
     <section className="page-fade today-page">
       <article className="today-briefing-card">
         <div className="today-main">
-          <p className="eyebrow">{greeting} - {formatCalendarDay(todayKey)}</p>
+          <div className="today-profile-row">
+            <p className="eyebrow">{greeting} - {formatCalendarDay(todayKey)}</p>
+            <span>{urgentTasks.length > 0 ? `${urgentTasks.length} urgent` : 'Clear priority lane'}</span>
+          </div>
           <h2>Today starts with {todayFocus}</h2>
           <p>{todayReason}</p>
           <div className="today-actions">
@@ -6430,14 +6529,28 @@ function Today({
             </button>
           </div>
         </div>
-        <div className="today-pulse">
-          {todayMetrics.map((metric) => (
-            <article className={`today-pulse-card ${metric.tone}`} key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <small>{metric.detail}</small>
-            </article>
-          ))}
+        <div className="today-insight-stack">
+          <article className="today-performance-card">
+            <div>
+              <span>Workload pulse</span>
+              <strong>{sevenDayPulse.reduce((sum, day) => sum + day.total, 0)}</strong>
+              <small>items across the next 7 days</small>
+            </div>
+            <div className="today-hero-chart" aria-label="Seven day workload preview">
+              {sevenDayPulse.map((day) => (
+                <i key={day.date} title={`${day.label}: ${day.total}`} style={{ height: `${Math.max(10, day.total * 16)}px` }} />
+              ))}
+            </div>
+          </article>
+          <div className="today-pulse">
+            {todayMetrics.map((metric) => (
+              <article className={`today-pulse-card ${metric.tone}`} key={metric.label}>
+                <span>{metric.label}</span>
+                <strong>{metric.value}</strong>
+                <small>{metric.detail}</small>
+              </article>
+            ))}
+          </div>
         </div>
       </article>
 
@@ -6484,7 +6597,7 @@ function Today({
         <article className="glass-card wide today-chart-panel">
           <PanelTitle eyebrow="7 day shape" title="Workload pulse" />
           <div className="today-mini-chart">
-            {buildSevenDayPulse(calendarJobs, allTasks, todayKey).map((day) => (
+            {sevenDayPulse.map((day) => (
               <div key={day.date}>
                 <span>{day.label}</span>
                 <div>

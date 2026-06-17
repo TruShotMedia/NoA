@@ -1691,6 +1691,23 @@ h3 {
   gap: 14px;
 }
 
+.today-profile-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.today-profile-row span {
+  background: rgba(223, 243, 255, 0.12);
+  border-radius: 999px;
+  color: #dff3ff;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 8px 11px;
+}
+
 .today-main h2 {
   font-size: 52px;
   line-height: 1;
@@ -1729,6 +1746,62 @@ h3 {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.today-insight-stack {
+  align-content: center;
+  display: grid;
+  gap: 10px;
+}
+
+.today-performance-card {
+  background: linear-gradient(145deg, rgba(223, 243, 255, 0.16), rgba(255, 255, 255, 0.055));
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px rgba(223, 243, 255, 0.14);
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.today-performance-card span,
+.today-performance-card small {
+  color: var(--muted);
+  display: block;
+  font-weight: 800;
+}
+
+.today-performance-card span {
+  color: #dff3ff;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.today-performance-card strong {
+  color: #fff;
+  display: block;
+  font-size: 44px;
+  line-height: 1;
+  margin: 8px 0 4px;
+}
+
+.today-hero-chart {
+  align-items: end;
+  background: rgba(3, 7, 18, 0.36);
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  height: 104px;
+  padding: 14px;
+}
+
+.today-hero-chart i {
+  align-self: end;
+  background: linear-gradient(180deg, #dff3ff, rgba(96, 165, 250, 0.42));
+  border-radius: 999px 999px 6px 6px;
+  display: block;
+  min-height: 10px;
 }
 
 .today-pulse-card {
@@ -2959,6 +3032,141 @@ h3 {
   display: flex;
   gap: 18px;
   justify-content: space-between;
+}
+
+.overview-hero {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(360px, 1.35fr) minmax(220px, 0.55fr);
+}
+
+.overview-balance-card,
+.overview-chart-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.045));
+  border-radius: 28px;
+  box-shadow: inset 0 0 0 1px var(--line), 0 24px 70px rgba(0, 0, 0, 0.22);
+  min-width: 0;
+  padding: 24px;
+}
+
+.overview-balance-card {
+  align-content: space-between;
+  display: grid;
+  gap: 28px;
+  overflow: hidden;
+}
+
+.budget-balance-card {
+  background: linear-gradient(145deg, rgba(72, 187, 120, 0.42), rgba(37, 99, 235, 0.22) 58%, rgba(15, 23, 42, 0.96));
+}
+
+.xero-balance-card {
+  background: linear-gradient(145deg, rgba(96, 165, 250, 0.42), rgba(34, 197, 94, 0.2) 58%, rgba(15, 23, 42, 0.96));
+}
+
+.overview-balance-card > div:first-child > span {
+  color: rgba(255, 255, 255, 0.72);
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.overview-balance-card > div:first-child > strong {
+  color: #fff;
+  display: block;
+  font-size: 42px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.overview-balance-card p {
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.5;
+  margin: 14px 0 0;
+}
+
+.overview-card-meta {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.overview-card-meta div {
+  background: rgba(3, 7, 18, 0.28);
+  border-radius: 18px;
+  padding: 13px;
+}
+
+.overview-card-meta span {
+  color: rgba(255, 255, 255, 0.62);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 7px;
+  text-transform: uppercase;
+}
+
+.overview-card-meta strong {
+  color: #fff;
+  display: block;
+  font-size: 18px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.overview-chart-card {
+  background: linear-gradient(145deg, rgba(12, 18, 33, 0.98), rgba(20, 25, 42, 0.94));
+  display: grid;
+}
+
+.overview-chart-card .panel-row-head {
+  margin-bottom: 12px;
+}
+
+.overview-chart-card .budget-projection-chart,
+.overview-chart-card .xero-bars {
+  align-self: end;
+}
+
+.overview-chart-card .xero-bars {
+  min-height: 210px;
+}
+
+.overview-action-tiles {
+  align-content: stretch;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.overview-action-tiles button {
+  align-content: center;
+  background: rgba(255, 255, 255, 0.075);
+  border: 0;
+  border-radius: 20px;
+  color: #fff;
+  display: grid;
+  gap: 9px;
+  justify-items: center;
+  min-height: 96px;
+  padding: 14px 10px;
+}
+
+.overview-action-tiles button:disabled {
+  opacity: 0.6;
+}
+
+.overview-action-tiles svg {
+  color: #dff3ff;
+}
+
+.overview-action-tiles span {
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .budget-overview {
@@ -4792,6 +5000,7 @@ h3 {
   }
 
   .metric-grid,
+    .overview-hero,
     .budget-overview,
     .budget-command-grid,
     .budget-decision-grid,
@@ -4880,6 +5089,18 @@ h3 {
 
   .today-briefing-card {
     min-height: 0;
+  }
+
+  .overview-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-action-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .overview-action-tiles button {
+    min-height: 82px;
   }
 
   .calendar-day-modal {
@@ -5098,6 +5319,7 @@ h3 {
   .hero-grid,
   .briefing-strip,
   .metric-grid,
+  .overview-hero,
   .home-command-strip,
   .split-grid,
   .lower-grid,
@@ -5110,6 +5332,10 @@ h3 {
   .jobs-metrics,
   .jobs-board,
   .jobs-calendar,
+  .budget-overview,
+  .budget-command-grid,
+  .budget-decision-grid,
+  .budget-analytics-grid,
   .xero-overview,
   .xero-analytics-grid,
   .xero-intelligence-grid,
@@ -5130,6 +5356,10 @@ h3 {
     border-radius: 22px;
     gap: 16px;
     padding: 18px;
+  }
+
+  .today-profile-row {
+    align-items: flex-start;
   }
 
   .today-main h2 {
@@ -5160,6 +5390,46 @@ h3 {
 
   .today-pulse-card strong {
     font-size: 23px;
+  }
+
+  .today-performance-card {
+    border-radius: 20px;
+    padding: 15px;
+  }
+
+  .today-performance-card strong {
+    font-size: 34px;
+  }
+
+  .today-hero-chart {
+    height: 86px;
+  }
+
+  .overview-balance-card,
+  .overview-chart-card {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .overview-balance-card > div:first-child > strong {
+    font-size: 34px;
+  }
+
+  .overview-card-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-action-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-action-tiles button {
+    border-radius: 18px;
+    min-height: 82px;
+  }
+
+  .overview-chart-card .xero-bars {
+    min-height: 180px;
   }
 
   .today-job-row {
