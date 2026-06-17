@@ -73,6 +73,8 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
 const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
+const NOA_UNLOCK_PIN = '8726';
+const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -796,6 +798,9 @@ const integrationSetups: IntegrationSetup[] = [
 ];
 
 function App() {
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
   const [screen, setScreen] = useState<Screen>('today');
   const [budgetSection, setBudgetSection] = useState<BudgetSection>('overview');
   const [xeroSection, setXeroSection] = useState<XeroSection>('overview');
@@ -871,6 +876,7 @@ function App() {
   const jobsRequestRef = useRef<Promise<NotionJobsReport> | null>(null);
   const xeroRequestRef = useRef<Promise<XeroReport> | null>(null);
   const budgetRequestRef = useRef<Promise<BudgetReport> | null>(null);
+  const lockTimerRef = useRef<number | null>(null);
   const voiceSupported = false;
   const recordingSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
 
@@ -880,6 +886,35 @@ function App() {
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   }, []);
+
+  const lockNoa = () => {
+    if (lockTimerRef.current) {
+      window.clearTimeout(lockTimerRef.current);
+      lockTimerRef.current = null;
+    }
+    setIsMoreMenuOpen(false);
+    setPinInput('');
+    setPinError('');
+    setIsUnlocked(false);
+    interruptNoahVoice();
+  };
+
+  const resetLockTimer = () => {
+    if (!isUnlocked) return;
+    if (lockTimerRef.current) window.clearTimeout(lockTimerRef.current);
+    lockTimerRef.current = window.setTimeout(lockNoa, NOA_LOCK_TIMEOUT_MS);
+  };
+
+  const submitPin = (candidatePin = pinInput) => {
+    if (candidatePin === NOA_UNLOCK_PIN) {
+      setPinError('');
+      setPinInput('');
+      setIsUnlocked(true);
+      return;
+    }
+    setPinError('Incorrect PIN. Try again.');
+    setPinInput('');
+  };
 
   useEffect(() => {
     window.localStorage.setItem('noa.quickCapture', JSON.stringify(notes));
@@ -990,6 +1025,29 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (!isUnlocked) {
+      if (lockTimerRef.current) {
+        window.clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = null;
+      }
+      return undefined;
+    }
+
+    const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
+    const handleActivity = () => resetLockTimer();
+    resetLockTimer();
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, handleActivity, { passive: true }));
+
+    return () => {
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
+      if (lockTimerRef.current) {
+        window.clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = null;
+      }
+    };
+  }, [isUnlocked]);
+
   const loadNotionJobs = async () => {
     const getNotionJobs = window.noa?.getNotionJobs;
     if (!getNotionJobs) return emptyJobsReport;
@@ -1050,6 +1108,7 @@ function App() {
   };
 
   useEffect(() => {
+    if (!isUnlocked) return;
     if (startupSyncStartedRef.current) return;
     startupSyncStartedRef.current = true;
     let isMounted = true;
@@ -1100,9 +1159,10 @@ function App() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isUnlocked]);
 
   useEffect(() => {
+    if (!isUnlocked) return;
     if ((screen === 'pipeline' || screen === 'tasks' || screen === 'upcoming-jobs') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
@@ -1115,7 +1175,7 @@ function App() {
     if (screen === 'budgeting' && !budgetReport.fetchedAt && !isLoadingBudget) {
       void loadBudgetSummary();
     }
-  }, [screen]);
+  }, [screen, isUnlocked]);
 
   const askNoah = async (value: string, interactionMode: InteractionMode) => {
     if (!window.noa?.askNoah) {
@@ -1725,6 +1785,20 @@ function App() {
     });
   }, []);
 
+  if (!isUnlocked) {
+    return (
+      <NoaLockScreen
+        pin={pinInput}
+        error={pinError}
+        setPin={(value) => {
+          setPinError('');
+          setPinInput(value.replace(/\D/g, '').slice(0, 4));
+        }}
+        onSubmit={submitPin}
+      />
+    );
+  }
+
   return (
     <main className="shell">
       <aside className="rail">
@@ -1907,6 +1981,91 @@ function App() {
         isMoreMenuOpen={isMoreMenuOpen}
         closeMoreMenu={() => setIsMoreMenuOpen(false)}
       />
+    </main>
+  );
+}
+
+function NoaLockScreen({
+  pin,
+  error,
+  setPin,
+  onSubmit
+}: {
+  pin: string;
+  error: string;
+  setPin: (value: string) => void;
+  onSubmit: (candidatePin?: string) => void;
+}) {
+  const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+  const addDigit = (digit: string) => {
+    const nextPin = `${pin}${digit}`.slice(0, 4);
+    setPin(nextPin);
+    if (nextPin.length === 4) {
+      window.setTimeout(() => onSubmit(nextPin), 80);
+    }
+  };
+
+  return (
+    <main
+      className="lockscreen-shell"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (/^\d$/.test(event.key)) {
+          event.preventDefault();
+          addDigit(event.key);
+        }
+        if (event.key === 'Backspace') {
+          event.preventDefault();
+          setPin(pin.slice(0, -1));
+        }
+        if (event.key === 'Enter' && pin.length === 4) {
+          event.preventDefault();
+          onSubmit();
+        }
+      }}
+    >
+      <section className="lockscreen-card" aria-label="NoA lockscreen">
+        <div className="lockscreen-orb">
+          <LockKeyhole size={34} />
+        </div>
+        <p className="eyebrow">Noetic Advisor</p>
+        <h1>NoA is locked</h1>
+        <p className="lockscreen-copy">
+          Enter your four digit PIN to access private Notion, Xero, Budgeting, and Noah data.
+        </p>
+        <form
+          className="pin-panel"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <input
+            value={pin}
+            onChange={(event) => setPin(event.currentTarget.value)}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
+            autoFocus
+            aria-label="NoA PIN"
+          />
+          <div className="pin-dots" aria-hidden="true">
+            {[0, 1, 2, 3].map((index) => <span className={pin.length > index ? 'filled' : ''} key={index} />)}
+          </div>
+          {error && <p className="pin-error">{error}</p>}
+          <div className="pin-keypad">
+            {digits.map((digit) => (
+              <button type="button" onClick={() => addDigit(digit)} key={digit}>{digit}</button>
+            ))}
+            <button type="button" onClick={() => setPin(pin.slice(0, -1))}>Clear</button>
+          </div>
+          <button type="submit" className="primary-action lockscreen-submit" disabled={pin.length !== 4}>
+            <ShieldCheck size={16} />
+            Unlock NoA
+          </button>
+        </form>
+        <small>Auto-locks after 5 minutes idle.</small>
+      </section>
     </main>
   );
 }
