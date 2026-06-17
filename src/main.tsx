@@ -763,11 +763,11 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
       phase: 'Cloud deployment',
       auth: 'pin-cookie'
     }),
-    testIntegrations: () => postJson('/api/test-integrations'),
-    getIntegrationSettings: () => fetch('/api/integration-settings').then((response) => response.json()),
-    saveIntegrationSettings: (payload) => postJson('/api/integration-settings', payload),
-    testIntegration: (payload) => postJson('/api/test-integration', payload),
-    revealIntegrationSetting: (payload) => postJson('/api/reveal-integration-setting', payload),
+    testIntegrations: () => postJson('/api/integrations/test-all'),
+    getIntegrationSettings: () => fetch('/api/integrations/settings').then((response) => response.json()),
+    saveIntegrationSettings: (payload) => postJson('/api/integrations/settings', payload),
+    testIntegration: (payload) => postJson('/api/integrations/test', payload),
+    revealIntegrationSetting: (payload) => postJson('/api/integrations/reveal', payload),
     getHubGauge: () => fetch('/api/hubgauge').then((response) => response.json()),
     getNotionJobs: () => fetch('/api/notion-jobs').then((response) => response.json()),
     updateNotionTaskStatus: (payload) => postJson('/api/notion-task-status', payload),
@@ -1028,7 +1028,7 @@ function App() {
     setPinError('');
     setIsUnlocked(false);
     interruptNoahVoice();
-    void fetch('/api/integration-settings', {
+    void fetch('/api/integrations/settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'lock' })
@@ -1045,7 +1045,7 @@ function App() {
     if (isUnlocking) return;
     setIsUnlocking(true);
     try {
-      const response = await fetch('/api/integration-settings', {
+      const response = await fetch('/api/integrations/settings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'unlock', pin: candidatePin })
