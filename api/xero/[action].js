@@ -1,3 +1,5 @@
+const { requireNoaAuth } = require('../../lib/noa');
+
 const DEFAULT_SCOPES = [
   'offline_access',
   'accounting.settings.read',
@@ -8,6 +10,7 @@ const DEFAULT_SCOPES = [
 
 module.exports = async function handler(req, res) {
   const action = getAction(req);
+  if (!requireNoaAuth(req, res)) return;
 
   if (action === 'start') return startXero(req, res);
   if (action === 'callback') return handleXeroCallback(req, res);

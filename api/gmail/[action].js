@@ -1,9 +1,10 @@
-const { getGmailAccessToken, saveStoredGmailRefreshToken, sendJson } = require('../../lib/noa');
+const { getGmailAccessToken, requireNoaAuth, saveStoredGmailRefreshToken, sendJson } = require('../../lib/noa');
 
 const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 
 module.exports = async function handler(req, res) {
   const action = getAction(req);
+  if (!requireNoaAuth(req, res)) return;
 
   if (action === 'start') return startGmail(req, res);
   if (action === 'callback') return handleGmailCallback(req, res);

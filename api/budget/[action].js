@@ -5,11 +5,13 @@ const {
   sendBudgetTenantEmail,
   runBudgetTenantEmailSchedule,
   methodNotAllowed,
+  requireNoaAuth,
   sendJson
 } = require('../../lib/noa');
 
 module.exports = async function handler(req, res) {
   const action = String(req.query?.action || '').replace(/\.json$/, '');
+  if (!requireNoaAuth(req, res, { allowCron: action === 'tenant-email-schedule' })) return;
 
   if (action === 'summary') {
     if (req.method !== 'GET') return methodNotAllowed(res);

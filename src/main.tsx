@@ -73,7 +73,6 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
 const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
-const NOA_UNLOCK_PIN = '8726';
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -801,6 +800,7 @@ function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [screen, setScreen] = useState<Screen>('today');
   const [budgetSection, setBudgetSection] = useState<BudgetSection>('overview');
   const [xeroSection, setXeroSection] = useState<XeroSection>('overview');
@@ -897,6 +897,11 @@ function App() {
     setPinError('');
     setIsUnlocked(false);
     interruptNoahVoice();
+    void fetch('/api/version', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'lock' })
+    }).catch(() => undefined);
   };
 
   const resetLockTimer = () => {
@@ -905,15 +910,29 @@ function App() {
     lockTimerRef.current = window.setTimeout(lockNoa, NOA_LOCK_TIMEOUT_MS);
   };
 
-  const submitPin = (candidatePin = pinInput) => {
-    if (candidatePin === NOA_UNLOCK_PIN) {
-      setPinError('');
+  const submitPin = async (candidatePin = pinInput) => {
+    if (isUnlocking) return;
+    setIsUnlocking(true);
+    try {
+      const response = await fetch('/api/version', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'unlock', pin: candidatePin })
+      });
+      const result = await response.json();
+      if (response.ok && result.ok) {
+        setPinError('');
+        setPinInput('');
+        setIsUnlocked(true);
+        return;
+      }
+      setPinError(result.message || 'Incorrect PIN. Try again.');
       setPinInput('');
-      setIsUnlocked(true);
-      return;
+    } catch {
+      setPinError('NoA could not verify the PIN. Check the connection and try again.');
+    } finally {
+      setIsUnlocking(false);
     }
-    setPinError('Incorrect PIN. Try again.');
-    setPinInput('');
   };
 
   useEffect(() => {
@@ -1790,6 +1809,7 @@ function App() {
       <NoaLockScreen
         pin={pinInput}
         error={pinError}
+        isUnlocking={isUnlocking}
         setPin={(value) => {
           setPinError('');
           setPinInput(value.replace(/\D/g, '').slice(0, 4));
@@ -1988,20 +2008,22 @@ function App() {
 function NoaLockScreen({
   pin,
   error,
+  isUnlocking,
   setPin,
   onSubmit
 }: {
   pin: string;
   error: string;
+  isUnlocking: boolean;
   setPin: (value: string) => void;
-  onSubmit: (candidatePin?: string) => void;
+  onSubmit: (candidatePin?: string) => Promise<void>;
 }) {
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
   const addDigit = (digit: string) => {
     const nextPin = `${pin}${digit}`.slice(0, 4);
     setPin(nextPin);
     if (nextPin.length === 4) {
-      window.setTimeout(() => onSubmit(nextPin), 80);
+      window.setTimeout(() => void onSubmit(nextPin), 80);
     }
   };
 
@@ -2020,7 +2042,7 @@ function NoaLockScreen({
         }
         if (event.key === 'Enter' && pin.length === 4) {
           event.preventDefault();
-          onSubmit();
+          void onSubmit();
         }
       }}
     >
@@ -2037,7 +2059,7 @@ function NoaLockScreen({
           className="pin-panel"
           onSubmit={(event) => {
             event.preventDefault();
-            onSubmit();
+            void onSubmit();
           }}
         >
           <input
@@ -2055,13 +2077,13 @@ function NoaLockScreen({
           {error && <p className="pin-error">{error}</p>}
           <div className="pin-keypad">
             {digits.map((digit) => (
-              <button type="button" onClick={() => addDigit(digit)} key={digit}>{digit}</button>
-            ))}
-            <button type="button" onClick={() => setPin(pin.slice(0, -1))}>Clear</button>
+            <button type="button" onClick={() => addDigit(digit)} disabled={isUnlocking} key={digit}>{digit}</button>
+          ))}
+            <button type="button" onClick={() => setPin(pin.slice(0, -1))} disabled={isUnlocking}>Clear</button>
           </div>
-          <button type="submit" className="primary-action lockscreen-submit" disabled={pin.length !== 4}>
+          <button type="submit" className="primary-action lockscreen-submit" disabled={pin.length !== 4 || isUnlocking}>
             <ShieldCheck size={16} />
-            Unlock NoA
+            {isUnlocking ? 'Checking...' : 'Unlock NoA'}
           </button>
         </form>
         <small>Auto-locks after 5 minutes idle.</small>
@@ -7057,6 +7079,9 @@ OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=marin
 OPENAI_TTS_INSTRUCTIONS=Speak like Noah: natural, warm, calm, and conversational.
+NOA_PIN=8726
+NOA_SESSION_SECRET=make_this_a_long_random_secret
+CRON_SECRET=make_this_a_long_random_cron_secret
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
 N8N_WEBHOOK_URL=your_n8n_webhook_url
