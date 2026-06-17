@@ -1335,6 +1335,384 @@ h3 {
   bottom: 24px;
 }
 
+.hubgauge-page {
+  display: grid;
+  gap: 18px;
+}
+
+.hubgauge-hero,
+.hubgauge-actions {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.hubgauge-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.hubgauge-live {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.075);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.76);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 9px;
+  padding: 10px 13px;
+}
+
+.hubgauge-live span {
+  background: var(--amber);
+  border-radius: 999px;
+  box-shadow: 0 0 16px var(--amber);
+  height: 8px;
+  width: 8px;
+}
+
+.hubgauge-live.online span {
+  background: var(--green);
+  box-shadow: 0 0 16px var(--green);
+}
+
+.hubgauge-live.offline span {
+  background: var(--danger);
+  box-shadow: 0 0 16px var(--danger);
+}
+
+.hubgauge-layout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(430px, 0.95fr) minmax(320px, 0.75fr);
+}
+
+.hubgauge-stage {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(96, 165, 250, 0.18), transparent 32%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.035));
+  border-radius: 28px;
+  box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
+  display: grid;
+  min-height: 590px;
+  padding: 36px;
+  place-items: center;
+}
+
+.hubgauge-device {
+  background: linear-gradient(145deg, #151a1d, #05070a);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    inset 0 -18px 42px rgba(255, 255, 255, 0.055),
+    0 34px 90px rgba(0, 0, 0, 0.55);
+  height: 452px;
+  padding: 20px;
+  width: 452px;
+}
+
+.hubgauge-screen {
+  --progress: 0deg;
+  background: #020405;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 0 42px rgba(0, 0, 0, 0.55);
+  height: 412px;
+  overflow: hidden;
+  position: relative;
+  width: 412px;
+}
+
+.hubgauge-screen::after {
+  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18), transparent 36%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.hubgauge-spotify,
+.hubgauge-jobs,
+.hubgauge-clock {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.hubgauge-spotify img,
+.hubgauge-art-fallback {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.hubgauge-art-fallback {
+  background:
+    radial-gradient(circle at 35% 25%, rgba(96, 165, 250, 0.7), transparent 24%),
+    radial-gradient(circle at 70% 70%, rgba(52, 211, 153, 0.45), transparent 30%),
+    linear-gradient(145deg, #07131b, #111827 50%, #05070d);
+}
+
+.hubgauge-shade {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.06) 38%, rgba(0, 0, 0, 0.82));
+  inset: 0;
+  position: absolute;
+}
+
+.hubgauge-progress-ring {
+  background: conic-gradient(#dff3ff var(--progress), rgba(255, 255, 255, 0.16) 0);
+  border-radius: 999px;
+  inset: 9px;
+  mask: radial-gradient(circle, transparent 185px, #000 187px);
+  position: absolute;
+}
+
+.hubgauge-face-content {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  justify-content: space-between;
+  padding: 48px 42px 44px;
+  position: absolute;
+  text-align: center;
+}
+
+.hubgauge-chip {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.78);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 8px 12px;
+  text-transform: uppercase;
+}
+
+.hubgauge-play-state {
+  background: rgba(0, 0, 0, 0.34);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 18px 42px rgba(0, 0, 0, 0.22);
+  display: grid;
+  height: 74px;
+  place-items: center;
+  width: 74px;
+}
+
+.hubgauge-track strong,
+.hubgauge-next-job strong {
+  color: #fff;
+  display: block;
+  font-size: 22px;
+  line-height: 1.08;
+}
+
+.hubgauge-track span,
+.hubgauge-track small,
+.hubgauge-next-job small,
+.hubgauge-job-label {
+  color: rgba(255, 255, 255, 0.7);
+  display: block;
+}
+
+.hubgauge-track span {
+  margin-top: 7px;
+}
+
+.hubgauge-track small {
+  margin-top: 9px;
+}
+
+.hubgauge-jobs {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(52, 211, 153, 0.2), transparent 30%),
+    linear-gradient(145deg, #071612, #05070d 56%, #081019);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 42px;
+  text-align: center;
+}
+
+.hubgauge-job-count {
+  color: #dff3ff;
+  display: block;
+  font-size: 92px;
+  line-height: 0.92;
+  margin-top: 18px;
+}
+
+.hubgauge-job-metrics {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 24px 0 16px;
+  width: 100%;
+}
+
+.hubgauge-job-metrics div,
+.hubgauge-next-job {
+  background: rgba(255, 255, 255, 0.085);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  padding: 12px;
+}
+
+.hubgauge-job-metrics b {
+  color: #fff;
+  display: block;
+  font-size: 22px;
+}
+
+.hubgauge-job-metrics span,
+.hubgauge-next-job span {
+  color: rgba(255, 255, 255, 0.58);
+  display: block;
+  font-size: 11px;
+}
+
+.hubgauge-next-job {
+  width: 100%;
+}
+
+.hubgauge-next-job strong {
+  font-size: 18px;
+  margin: 6px 0;
+}
+
+.hubgauge-clock {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(22, 101, 52, 0.18), transparent 42%),
+    linear-gradient(145deg, #03140d, #062116 52%, #020705);
+}
+
+.clock-ticks {
+  background: repeating-conic-gradient(from 0deg, rgba(246, 216, 140, 0.8) 0deg 1deg, transparent 1deg 30deg);
+  border-radius: 999px;
+  inset: 28px;
+  mask: radial-gradient(circle, transparent 172px, #000 174px);
+  position: absolute;
+}
+
+.clock-hand {
+  background: #f6d88c;
+  border-radius: 999px;
+  bottom: 50%;
+  left: calc(50% - 2px);
+  position: absolute;
+  transform-origin: 50% 100%;
+  width: 4px;
+}
+
+.clock-hand.hour {
+  height: 78px;
+}
+
+.clock-hand.minute {
+  height: 118px;
+}
+
+.clock-hand.second {
+  background: #dff3ff;
+  height: 136px;
+  width: 2px;
+}
+
+.clock-centre {
+  background: #f6d88c;
+  border-radius: 999px;
+  box-shadow: 0 0 20px rgba(246, 216, 140, 0.32);
+  height: 14px;
+  left: calc(50% - 7px);
+  position: absolute;
+  top: calc(50% - 7px);
+  width: 14px;
+}
+
+.hubgauge-clock-copy {
+  display: grid;
+  inset: 0;
+  place-content: center;
+  position: absolute;
+  text-align: center;
+}
+
+.hubgauge-clock-copy span {
+  color: rgba(246, 216, 140, 0.84);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hubgauge-clock-copy strong {
+  color: #fff;
+  font-size: 42px;
+  line-height: 1;
+  margin-top: 8px;
+}
+
+.hubgauge-clock-copy small {
+  color: rgba(255, 255, 255, 0.66);
+  margin-top: 9px;
+}
+
+.hubgauge-dots {
+  bottom: 26px;
+  display: flex;
+  gap: 7px;
+  justify-content: center;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.hubgauge-dots span {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  height: 7px;
+  width: 7px;
+}
+
+.hubgauge-dots span.active {
+  background: #dff3ff;
+  width: 18px;
+}
+
+.hubgauge-controls {
+  display: grid;
+  gap: 18px;
+}
+
+.hubgauge-face-buttons {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hubgauge-face-buttons button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 900;
+  min-height: 44px;
+}
+
+.hubgauge-face-buttons button.active {
+  background: #dff3ff;
+  color: #061018;
+}
+
 .integrations-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3613,6 +3991,75 @@ h3 {
   gap: 12px;
   justify-content: space-between;
   padding: 14px;
+}
+
+.ledger-settings-list .segmented-control {
+  flex-shrink: 0;
+}
+
+.segmented-control.compact button {
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.budget-category-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.budget-category-edit-row {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 44px minmax(0, 1fr) 40px;
+  padding: 10px;
+}
+
+.budget-category-edit-row input:not([type='color']) {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #fff;
+  font: inherit;
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+.budget-color-input {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  height: 34px;
+  padding: 0;
+  width: 34px;
+}
+
+.budget-settings-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.icon-action.danger {
+  align-items: center;
+  background: rgba(251, 113, 133, 0.14);
+  border: 1px solid rgba(251, 113, 133, 0.22);
+  border-radius: 12px;
+  color: #fecdd3;
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.icon-action.danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .budget-filter-controls.vertical {

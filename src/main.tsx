@@ -55,7 +55,7 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
+const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
 type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -75,6 +75,8 @@ const ledgerSections: Array<{ id: LedgerSection; label: string; icon: React.Elem
   { id: 'assets', label: 'Assets', icon: Building2 },
   { id: 'all', label: 'All Rows', icon: Database }
 ];
+const budgetDefaultCategories = ['Housing', 'Utilities', 'Subscriptions', 'Transport', 'Food', 'Insurance', 'Business', 'Equipment', 'Other'];
+const budgetDefaultCategoryColors = ['#7dd3fc', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#60a5fa', '#f472b6', '#c084fc', '#94a3b8'];
 type XeroSection = 'overview' | 'invoices' | 'bills' | 'contacts' | 'intelligence' | 'drafts';
 const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', detail: 'Cashflow, trends, and health checks', icon: PieChart },
@@ -84,7 +86,7 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
-const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
+const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -116,6 +118,48 @@ type StartupSyncState = {
   status: 'idle' | 'syncing' | 'synced' | 'partial';
   message: string;
   checkedAt: string;
+};
+
+type HubGaugePayload = {
+  status: 'online' | 'partial' | 'offline';
+  deviceName: string;
+  source: string;
+  mode: 'simulator' | 'device';
+  lastUpdated: string;
+  serverFetchedAt: number;
+  jobs: {
+    active: number;
+    today: number;
+    tomorrow: number;
+    dueSoon: number;
+    next: string;
+    nextClient: string;
+    nextWhen: string;
+  };
+  spotify: {
+    configured: boolean;
+    isPlaying: boolean;
+    status: 'playing' | 'paused' | 'idle' | 'unconfigured' | 'error';
+    trackId: string;
+    title: string;
+    artist: string;
+    album: string;
+    image: string;
+    progressMs: number;
+    durationMs: number;
+    serverFetchedAt: number;
+    device: {
+      name: string;
+      type: string;
+      volumePercent: number;
+    } | null;
+  };
+  noah: {
+    tone: string;
+    signal: string;
+    stale: boolean;
+  };
+  errors: string[];
 };
 
 type IntegrationField = {
@@ -569,6 +613,44 @@ const emptyJobsReport: NotionJobsReport = {
   upcomingJobsError: ''
 };
 
+const emptyHubGaugePayload: HubGaugePayload = {
+  status: 'partial',
+  deviceName: 'HubGauge',
+  source: 'noah-local',
+  mode: 'simulator',
+  lastUpdated: 'Not synced',
+  serverFetchedAt: Date.now(),
+  jobs: {
+    active: 0,
+    today: 0,
+    tomorrow: 0,
+    dueSoon: 0,
+    next: 'No job synced',
+    nextClient: '',
+    nextWhen: ''
+  },
+  spotify: {
+    configured: false,
+    isPlaying: false,
+    status: 'unconfigured',
+    trackId: '',
+    title: 'Connect Spotify',
+    artist: 'Noah will keep this server-side',
+    album: '',
+    image: '',
+    progressMs: 0,
+    durationMs: 180000,
+    serverFetchedAt: Date.now(),
+    device: null
+  },
+  noah: {
+    tone: 'calm',
+    signal: 'Noah companion surface',
+    stale: false
+  },
+  errors: []
+};
+
 const emptyXeroReport: XeroReport = {
   ok: false,
   message: '',
@@ -675,18 +757,25 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
 
   return {
     isBrowserLanMode: true,
-    getVersion: () => fetch('/api/version').then((response) => response.json()),
+    getVersion: async () => ({
+      version: '0.1.0',
+      platform: 'vercel',
+      phase: 'Cloud deployment',
+      auth: 'pin-cookie'
+    }),
     testIntegrations: () => postJson('/api/test-integrations'),
     getIntegrationSettings: () => fetch('/api/integration-settings').then((response) => response.json()),
     saveIntegrationSettings: (payload) => postJson('/api/integration-settings', payload),
     testIntegration: (payload) => postJson('/api/test-integration', payload),
     revealIntegrationSetting: (payload) => postJson('/api/reveal-integration-setting', payload),
+    getHubGauge: () => fetch('/api/hubgauge').then((response) => response.json()),
     getNotionJobs: () => fetch('/api/notion-jobs').then((response) => response.json()),
     updateNotionTaskStatus: (payload) => postJson('/api/notion-task-status', payload),
     manageNotionItem: (payload) => postJson('/api/notion-item', payload),
     getXeroSummary: () => fetch('/api/xero/summary').then((response) => response.json()),
     getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
+    saveBudgetSettings: (payload) => postJson('/api/budget/settings', payload),
     saveBudgetEmailSettings: (payload) => postJson('/api/budget/email-settings', payload),
     sendBudgetTenantEmail: (payload) => postJson('/api/budget/tenant-email', payload),
     runBudgetTenantEmailSchedule: (payload) => postJson('/api/budget/tenant-email-schedule', payload),
@@ -874,6 +963,8 @@ function App() {
   const [isNoahThinking, setIsNoahThinking] = useState(false);
   const [jobsReport, setJobsReport] = useState<NotionJobsReport>(emptyJobsReport);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [hubGaugePayload, setHubGaugePayload] = useState<HubGaugePayload>(emptyHubGaugePayload);
+  const [isLoadingHubGauge, setIsLoadingHubGauge] = useState(false);
   const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
   const [isLoadingXero, setIsLoadingXero] = useState(false);
   const [budgetReport, setBudgetReport] = useState<BudgetReport>(emptyBudgetReport);
@@ -912,6 +1003,7 @@ function App() {
   const voiceVolumeRef = useRef(voiceVolume);
   const voiceStateRef = useRef<VoiceState>('off');
   const startupSyncStartedRef = useRef(false);
+  const hubGaugeRequestRef = useRef<Promise<HubGaugePayload> | null>(null);
   const jobsRequestRef = useRef<Promise<NotionJobsReport> | null>(null);
   const xeroRequestRef = useRef<Promise<XeroReport> | null>(null);
   const budgetRequestRef = useRef<Promise<BudgetReport> | null>(null);
@@ -936,7 +1028,7 @@ function App() {
     setPinError('');
     setIsUnlocked(false);
     interruptNoahVoice();
-    void fetch('/api/version', {
+    void fetch('/api/integration-settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'lock' })
@@ -953,7 +1045,7 @@ function App() {
     if (isUnlocking) return;
     setIsUnlocking(true);
     try {
-      const response = await fetch('/api/version', {
+      const response = await fetch('/api/integration-settings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'unlock', pin: candidatePin })
@@ -1125,6 +1217,25 @@ function App() {
     }
   };
 
+  const loadHubGauge = async () => {
+    const getHubGauge = window.noa?.getHubGauge;
+    if (!getHubGauge) return emptyHubGaugePayload;
+    if (hubGaugeRequestRef.current) return hubGaugeRequestRef.current;
+    setIsLoadingHubGauge(true);
+    const request = (async () => {
+      const payload = await getHubGauge();
+      setHubGaugePayload({ ...emptyHubGaugePayload, ...payload });
+      return { ...emptyHubGaugePayload, ...payload };
+    })();
+    hubGaugeRequestRef.current = request;
+    try {
+      return await request;
+    } finally {
+      hubGaugeRequestRef.current = null;
+      setIsLoadingHubGauge(false);
+    }
+  };
+
   const loadXeroSummary = async () => {
     const getXeroSummary = window.noa?.getXeroSummary;
     if (!getXeroSummary) return emptyXeroReport;
@@ -1223,6 +1334,9 @@ function App() {
     if (!isUnlocked) return;
     if ((screen === 'pipeline' || screen === 'tasks' || screen === 'upcoming-jobs') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
+    }
+    if (screen === 'hubgauge' && !isLoadingHubGauge) {
+      void loadHubGauge();
     }
     if (screen === 'xero' && !xeroReport.fetchedAt && !isLoadingXero) {
       void loadXeroSummary();
@@ -1959,6 +2073,13 @@ function App() {
             isNoahThinking={isNoahThinking}
           />
         )}
+        {screen === 'hubgauge' && (
+          <HubGaugeView
+            payload={hubGaugePayload}
+            isLoading={isLoadingHubGauge}
+            refresh={loadHubGauge}
+          />
+        )}
         {screen === 'pipeline' && (
           <PipelineBoard
             report={jobsReport}
@@ -2379,6 +2500,145 @@ function MobileNav({
         </div>
       )}
     </>
+  );
+}
+
+function HubGaugeView({
+  payload,
+  isLoading,
+  refresh
+}: {
+  payload: HubGaugePayload;
+  isLoading: boolean;
+  refresh: () => Promise<HubGaugePayload>;
+}) {
+  const [face, setFace] = useState<'spotify' | 'jobs' | 'clock'>('spotify');
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const spotify = payload.spotify || emptyHubGaugePayload.spotify;
+  const elapsedMs = spotify.isPlaying
+    ? Math.min(spotify.durationMs || 0, spotify.progressMs + Math.max(0, now - spotify.serverFetchedAt))
+    : spotify.progressMs;
+  const progress = spotify.durationMs ? Math.max(0, Math.min(1, elapsedMs / spotify.durationMs)) : 0;
+  const progressDegrees = Math.round(progress * 360);
+  const clock = new Date(now);
+
+  return (
+    <section className="page-fade hubgauge-page">
+      <article className="glass-card wide hubgauge-hero">
+        <div>
+          <PanelTitle eyebrow="Noah hardware companion" title="HubGauge" />
+          <p className="section-copy">
+            A tiny in-car Noah surface for music, live work context, and a calm clock face. The simulator uses the same
+            compact payload the ESP32 will request when it arrives.
+          </p>
+        </div>
+        <div className="hubgauge-actions">
+          <div className={`hubgauge-live ${payload.status}`}>
+            <span />
+            {payload.status === 'online' ? 'Live payload' : payload.status === 'partial' ? 'Partial payload' : 'Offline'}
+          </div>
+          <button className="secondary-action" onClick={() => void refresh()} disabled={isLoading}>
+            <RefreshCw size={16} />
+            {isLoading ? 'Syncing...' : 'Sync HubGauge'}
+          </button>
+        </div>
+      </article>
+
+      <section className="hubgauge-layout">
+        <article className="hubgauge-stage">
+          <div className="hubgauge-device" aria-label={`HubGauge ${face} face simulator`}>
+            <div className={`hubgauge-screen face-${face}`} style={{ '--progress': `${progressDegrees}deg` } as React.CSSProperties}>
+              {face === 'spotify' && (
+                <div className="hubgauge-spotify">
+                  {spotify.image ? <img src={spotify.image} alt="" /> : <div className="hubgauge-art-fallback" />}
+                  <div className="hubgauge-shade" />
+                  <div className="hubgauge-progress-ring" />
+                  <div className="hubgauge-face-content">
+                    <div className="hubgauge-chip">Noah Media</div>
+                    <div className="hubgauge-play-state"><Play size={26} /></div>
+                    <div className="hubgauge-track">
+                      <strong>{spotify.title || 'Nothing playing'}</strong>
+                      <span>{spotify.artist || 'Spotify waits server-side'}</span>
+                      <small>{formatDuration(elapsedMs)} / {formatDuration(spotify.durationMs)}</small>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {face === 'jobs' && (
+                <div className="hubgauge-jobs">
+                  <div className="hubgauge-chip">Noah Pipeline</div>
+                  <strong className="hubgauge-job-count">{payload.jobs.active}</strong>
+                  <span className="hubgauge-job-label">active jobs</span>
+                  <div className="hubgauge-job-metrics">
+                    <div><b>{payload.jobs.today}</b><span>Today</span></div>
+                    <div><b>{payload.jobs.tomorrow}</b><span>Tomorrow</span></div>
+                    <div><b>{payload.jobs.dueSoon}</b><span>Due soon</span></div>
+                  </div>
+                  <div className="hubgauge-next-job">
+                    <span>Next</span>
+                    <strong>{payload.jobs.next}</strong>
+                    <small>{[payload.jobs.nextClient, payload.jobs.nextWhen].filter(Boolean).join(' - ') || 'Waiting for Notion sync'}</small>
+                  </div>
+                </div>
+              )}
+
+              {face === 'clock' && (
+                <div className="hubgauge-clock">
+                  <div className="clock-ticks" />
+                  <div className="clock-hand hour" style={{ transform: `rotate(${clock.getHours() * 30 + clock.getMinutes() / 2}deg)` }} />
+                  <div className="clock-hand minute" style={{ transform: `rotate(${clock.getMinutes() * 6}deg)` }} />
+                  <div className="clock-hand second" style={{ transform: `rotate(${clock.getSeconds() * 6}deg)` }} />
+                  <div className="clock-centre" />
+                  <div className="hubgauge-clock-copy">
+                    <span>Noah</span>
+                    <strong>{clock.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+                    <small>{clock.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</small>
+                  </div>
+                </div>
+              )}
+              <div className="hubgauge-dots">
+                {(['spotify', 'jobs', 'clock'] as const).map((item) => (
+                  <span key={item} className={face === item ? 'active' : ''} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <aside className="hubgauge-controls">
+          <article className="glass-card">
+            <PanelTitle eyebrow="Faces" title="Simulator controls" />
+            <div className="hubgauge-face-buttons">
+              <button className={face === 'spotify' ? 'active' : ''} onClick={() => setFace('spotify')}>Spotify</button>
+              <button className={face === 'jobs' ? 'active' : ''} onClick={() => setFace('jobs')}>Jobs</button>
+              <button className={face === 'clock' ? 'active' : ''} onClick={() => setFace('clock')}>Clock</button>
+            </div>
+          </article>
+          <article className="glass-card">
+            <PanelTitle eyebrow="Device contract" title="/api/hubgauge" />
+            <div className="settings-row"><span>Mode</span><strong>{payload.mode}</strong></div>
+            <div className="settings-row"><span>Source</span><strong>{payload.source}</strong></div>
+            <div className="settings-row"><span>Last sync</span><strong>{payload.lastUpdated}</strong></div>
+            <div className="settings-row"><span>Spotify</span><strong>{spotify.configured ? spotify.status : 'Not configured'}</strong></div>
+          </article>
+          <article className="glass-card">
+            <PanelTitle eyebrow="Bring-up plan" title="When the board arrives" />
+            <div className="decision-list compact">
+              <Decision icon={CheckCircle2} title="Flash vendor demo" detail="Confirm display, touch, serial upload, and Wi-Fi before custom firmware." />
+              <Decision icon={Database} title="Call payload" detail="Point firmware at /api/hubgauge using HUBGAUGE_DEVICE_TOKEN." />
+              <Decision icon={Sparkles} title="Port faces" detail="Recreate these three faces in LVGL once the hardware loop is proven." />
+            </div>
+          </article>
+        </aside>
+      </section>
+    </section>
   );
 }
 
@@ -4050,6 +4310,7 @@ function BudgetingView({
           settings={report.settings}
           expenses={filteredTables.expenses}
           onCreateExpense={() => setEditor({ kind: 'expenses', row: null })}
+          onSettingsSaved={onMutated}
         />
       )}
 
@@ -4612,17 +4873,22 @@ function BudgetUpcomingSchedule({ rows }: { rows: BudgetScheduleOccurrence[] }) 
 function BudgetFuelPage({
   settings,
   expenses,
-  onCreateExpense
+  onCreateExpense,
+  onSettingsSaved
 }: {
   settings: Record<string, unknown> | null;
   expenses: BudgetRow[];
   onCreateExpense: () => void;
+  onSettingsSaved: () => void;
 }) {
   const rawFuel = (settings?.raw_data as Record<string, unknown> | undefined)?.fuelCalculator as Record<string, unknown> | undefined;
   const [efficiency, setEfficiency] = useState(String(rawFuel?.efficiency || '6.3'));
   const [dailyKm, setDailyKm] = useState(String(rawFuel?.dailyKm || '40'));
   const [tankSize, setTankSize] = useState(String(rawFuel?.tankSize || '60'));
   const [fuelPrice, setFuelPrice] = useState(String(rawFuel?.fuelPrice || ''));
+  const [includeInBudget, setIncludeInBudget] = useState(rawFuel?.includeInBudget !== false);
+  const [message, setMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const litresPer100 = Number(efficiency) || 0;
   const kmPerDay = Number(dailyKm) || 0;
   const price = Number(fuelPrice) || 0;
@@ -4634,6 +4900,21 @@ function BudgetFuelPage({
   const tankDays = kmPerDay > 0 && tankRange > 0 ? tankRange / kmPerDay : 0;
   const weeklyTankPercent = tank > 0 ? Math.min(100, weeklyLitres / tank * 100) : 0;
   const matchingFuelExpense = expenses.find((row) => /fuel|petrol|diesel/i.test(`${row.name || ''} ${row.category || ''}`));
+
+  const saveFuelSettings = async () => {
+    if (!window.noa?.saveBudgetSettings) {
+      setMessage('Budget settings are only available through the Vercel/desktop API.');
+      return;
+    }
+    setIsSaving(true);
+    setMessage('');
+    const response = await window.noa.saveBudgetSettings({
+      fuelCalculator: { efficiency, dailyKm, tankSize, fuelPrice, includeInBudget }
+    });
+    setIsSaving(false);
+    setMessage(response.message || (response.ok ? 'Fuel settings saved.' : 'Could not save fuel settings.'));
+    if (response.ok) onSettingsSaved();
+  };
 
   return (
     <section className="ledger-subpage">
@@ -4681,6 +4962,17 @@ function BudgetFuelPage({
             <label><span>Tank size</span><input type="number" value={tankSize} onChange={(event) => setTankSize(event.currentTarget.value)} /></label>
             <label><span>Fuel price</span><input type="number" value={fuelPrice} onChange={(event) => setFuelPrice(event.currentTarget.value)} /></label>
           </div>
+          <label className="toggle-row">
+            <input type="checkbox" checked={includeInBudget} onChange={(event) => setIncludeInBudget(event.currentTarget.checked)} />
+            Keep this calculator available for budget planning
+          </label>
+          <div className="budget-settings-actions">
+            <button className="secondary-action" onClick={() => void saveFuelSettings()} disabled={isSaving}>
+              <Save size={16} />
+              {isSaving ? 'Saving...' : 'Save assumptions'}
+            </button>
+          </div>
+          {message && <p className="form-message">{message}</p>}
         </article>
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
@@ -4723,14 +5015,77 @@ function BudgetSettingsPage({
 }) {
   const settings = report.settings || {};
   const rawData = (settings.raw_data as Record<string, unknown> | undefined) || {};
-  const categories = Array.isArray(rawData.categories) ? rawData.categories : Array.isArray(settings.categories) ? settings.categories : [];
+  const storedCategories = Array.isArray(rawData.categories) ? rawData.categories.map(String) : Array.isArray(settings.categories) ? settings.categories.map(String) : budgetDefaultCategories;
+  const storedColors = Array.isArray(rawData.catColors) ? rawData.catColors.map(String) : budgetDefaultCategoryColors;
+  const [defaultMode, setDefaultMode] = useState(String(settings.default_mode || rawData.defaultMode || 'personal'));
+  const [categories, setCategories] = useState<string[]>(storedCategories.length ? storedCategories : budgetDefaultCategories);
+  const [catColors, setCatColors] = useState<string[]>(storedColors.length ? storedColors : budgetDefaultCategoryColors);
+  const [message, setMessage] = useState('');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  useEffect(() => {
+    const nextRaw = (report.settings?.raw_data as Record<string, unknown> | undefined) || {};
+    const nextCategories = Array.isArray(nextRaw.categories) ? nextRaw.categories.map(String) : budgetDefaultCategories;
+    const nextColors = Array.isArray(nextRaw.catColors) ? nextRaw.catColors.map(String) : budgetDefaultCategoryColors;
+    setDefaultMode(String(report.settings?.default_mode || nextRaw.defaultMode || 'personal'));
+    setCategories(nextCategories.length ? nextCategories : budgetDefaultCategories);
+    setCatColors(nextColors.length ? nextColors : budgetDefaultCategoryColors);
+  }, [report.settings]);
+
+  const updateCategory = (index: number, value: string) => {
+    setCategories((current) => current.map((category, categoryIndex) => categoryIndex === index ? value : category));
+  };
+
+  const updateCategoryColor = (index: number, value: string) => {
+    setCatColors((current) => {
+      const next = [...current];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const addCategory = () => {
+    setCategories((current) => [...current, 'New category']);
+    setCatColors((current) => [...current, budgetDefaultCategoryColors[current.length % budgetDefaultCategoryColors.length]]);
+  };
+
+  const removeCategory = (index: number) => {
+    setCategories((current) => current.filter((_, categoryIndex) => categoryIndex !== index));
+    setCatColors((current) => current.filter((_, categoryIndex) => categoryIndex !== index));
+  };
+
+  const resetCategories = () => {
+    setCategories(budgetDefaultCategories);
+    setCatColors(budgetDefaultCategoryColors);
+  };
+
+  const saveSettings = async () => {
+    if (!window.noa?.saveBudgetSettings) {
+      setMessage('Budget settings are only available through the Vercel/desktop API.');
+      return;
+    }
+    setIsSavingSettings(true);
+    setMessage('');
+    const cleanedCategories = categories.map((category) => category.trim()).filter(Boolean);
+    const response = await window.noa.saveBudgetSettings({
+      defaultMode,
+      categories: cleanedCategories,
+      catColors: cleanedCategories.map((_, index) => catColors[index] || budgetDefaultCategoryColors[index % budgetDefaultCategoryColors.length])
+    });
+    setIsSavingSettings(false);
+    setMessage(response.message || (response.ok ? 'Budget settings saved.' : 'Could not save budget settings.'));
+    if (response.ok) {
+      setModeFilter(defaultMode === 'business' ? 'business' : 'personal');
+      await refreshBudget();
+    }
+  };
 
   return (
     <section className="ledger-subpage">
       <article className="glass-card wide ledger-subpage-hero">
         <div>
           <PanelTitle eyebrow="Ledger settings" title="Budget settings" />
-          <p>Review the Ledger configuration NoA is reading from Optra Studio. Editing categories and defaults can come next as a backend settings mutation.</p>
+          <p>Configure the Ledger defaults NoA reads from Optra Studio, including default mode, category labels, and category colours.</p>
         </div>
         <button className="secondary-action" onClick={() => void refreshBudget()} disabled={isLoading}>
           <RefreshCw size={16} />
@@ -4759,15 +5114,66 @@ function BudgetSettingsPage({
         </article>
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Ledger setup" title="Stored settings" />
+            <PanelTitle eyebrow="Ledger setup" title="Default behaviour" />
             <Database size={20} />
           </div>
           <div className="ledger-settings-list">
             <div><span>Owner</span><strong>{report.owner.email}</strong></div>
-            <div><span>Default mode</span><strong>{String(settings.default_mode || rawData.defaultMode || 'personal')}</strong></div>
-            <div><span>Categories</span><strong>{categories.length || 'Not returned'}</strong></div>
+            <div>
+              <span>Default mode</span>
+              <div className="segmented-control compact">
+                {(['personal', 'business'] as const).map((mode) => (
+                  <button key={mode} className={defaultMode === mode ? 'active' : ''} onClick={() => setDefaultMode(mode)}>
+                    {mode[0].toUpperCase() + mode.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div><span>Categories</span><strong>{categories.filter(Boolean).length}</strong></div>
             <div><span>Last synced</span><strong>{report.fetchedAt ? new Date(report.fetchedAt).toLocaleString() : 'Not synced'}</strong></div>
           </div>
+        </article>
+        <article className="glass-card budget-panel wide">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Category system" title="Budget categories" />
+            <Database size={20} />
+          </div>
+          <div className="budget-category-editor">
+            {categories.map((category, index) => (
+              <div className="budget-category-edit-row" key={`${category}-${index}`}>
+                <input
+                  aria-label={`Colour for ${category || `category ${index + 1}`}`}
+                  className="budget-color-input"
+                  type="color"
+                  value={catColors[index] || budgetDefaultCategoryColors[index % budgetDefaultCategoryColors.length]}
+                  onChange={(event) => updateCategoryColor(index, event.currentTarget.value)}
+                />
+                <input
+                  aria-label={`Category ${index + 1}`}
+                  value={category}
+                  onChange={(event) => updateCategory(index, event.currentTarget.value)}
+                />
+                <button className="icon-action danger" aria-label={`Remove ${category || `category ${index + 1}`}`} onClick={() => removeCategory(index)} disabled={categories.length <= 1}>
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="budget-settings-actions">
+            <button className="secondary-action" onClick={addCategory}>
+              <Plus size={16} />
+              Add category
+            </button>
+            <button className="secondary-action" onClick={resetCategories}>
+              <RefreshCw size={16} />
+              Reset defaults
+            </button>
+            <button className="primary-action" onClick={() => void saveSettings()} disabled={isSavingSettings}>
+              <Save size={16} />
+              {isSavingSettings ? 'Saving...' : 'Save settings'}
+            </button>
+          </div>
+          {message && <p className="form-message">{message}</p>}
         </article>
       </section>
     </section>
@@ -8477,6 +8883,7 @@ function screenTitle(screen: Screen) {
   return {
     today: 'Command Centre',
     noah: 'Noah',
+    hubgauge: 'HubGauge',
     pipeline: 'Pipeline',
     tasks: 'Tasks',
     'upcoming-jobs': 'Upcoming Jobs',
@@ -8489,6 +8896,13 @@ function screenTitle(screen: Screen) {
     integrations: 'Integrations',
     settings: 'Settings'
   }[screen];
+}
+
+function formatDuration(value: number) {
+  const totalSeconds = Math.max(0, Math.floor((Number.isFinite(value) ? value : 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function formatMoney(value: number, currency = 'AUD') {

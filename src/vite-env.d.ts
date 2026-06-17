@@ -115,6 +115,47 @@ interface Window {
       value: string;
       message: string;
     }>;
+    getHubGauge?: () => Promise<{
+      status: 'online' | 'partial' | 'offline';
+      deviceName: string;
+      source: string;
+      mode: 'simulator' | 'device';
+      lastUpdated: string;
+      serverFetchedAt: number;
+      jobs: {
+        active: number;
+        today: number;
+        tomorrow: number;
+        dueSoon: number;
+        next: string;
+        nextClient: string;
+        nextWhen: string;
+      };
+      spotify: {
+        configured: boolean;
+        isPlaying: boolean;
+        status: 'playing' | 'paused' | 'idle' | 'unconfigured' | 'error';
+        trackId: string;
+        title: string;
+        artist: string;
+        album: string;
+        image: string;
+        progressMs: number;
+        durationMs: number;
+        serverFetchedAt: number;
+        device: {
+          name: string;
+          type: string;
+          volumePercent: number;
+        } | null;
+      };
+      noah: {
+        tone: string;
+        signal: string;
+        stale: boolean;
+      };
+      errors: string[];
+    }>;
     getNotionJobs: () => Promise<{
       tasks: Array<{
         id: string;
@@ -484,6 +525,16 @@ interface Window {
       ok: boolean;
       message: string;
       item?: unknown;
+    }>;
+    saveBudgetSettings?: (payload: {
+      defaultMode?: string;
+      categories?: string[];
+      catColors?: string[];
+      fuelCalculator?: Record<string, unknown>;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      settings?: unknown;
     }>;
     saveBudgetEmailSettings?: (payload: {
       settings: Record<string, unknown>;

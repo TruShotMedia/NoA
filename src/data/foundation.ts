@@ -34,6 +34,7 @@ import type {
 export const navItems: NavItem[] = [
   { id: 'today', label: 'Today', icon: Gauge },
   { id: 'noah', label: 'Noah', icon: MessagesSquare },
+  { id: 'hubgauge', label: 'HubGauge', icon: Activity },
   { id: 'pipeline', label: 'Pipeline', icon: ClipboardList },
   { id: 'tasks', label: 'Tasks', icon: Inbox },
   { id: 'upcoming-jobs', label: 'Upcoming Jobs', icon: CalendarDays },

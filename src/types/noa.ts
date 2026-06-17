@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-export type Screen = 'today' | 'noah' | 'pipeline' | 'tasks' | 'upcoming-jobs' | 'xero' | 'budgeting' | 'plan' | 'memory' | 'automations' | 'network' | 'integrations' | 'settings';
+export type Screen = 'today' | 'noah' | 'hubgauge' | 'pipeline' | 'tasks' | 'upcoming-jobs' | 'xero' | 'budgeting' | 'plan' | 'memory' | 'automations' | 'network' | 'integrations' | 'settings';
 
 export type NavItem = {
   id: Screen;
