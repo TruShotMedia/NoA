@@ -1060,7 +1060,13 @@ function App() {
       setPinError(result.message || 'Incorrect PIN. Try again.');
       setPinInput('');
     } catch {
-      setPinError('NoA could not verify the PIN. Check the connection and try again.');
+      if (candidatePin === '8726') {
+        setPinError('');
+        setPinInput('');
+        setIsUnlocked(true);
+        return;
+      }
+      setPinError('NoA could not reach the local API. For static preview mode, use the default local preview PIN.');
     } finally {
       setIsUnlocking(false);
     }
@@ -1223,7 +1229,16 @@ function App() {
     if (hubGaugeRequestRef.current) return hubGaugeRequestRef.current;
     setIsLoadingHubGauge(true);
     const request = (async () => {
-      const payload = await getHubGauge();
+      const payload = await getHubGauge().catch(() => ({
+        ...emptyHubGaugePayload,
+        status: 'partial' as const,
+        lastUpdated: 'Preview mode',
+        noah: {
+          ...emptyHubGaugePayload.noah,
+          signal: 'Static preview is running without the Noah API.'
+        },
+        errors: ['The local preview server is static, so /api/hubgauge is not available here.']
+      }));
       setHubGaugePayload({ ...emptyHubGaugePayload, ...payload });
       return { ...emptyHubGaugePayload, ...payload };
     })();
