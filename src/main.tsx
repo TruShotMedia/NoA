@@ -56,21 +56,24 @@ import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
 const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
-type BudgetSection = 'overview' | 'income' | 'expenses' | 'calendar' | 'debts' | 'savings' | 'assets' | 'mortgage-expenses' | 'fuel' | 'tenant-billing' | 'ledger' | 'settings' | 'automation';
+type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'fuel' | 'settings' | 'automation';
+type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', detail: 'Cashflow, analytics, and attention cards', icon: PieChart },
-  { id: 'income', label: 'Income', detail: 'Personal and business income rows', icon: WalletCards },
-  { id: 'expenses', label: 'Expenses', detail: 'Bills, categories, and outgoing costs', icon: ReceiptText },
+  { id: 'ledger', label: 'Ledger', detail: 'Income, expenses, debts, savings, and assets', icon: Database },
   { id: 'calendar', label: 'Calendar', detail: 'Scheduled payments and transfer planning', icon: CalendarDays },
-  { id: 'debts', label: 'Debts', detail: 'Balances, repayments, and payoff pressure', icon: CreditCard },
-  { id: 'savings', label: 'Savings', detail: 'Savings goals and weekly commitments', icon: ShieldCheck },
-  { id: 'assets', label: 'Assets', detail: 'Net worth and owned asset values', icon: Building2 },
-  { id: 'mortgage-expenses', label: 'Mortgage Expenses', detail: 'Owner costs and tenant offsets', icon: Building2 },
+  { id: 'property', label: 'Property', detail: 'Mortgage costs, tenant offsets, and tenant billing', icon: Building2 },
   { id: 'fuel', label: 'Fuel', detail: 'Fuel budget calculator and expense setup', icon: Activity },
-  { id: 'tenant-billing', label: 'Tenant Billing', detail: 'Tenants, rent, utilities, previews', icon: UsersRound },
-  { id: 'ledger', label: 'All Rows', detail: 'Raw normalized Ledger tables', icon: Database },
   { id: 'settings', label: 'Settings', detail: 'Categories, defaults, cloud status, and checklist', icon: ServerCog },
   { id: 'automation', label: 'Automation', detail: 'Email activity and schedule checks', icon: Zap }
+];
+const ledgerSections: Array<{ id: LedgerSection; label: string; icon: React.ElementType }> = [
+  { id: 'income', label: 'Income', icon: WalletCards },
+  { id: 'expenses', label: 'Expenses', icon: ReceiptText },
+  { id: 'debts', label: 'Debts', icon: CreditCard },
+  { id: 'savings', label: 'Savings', icon: ShieldCheck },
+  { id: 'assets', label: 'Assets', icon: Building2 },
+  { id: 'all', label: 'All Rows', icon: Database }
 ];
 type XeroSection = 'overview' | 'invoices' | 'bills' | 'contacts' | 'intelligence' | 'drafts';
 const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -3254,6 +3257,7 @@ function BudgetingView({
   const [updatingExpenseId, setUpdatingExpenseId] = useState('');
   const [modeFilter, setModeFilter] = useState<BudgetModeFilter>('all');
   const [showInactiveRows, setShowInactiveRows] = useState(false);
+  const [ledgerSection, setLedgerSection] = useState<LedgerSection>('expenses');
   const totals = report.totals;
   const netTone = totals.netWeekly >= 0 ? 'green' : 'amber';
   const dataCount = Object.values(report.tables).reduce((count, rows) => count + rows.length, 0);
@@ -3456,17 +3460,17 @@ function BudgetingView({
         </article>
 
         <div className="overview-action-tiles" aria-label="Budget quick actions">
-          <button type="button" onClick={() => setSection('expenses')}>
+          <button type="button" onClick={() => setSection('ledger')}>
             <ReceiptText size={18} />
-            <span>Expenses</span>
+            <span>Ledger</span>
           </button>
           <button type="button" onClick={() => setSection('calendar')}>
             <CalendarDays size={18} />
             <span>Calendar</span>
           </button>
-          <button type="button" onClick={() => setSection('mortgage-expenses')}>
+          <button type="button" onClick={() => setSection('property')}>
             <Building2 size={18} />
-            <span>Offsets</span>
+            <span>Property</span>
           </button>
           <button type="button" onClick={() => setSection('fuel')}>
             <Activity size={18} />
@@ -3537,30 +3541,43 @@ function BudgetingView({
       )}
 
       {section === 'ledger' && (
-      <article className="glass-card wide budget-toolbar">
+      <article className="glass-card wide budget-toolbar ledger-workspace-toolbar">
         <div>
-          <PanelTitle eyebrow="Ledger controls" title="Budget rows" />
-          <p>Filter the normalized ledger without changing the underlying data.</p>
+          <PanelTitle eyebrow="Ledger workspace" title="Budget rows" />
+          <p>Income, expenses, debts, savings, and assets now live inside one focused Ledger workspace.</p>
         </div>
-        <div className="budget-filter-controls">
-          <div className="segmented-control">
-            {(['all', 'personal', 'business'] as BudgetModeFilter[]).map((mode) => (
-              <button key={mode} className={modeFilter === mode ? 'active' : ''} onClick={() => setModeFilter(mode)}>
-                {mode === 'all' ? 'All' : mode[0].toUpperCase() + mode.slice(1)}
-              </button>
-            ))}
+        <div className="ledger-workspace-controls">
+          <div className="ledger-section-tabs" aria-label="Ledger sections">
+            {ledgerSections.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button key={item.id} className={ledgerSection === item.id ? 'active' : ''} onClick={() => setLedgerSection(item.id)}>
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
           </div>
-          <label className="toggle-row">
-            <input type="checkbox" checked={showInactiveRows} onChange={(event) => setShowInactiveRows(event.currentTarget.checked)} />
-            Show inactive
-          </label>
+          <div className="budget-filter-controls">
+            <div className="segmented-control">
+              {(['all', 'personal', 'business'] as BudgetModeFilter[]).map((mode) => (
+                <button key={mode} className={modeFilter === mode ? 'active' : ''} onClick={() => setModeFilter(mode)}>
+                  {mode === 'all' ? 'All' : mode[0].toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
+            </div>
+            <label className="toggle-row">
+              <input type="checkbox" checked={showInactiveRows} onChange={(event) => setShowInactiveRows(event.currentTarget.checked)} />
+              Show inactive
+            </label>
+          </div>
         </div>
       </article>
       )}
 
-      {(section === 'tenant-billing' || section === 'mortgage-expenses' || section === 'automation') && (
+      {(section === 'property' || section === 'automation') && (
       <section className="budget-grid">
-        {section === 'tenant-billing' && (
+        {section === 'property' && (
         <article className="glass-card budget-panel budget-tenant-workflow">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Tenant billing workflow" title="Rent, utilities, total" />
@@ -3607,7 +3624,7 @@ function BudgetingView({
         </article>
         )}
 
-        {section === 'mortgage-expenses' && (
+        {section === 'property' && (
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Mortgage automation" title="Tenant bills" />
@@ -3635,7 +3652,7 @@ function BudgetingView({
         </article>
         )}
 
-        {section === 'mortgage-expenses' && (
+        {section === 'property' && (
         <article className="glass-card budget-panel budget-mortgage-expense-centre">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Mortgage expense logic" title="Owner costs vs tenant offsets" />
@@ -3715,7 +3732,7 @@ function BudgetingView({
         </article>
         )}
 
-        {(section === 'tenant-billing' || section === 'automation') && (
+        {(section === 'property' || section === 'automation') && (
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
             <PanelTitle eyebrow={section === 'automation' ? 'Automation' : 'Email automation'} title={section === 'automation' ? 'Billing activity and schedule' : 'Tenant billing emails'} />
@@ -3919,7 +3936,7 @@ function BudgetingView({
       </section>
       )}
 
-      {section === 'ledger' && (
+      {section === 'ledger' && ledgerSection === 'all' && (
       <section className="budget-table-grid">
         <BudgetTable title="Income" kind="income" rows={filteredTables.income} onEdit={(row) => setEditor({ kind: 'income', row })} onCreate={() => setEditor({ kind: 'income', row: null })} />
         <BudgetTable title="Expenses" kind="expenses" rows={filteredTables.expenses} onEdit={(row) => setEditor({ kind: 'expenses', row })} onCreate={() => setEditor({ kind: 'expenses', row: null })} />
@@ -3930,7 +3947,7 @@ function BudgetingView({
       </section>
       )}
 
-      {section === 'income' && (
+      {section === 'ledger' && ledgerSection === 'income' && (
         <BudgetLedgerPage
           eyebrow="Ledger income"
           title="Income"
@@ -3947,7 +3964,7 @@ function BudgetingView({
         />
       )}
 
-      {section === 'expenses' && (
+      {section === 'ledger' && ledgerSection === 'expenses' && (
         <BudgetExpensePage
           rows={[...filteredTables.expenses, ...filteredTables.mortgageExpenses]}
           baseRows={filteredTables.expenses}
@@ -3962,7 +3979,7 @@ function BudgetingView({
         <BudgetSchedulePage tables={filteredTables} />
       )}
 
-      {section === 'debts' && (
+      {section === 'ledger' && ledgerSection === 'debts' && (
         <BudgetLedgerPage
           eyebrow="Ledger debt strategy"
           title="Debts"
@@ -3979,7 +3996,7 @@ function BudgetingView({
         />
       )}
 
-      {section === 'savings' && (
+      {section === 'ledger' && ledgerSection === 'savings' && (
         <BudgetLedgerPage
           eyebrow="Ledger savings"
           title="Savings goals"
@@ -3996,7 +4013,7 @@ function BudgetingView({
         />
       )}
 
-      {section === 'assets' && (
+      {section === 'ledger' && ledgerSection === 'assets' && (
         <BudgetLedgerPage
           eyebrow="Ledger net worth"
           title="Assets"
