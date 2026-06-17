@@ -1424,7 +1424,13 @@ h3 {
   height: 412px;
   overflow: hidden;
   position: relative;
+  touch-action: pan-y;
   width: 412px;
+}
+
+.hubgauge-screen:focus-visible {
+  outline: 2px solid rgba(223, 243, 255, 0.72);
+  outline-offset: 7px;
 }
 
 .hubgauge-screen::after {
@@ -1609,12 +1615,27 @@ h3 {
     linear-gradient(145deg, #03140d, #062116 52%, #020705);
 }
 
-.clock-ticks {
-  background: repeating-conic-gradient(from 0deg, rgba(246, 216, 140, 0.8) 0deg 1deg, transparent 1deg 30deg);
-  border-radius: 999px;
-  inset: 28px;
-  mask: radial-gradient(circle, transparent 172px, #000 174px);
+.clock-numerals {
+  inset: 0;
+  pointer-events: none;
   position: absolute;
+  z-index: 2;
+}
+
+.clock-numerals span {
+  color: rgba(246, 216, 140, 0.88);
+  display: block;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  font-weight: 900;
+  left: calc(50% - 24px);
+  line-height: 1;
+  min-width: 48px;
+  position: absolute;
+  text-align: center;
+  text-shadow: 0 0 14px rgba(246, 216, 140, 0.24);
+  top: calc(50% - 8px);
+  transform: rotate(var(--clock-angle)) translateY(-148px) rotate(var(--clock-counter-angle));
 }
 
 .clock-hand {
@@ -1625,6 +1646,7 @@ h3 {
   position: absolute;
   transform-origin: 50% 100%;
   width: 4px;
+  z-index: 4;
 }
 
 .clock-hand.hour {
@@ -1650,6 +1672,7 @@ h3 {
   position: absolute;
   top: calc(50% - 7px);
   width: 14px;
+  z-index: 5;
 }
 
 .hubgauge-clock-copy {
@@ -1658,6 +1681,7 @@ h3 {
   place-content: center;
   position: absolute;
   text-align: center;
+  z-index: 3;
 }
 
 .hubgauge-clock-copy span {

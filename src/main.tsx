@@ -2519,6 +2519,10 @@ function MobileNav({
   );
 }
 
+const hubGaugeFaces = ['spotify', 'jobs', 'clock'] as const;
+const clockNumerals = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'] as const;
+type HubGaugeFace = typeof hubGaugeFaces[number];
+
 function HubGaugeView({
   payload,
   isLoading,
@@ -2528,11 +2532,12 @@ function HubGaugeView({
   isLoading: boolean;
   refresh: () => Promise<HubGaugePayload>;
 }) {
-  const [face, setFace] = useState<'spotify' | 'jobs' | 'clock'>('spotify');
+  const [face, setFace] = useState<HubGaugeFace>('spotify');
   const [now, setNow] = useState(Date.now());
   const refreshRef = useRef(refresh);
   const isLoadingRef = useRef(isLoading);
   const endRefreshRef = useRef('');
+  const gestureStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -2554,6 +2559,36 @@ function HubGaugeView({
   const progress = spotify.durationMs ? Math.max(0, Math.min(1, elapsedMs / spotify.durationMs)) : 0;
   const progressDegrees = Math.round(progress * 360);
   const clock = new Date(now);
+  const goToFace = (nextFace: HubGaugeFace) => setFace(nextFace);
+  const shiftFace = (direction: 1 | -1) => setFace((currentFace) => getAdjacentHubGaugeFace(currentFace, direction));
+
+  const handleGaugePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    gestureStartRef.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleGaugePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = gestureStartRef.current;
+    gestureStartRef.current = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 44 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return;
+
+    shiftFace(deltaX < 0 ? 1 : -1);
+  };
+
+  const handleGaugeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      shiftFace(1);
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      shiftFace(-1);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -2625,7 +2660,18 @@ function HubGaugeView({
       <section className="hubgauge-layout">
         <article className="hubgauge-stage">
           <div className="hubgauge-device" aria-label={`HubGauge ${face} face simulator`}>
-            <div className={`hubgauge-screen face-${face}`} style={{ '--progress': `${progressDegrees}deg` } as React.CSSProperties}>
+            <div
+              className={`hubgauge-screen face-${face}`}
+              onKeyDown={handleGaugeKeyDown}
+              onPointerCancel={() => {
+                gestureStartRef.current = null;
+              }}
+              onPointerDown={handleGaugePointerDown}
+              onPointerUp={handleGaugePointerUp}
+              role="group"
+              style={{ '--progress': `${progressDegrees}deg` } as React.CSSProperties}
+              tabIndex={0}
+            >
               {face === 'spotify' && (
                 <div className="hubgauge-spotify">
                   {spotify.image ? <img src={spotify.image} alt="" /> : <div className="hubgauge-art-fallback" />}
@@ -2663,7 +2709,19 @@ function HubGaugeView({
 
               {face === 'clock' && (
                 <div className="hubgauge-clock">
-                  <div className="clock-ticks" />
+                  <div className="clock-numerals" aria-hidden="true">
+                    {clockNumerals.map((numeral, index) => (
+                      <span
+                        key={numeral}
+                        style={{
+                          '--clock-angle': `${index * 30}deg`,
+                          '--clock-counter-angle': `${index * -30}deg`
+                        } as React.CSSProperties}
+                      >
+                        {numeral}
+                      </span>
+                    ))}
+                  </div>
                   <div className="clock-hand hour" style={{ transform: `rotate(${clock.getHours() * 30 + clock.getMinutes() / 2}deg)` }} />
                   <div className="clock-hand minute" style={{ transform: `rotate(${clock.getMinutes() * 6}deg)` }} />
                   <div className="clock-hand second" style={{ transform: `rotate(${clock.getSeconds() * 6}deg)` }} />
@@ -2676,7 +2734,7 @@ function HubGaugeView({
                 </div>
               )}
               <div className="hubgauge-dots">
-                {(['spotify', 'jobs', 'clock'] as const).map((item) => (
+                {hubGaugeFaces.map((item) => (
                   <span key={item} className={face === item ? 'active' : ''} />
                 ))}
               </div>
@@ -2688,9 +2746,9 @@ function HubGaugeView({
           <article className="glass-card">
             <PanelTitle eyebrow="Faces" title="Simulator controls" />
             <div className="hubgauge-face-buttons">
-              <button className={face === 'spotify' ? 'active' : ''} onClick={() => setFace('spotify')}>Spotify</button>
-              <button className={face === 'jobs' ? 'active' : ''} onClick={() => setFace('jobs')}>Jobs</button>
-              <button className={face === 'clock' ? 'active' : ''} onClick={() => setFace('clock')}>Clock</button>
+              <button className={face === 'spotify' ? 'active' : ''} onClick={() => goToFace('spotify')}>Spotify</button>
+              <button className={face === 'jobs' ? 'active' : ''} onClick={() => goToFace('jobs')}>Jobs</button>
+              <button className={face === 'clock' ? 'active' : ''} onClick={() => goToFace('clock')}>Clock</button>
             </div>
           </article>
           <article className="glass-card">
@@ -8977,7 +9035,13 @@ function formatDuration(value: number) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function getHubGaugePollDelay(face: 'spotify' | 'jobs' | 'clock', spotify: HubGaugePayload['spotify']) {
+function getAdjacentHubGaugeFace(face: HubGaugeFace, direction: 1 | -1): HubGaugeFace {
+  const currentIndex = hubGaugeFaces.indexOf(face);
+  const nextIndex = (currentIndex + direction + hubGaugeFaces.length) % hubGaugeFaces.length;
+  return hubGaugeFaces[nextIndex];
+}
+
+function getHubGaugePollDelay(face: HubGaugeFace, spotify: HubGaugePayload['spotify']) {
   if (!spotify.configured) return 15000;
   if (face === 'spotify') return spotify.isPlaying ? 4000 : 7000;
   return spotify.isPlaying ? 12000 : 20000;
