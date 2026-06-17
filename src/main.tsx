@@ -4313,16 +4313,69 @@ function BudgetTable({
           <p className="empty-state">No rows yet.</p>
         ) : (
           rows.map((row, index) => (
-            <button className="budget-row" key={row.id || row.local_id || `${title}-${index}`} onClick={() => onEdit(row)}>
-              <span>
-                <strong>{budgetRowTitle(row)}</strong>
-                <small>{budgetRowSubtitle(kind, row)}</small>
-              </span>
-              <span>{formatMoney(budgetPrimaryAmount(kind, row))}</span>
-              <Edit3 size={16} />
-            </button>
+            <BudgetLedgerCard
+              kind={kind}
+              row={row}
+              key={row.id || row.local_id || `${title}-${index}`}
+              onEdit={() => onEdit(row)}
+            />
           ))
         )}
+      </div>
+    </article>
+  );
+}
+
+function BudgetLedgerCard({
+  kind,
+  row,
+  onEdit
+}: {
+  kind: BudgetItemKind;
+  row: BudgetRow;
+  onEdit: () => void;
+}) {
+  const primary = budgetPrimaryAmount(kind, row);
+  const weekly = budgetWeeklyImpact(kind, row);
+  const monthly = weekly * 52 / 12;
+  const schedule = budgetRowScheduleLabel(row);
+  const chips = budgetRowChips(kind, row);
+  const isInactive = row.active === false;
+
+  return (
+    <article className={`ledger-item-card ${kind} ${isInactive ? 'inactive' : ''}`}>
+      <button className="ledger-card-main" onClick={onEdit}>
+        <div className="ledger-card-title">
+          <span>{kindLabel(kind)}</span>
+          <strong>{budgetRowTitle(row)}</strong>
+          <p>{budgetRowSubtitle(kind, row) || 'No extra details yet'}</p>
+        </div>
+        <div className="ledger-card-amount">
+          <strong>{formatMoney(primary)}</strong>
+          <span>{formatMoney(weekly)} / week</span>
+        </div>
+      </button>
+
+      <div className="ledger-card-meta">
+        <span className={`ledger-status-pill ${isInactive ? 'inactive' : 'active'}`}>{isInactive ? 'Inactive' : 'Active'}</span>
+        <span className={`ledger-schedule-pill ${schedule.tone}`}>
+          <Clock3 size={13} />
+          {schedule.label}
+        </span>
+        {chips.map((chip) => (
+          <span className="ledger-soft-chip" key={chip}>{chip}</span>
+        ))}
+      </div>
+
+      <div className="ledger-card-footer">
+        <span>Monthly equivalent <strong>{formatMoney(monthly)}</strong></span>
+        {kind === 'mortgageExpenses' && row.offset_to_tenants && (
+          <span>Tenant offset <strong>{formatMoney(weekly)}</strong></span>
+        )}
+        <button className="secondary-action compact" onClick={onEdit}>
+          <Edit3 size={15} />
+          Edit
+        </button>
       </div>
     </article>
   );
@@ -5993,6 +6046,38 @@ function budgetPrimaryAmount(kind: BudgetItemKind, row: BudgetRow) {
   if (kind === 'assets') return row.value || 0;
   if (kind === 'savings') return row.amount || row.goal_amount || 0;
   return row.amount || row.weekly_amount || 0;
+}
+
+function budgetWeeklyImpact(kind: BudgetItemKind, row: BudgetRow) {
+  if (kind === 'assets') return numberOrZero(row.value);
+  if (kind === 'debts' || kind === 'mortgages') return budgetWeeklyValue(row, 'repayment');
+  if (kind === 'savings') return budgetWeeklyValue(row, 'amount');
+  return budgetWeeklyValue(row, 'amount');
+}
+
+function budgetRowScheduleLabel(row: BudgetRow): { label: string; tone: 'scheduled' | 'none' | 'once' } {
+  const type = normaliseScheduleType(row.schedule_type);
+  if (!type) return { label: 'No schedule', tone: 'none' };
+  if (type === 'weekday') return { label: `${formatBudgetOption(String(row.frequency || 'weekly'))} · ${dayName(Number(row.schedule_day || 0))}`, tone: 'scheduled' };
+  if (type === 'monthdate') return { label: `Monthly · day ${row.schedule_date || 1}`, tone: 'scheduled' };
+  if (type === 'date') return { label: row.schedule_exact_date ? `Once · ${formatShortDate(row.schedule_exact_date)}` : 'One-off date', tone: 'once' };
+  return { label: formatBudgetOption(type), tone: 'scheduled' };
+}
+
+function budgetRowChips(kind: BudgetItemKind, row: BudgetRow) {
+  const chips = [
+    row.mode ? formatBudgetOption(row.mode) : '',
+    row.frequency ? formatBudgetOption(row.frequency) : ''
+  ];
+  if (kind === 'expenses' && row.category) chips.push(row.category);
+  if (kind === 'mortgageExpenses') {
+    if (row.category) chips.push(row.category);
+    chips.push(row.offset_to_tenants ? 'Offset to tenants' : 'Owner-only');
+  }
+  if (kind === 'debts' && row.debt_type) chips.push(formatBudgetOption(row.debt_type));
+  if (kind === 'assets' && row.asset_type) chips.push(formatBudgetOption(row.asset_type));
+  if (kind === 'mortgages' && row.tenant_count) chips.push(`${row.tenant_count} tenants`);
+  return chips.filter(Boolean).slice(0, 4);
 }
 
 function budgetFormForKind(kind: BudgetItemKind): {

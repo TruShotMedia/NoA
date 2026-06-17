@@ -3881,6 +3881,166 @@ h3 {
   gap: 10px;
 }
 
+.ledger-item-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
+  border-radius: 20px;
+  box-shadow: inset 4px 0 0 rgba(96, 165, 250, 0.64), inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+}
+
+.ledger-item-card.income {
+  box-shadow: inset 4px 0 0 rgba(52, 211, 153, 0.74), inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+}
+
+.ledger-item-card.expenses,
+.ledger-item-card.mortgageExpenses {
+  box-shadow: inset 4px 0 0 rgba(251, 191, 36, 0.74), inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+}
+
+.ledger-item-card.debts {
+  box-shadow: inset 4px 0 0 rgba(251, 113, 133, 0.74), inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+}
+
+.ledger-item-card.mortgages,
+.ledger-item-card.assets {
+  box-shadow: inset 4px 0 0 rgba(167, 139, 250, 0.74), inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+}
+
+.ledger-item-card.savings {
+  box-shadow: inset 4px 0 0 rgba(45, 212, 191, 0.74), inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+}
+
+.ledger-item-card.inactive {
+  opacity: 0.62;
+}
+
+.ledger-card-main {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0;
+  text-align: left;
+}
+
+.ledger-card-title span {
+  color: var(--faint);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.ledger-card-title strong {
+  color: #fff;
+  display: block;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.ledger-card-title p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 5px 0 0;
+}
+
+.ledger-card-amount {
+  text-align: right;
+}
+
+.ledger-card-amount strong {
+  color: #fff;
+  display: block;
+  font-size: 20px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.ledger-card-amount span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 5px;
+  white-space: nowrap;
+}
+
+.ledger-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ledger-status-pill,
+.ledger-schedule-pill,
+.ledger-soft-chip {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 5px;
+  min-height: 28px;
+  padding: 6px 9px;
+}
+
+.ledger-status-pill.active {
+  background: rgba(52, 211, 153, 0.14);
+  color: #bbf7d0;
+}
+
+.ledger-status-pill.inactive {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+}
+
+.ledger-schedule-pill.scheduled {
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+}
+
+.ledger-schedule-pill.once {
+  background: rgba(167, 139, 250, 0.14);
+  color: #ddd6fe;
+}
+
+.ledger-schedule-pill.none {
+  background: rgba(251, 191, 36, 0.13);
+  color: #fde68a;
+}
+
+.ledger-soft-chip {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.ledger-card-footer {
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.ledger-card-footer span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ledger-card-footer span strong {
+  color: #fff;
+}
+
 .budget-mortgage-card,
 .budget-email-card,
 .budget-row {
@@ -5808,6 +5968,23 @@ h3 {
 
   .ledger-mini-metric strong {
     font-size: 24px;
+  }
+
+  .ledger-card-main {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-card-amount {
+    text-align: left;
+  }
+
+  .ledger-card-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ledger-card-footer .secondary-action {
+    width: 100%;
   }
 
   .ledger-schedule-row {
