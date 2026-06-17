@@ -545,6 +545,18 @@ type BudgetScheduleOccurrence = {
   source: BudgetRow;
 };
 
+type BudgetCalendarDay = {
+  date: string;
+  dayNumber: number;
+  isToday: boolean;
+  isMuted: boolean;
+  income: number;
+  outgoing: number;
+  incomePercent: number;
+  outgoingPercent: number;
+  events: BudgetScheduleOccurrence[];
+};
+
 const emptyJobsReport: NotionJobsReport = {
   tasks: [],
   pipelineTasks: [],
@@ -4484,12 +4496,13 @@ function BudgetExpensePage({
 
 function BudgetSchedulePage({ tables }: { tables: BudgetTables }) {
   const scheduled = budgetScheduledItems(tables);
-  const upcoming = buildBudgetUpcomingSchedule(scheduled, 45);
+  const upcoming = buildBudgetUpcomingSchedule(scheduled, 60);
   const transfer = buildBudgetTransferSuggestion(scheduled);
+  const monthDays = buildBudgetScheduleMonth(scheduled);
 
   return (
     <section className="ledger-subpage">
-      <article className="glass-card wide ledger-subpage-hero">
+      <article className="glass-card wide ledger-subpage-hero ledger-calendar-hero">
         <div>
           <PanelTitle eyebrow="Ledger calendar" title="Scheduled payments" />
           <p>Ledger's calendar logic is now inside NoA: scheduled income, expenses, debts, mortgages, and mortgage costs all roll into one planning view.</p>
@@ -4500,14 +4513,26 @@ function BudgetSchedulePage({ tables }: { tables: BudgetTables }) {
           <p>{transfer.message}</p>
         </div>
       </article>
-      <section className="budget-analytics-grid">
+
+      <section className="ledger-calendar-layout">
+        <article className="glass-card budget-panel ledger-calendar-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="This month" title={new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })} />
+            <CalendarDays size={20} />
+          </div>
+          <BudgetScheduleCalendar days={monthDays} />
+        </article>
+
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
-            <PanelTitle eyebrow="Next 45 days" title="Upcoming schedule" />
+            <PanelTitle eyebrow="Next 60 days" title="Upcoming schedule" />
             <Clock3 size={20} />
           </div>
           <BudgetUpcomingSchedule rows={upcoming} />
         </article>
+      </section>
+
+      <section className="budget-analytics-grid">
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Coverage" title="Scheduled rows" />
@@ -4525,8 +4550,44 @@ function BudgetSchedulePage({ tables }: { tables: BudgetTables }) {
             ))}
           </div>
         </article>
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Calendar intelligence" title="Money movement" />
+            <Sparkles size={20} />
+          </div>
+          <div className="ledger-calendar-insights">
+            <div><span>Scheduled rows</span><strong>{scheduled.length}</strong><p>active Ledger rows with calendar timing</p></div>
+            <div><span>Upcoming events</span><strong>{upcoming.length}</strong><p>payments found in the next 60 days</p></div>
+            <div><span>Weekly transfer</span><strong>{formatMoney(transfer.weeklyAmount)}</strong><p>outgoing schedule pressure</p></div>
+          </div>
+        </article>
       </section>
     </section>
+  );
+}
+
+function BudgetScheduleCalendar({ days }: { days: BudgetCalendarDay[] }) {
+  return (
+    <div className="ledger-calendar-month">
+      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span className="ledger-calendar-weekday" key={day}>{day}</span>)}
+      {days.map((day) => (
+        <article className={`ledger-calendar-day ${day.isToday ? 'today' : ''} ${day.isMuted ? 'muted' : ''}`} key={day.date}>
+          <div>
+            <strong>{day.dayNumber}</strong>
+            {day.events.length > 0 && <span>{day.events.length}</span>}
+          </div>
+          {(day.income > 0 || day.outgoing > 0) && (
+            <div className="ledger-calendar-money">
+              {day.income > 0 && <i className="income" style={{ width: `${Math.max(18, Math.min(100, day.incomePercent))}%` }} />}
+              {day.outgoing > 0 && <i className="outgoing" style={{ width: `${Math.max(18, Math.min(100, day.outgoingPercent))}%` }} />}
+            </div>
+          )}
+          {day.events.slice(0, 2).map((event) => (
+            <small className={event.kind} key={`${event.id}-${event.title}`}>{event.title}</small>
+          ))}
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -4568,6 +4629,10 @@ function BudgetFuelPage({
   const weeklyLitres = litresPer100 > 0 ? (kmPerDay * 7 * litresPer100) / 100 : 0;
   const weeklyCost = weeklyLitres * price;
   const monthlyCost = weeklyCost * 52 / 12;
+  const tank = Number(tankSize) || 0;
+  const tankRange = litresPer100 > 0 && tank > 0 ? tank / litresPer100 * 100 : 0;
+  const tankDays = kmPerDay > 0 && tankRange > 0 ? tankRange / kmPerDay : 0;
+  const weeklyTankPercent = tank > 0 ? Math.min(100, weeklyLitres / tank * 100) : 0;
   const matchingFuelExpense = expenses.find((row) => /fuel|petrol|diesel/i.test(`${row.name || ''} ${row.category || ''}`));
 
   return (
@@ -4583,6 +4648,28 @@ function BudgetFuelPage({
         </button>
       </article>
       <section className="ledger-fuel-grid">
+        <article className="glass-card budget-panel ledger-fuel-visual-card">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Fuel tank" title="Weekly burn" />
+            <Activity size={20} />
+          </div>
+          <div className="ledger-fuel-gauge" aria-label="Fuel usage gauge">
+            <div className="ledger-fuel-tank">
+              <i style={{ height: `${Math.max(6, weeklyTankPercent)}%` }} />
+            </div>
+            <div>
+              <span>Uses about</span>
+              <strong>{weeklyLitres.toFixed(1)}L</strong>
+              <p>{tank > 0 ? `${Math.round(weeklyTankPercent)}% of a ${tank.toFixed(0)}L tank per week` : 'Add tank size to estimate weekly tank usage.'}</p>
+            </div>
+          </div>
+          <div className="ledger-fuel-stats">
+            <span>Tank range <strong>{tankRange ? `${Math.round(tankRange)}km` : 'Add efficiency'}</strong></span>
+            <span>Days per tank <strong>{tankDays ? tankDays.toFixed(1) : 'Add daily km'}</strong></span>
+            <span>Monthly litres <strong>{(weeklyLitres * 52 / 12).toFixed(1)}L</strong></span>
+          </div>
+        </article>
+
         <article className="glass-card budget-panel">
           <div className="panel-row-head">
             <PanelTitle eyebrow="Calculator" title="Fuel assumptions" />
@@ -5591,6 +5678,43 @@ function buildBudgetUpcomingSchedule(items: BudgetScheduleOccurrence[], days = 4
     }
   }
   return out.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 24);
+}
+
+function buildBudgetScheduleMonth(items: BudgetScheduleOccurrence[]) {
+  const now = startOfLocalDay(new Date());
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const offsetToMonday = (first.getDay() + 6) % 7;
+  const start = addLocalDays(first, -offsetToMonday);
+  const days: BudgetCalendarDay[] = [];
+
+  for (let index = 0; index < 42; index += 1) {
+    const date = addLocalDays(start, index);
+    const dateKey = toLocalDateKey(date);
+    const events = items
+      .filter((item) => budgetItemOccursOn(item.source, date))
+      .map((item) => ({ ...item, date: dateKey }));
+    const income = sumNumbers(events.filter((item) => item.kind === 'income'), (item) => item.amount);
+    const outgoing = sumNumbers(events.filter((item) => item.kind !== 'income'), (item) => item.amount);
+    days.push({
+      date: dateKey,
+      dayNumber: date.getDate(),
+      isToday: dateKey === toLocalDateKey(now),
+      isMuted: date.getMonth() !== now.getMonth(),
+      income,
+      outgoing,
+      incomePercent: 0,
+      outgoingPercent: 0,
+      events
+    });
+  }
+
+  const maxIncome = Math.max(1, ...days.map((day) => day.income));
+  const maxOutgoing = Math.max(1, ...days.map((day) => day.outgoing));
+  return days.map((day) => ({
+    ...day,
+    incomePercent: day.income / maxIncome * 100,
+    outgoingPercent: day.outgoing / maxOutgoing * 100
+  }));
 }
 
 function buildBudgetTransferSuggestion(items: BudgetScheduleOccurrence[]) {

@@ -3314,6 +3314,152 @@ h3 {
   padding: 18px;
 }
 
+.ledger-calendar-layout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+}
+
+.ledger-calendar-month {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.ledger-calendar-weekday {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 0 4px 4px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ledger-calendar-day {
+  align-content: start;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.065);
+  display: grid;
+  gap: 7px;
+  min-height: 112px;
+  padding: 10px;
+}
+
+.ledger-calendar-day.muted {
+  opacity: 0.42;
+}
+
+.ledger-calendar-day.today {
+  box-shadow: inset 0 0 0 1px rgba(223, 243, 255, 0.42), 0 0 0 1px rgba(223, 243, 255, 0.12);
+}
+
+.ledger-calendar-day > div:first-child {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.ledger-calendar-day strong {
+  color: #fff;
+}
+
+.ledger-calendar-day > div:first-child span {
+  background: rgba(223, 243, 255, 0.12);
+  border-radius: 999px;
+  color: #dff3ff;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 3px 7px;
+}
+
+.ledger-calendar-money {
+  display: grid;
+  gap: 4px;
+}
+
+.ledger-calendar-money i {
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+}
+
+.ledger-calendar-money i.income {
+  background: rgba(52, 211, 153, 0.82);
+}
+
+.ledger-calendar-money i.outgoing {
+  background: rgba(251, 191, 36, 0.82);
+}
+
+.ledger-calendar-day small {
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.82);
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  padding: 5px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledger-calendar-day small.income {
+  background: rgba(52, 211, 153, 0.12);
+  color: #bbf7d0;
+}
+
+.ledger-calendar-day small.expenses,
+.ledger-calendar-day small.mortgageExpenses {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde68a;
+}
+
+.ledger-calendar-day small.debts {
+  background: rgba(251, 113, 133, 0.12);
+  color: #fecdd3;
+}
+
+.ledger-calendar-day small.mortgages {
+  background: rgba(167, 139, 250, 0.13);
+  color: #ddd6fe;
+}
+
+.ledger-calendar-insights {
+  display: grid;
+  gap: 10px;
+}
+
+.ledger-calendar-insights div {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.ledger-calendar-insights span {
+  color: var(--faint);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ledger-calendar-insights strong {
+  color: #fff;
+  display: block;
+  font-size: 24px;
+  margin-top: 6px;
+}
+
+.ledger-calendar-insights p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 6px 0 0;
+}
+
 .ledger-schedule-list,
 .ledger-schedule-groups,
 .ledger-settings-list {
@@ -3368,7 +3514,95 @@ h3 {
 .ledger-fuel-grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 0.9fr 1fr 1fr;
+}
+
+.ledger-fuel-visual-card {
+  align-content: space-between;
+}
+
+.ledger-fuel-gauge {
+  align-items: center;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.ledger-fuel-tank {
+  align-items: end;
+  background: rgba(0, 0, 0, 0.28);
+  border: 3px solid rgba(223, 243, 255, 0.22);
+  border-radius: 22px 22px 14px 14px;
+  display: flex;
+  height: 190px;
+  overflow: hidden;
+  padding: 8px;
+  position: relative;
+  width: 82px;
+}
+
+.ledger-fuel-tank::before {
+  background: rgba(223, 243, 255, 0.22);
+  border-radius: 999px 999px 0 0;
+  content: '';
+  height: 12px;
+  left: 22px;
+  position: absolute;
+  top: -12px;
+  width: 38px;
+}
+
+.ledger-fuel-tank i {
+  background: linear-gradient(180deg, #dff3ff, #60a5fa 58%, #34d399);
+  border-radius: 16px 16px 9px 9px;
+  display: block;
+  min-height: 6px;
+  width: 100%;
+}
+
+.ledger-fuel-gauge span,
+.ledger-fuel-stats span {
+  color: var(--faint);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ledger-fuel-gauge strong {
+  color: #fff;
+  display: block;
+  font-size: 36px;
+  line-height: 1;
+  margin-top: 8px;
+}
+
+.ledger-fuel-gauge p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.ledger-fuel-stats {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.ledger-fuel-stats span {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.ledger-fuel-stats strong {
+  color: #fff;
+  display: block;
+  font-size: 18px;
+  letter-spacing: 0;
+  margin-top: 4px;
+  text-transform: none;
 }
 
 .ledger-settings-list div {
@@ -5500,6 +5734,7 @@ h3 {
     .budget-analytics-grid,
     .budget-table-grid,
     .ledger-metric-grid,
+    .ledger-calendar-layout,
     .ledger-fuel-grid,
     .memory-grid,
     .hero-grid,
@@ -5576,6 +5811,10 @@ h3 {
 
   .ledger-hero-actions {
     justify-content: flex-start;
+  }
+
+  .ledger-calendar-day {
+    min-height: 96px;
   }
 
   .task-row {
@@ -5849,6 +6088,7 @@ h3 {
   .budget-table-grid,
   .ledger-metric-grid,
   .ledger-fuel-grid,
+  .ledger-calendar-layout,
   .xero-overview,
   .xero-analytics-grid,
   .xero-intelligence-grid,
@@ -5985,6 +6225,48 @@ h3 {
 
   .ledger-card-footer .secondary-action {
     width: 100%;
+  }
+
+  .ledger-calendar-month {
+    gap: 5px;
+  }
+
+  .ledger-calendar-weekday {
+    font-size: 9px;
+    padding-bottom: 2px;
+  }
+
+  .ledger-calendar-day {
+    border-radius: 12px;
+    gap: 5px;
+    min-height: 76px;
+    padding: 7px;
+  }
+
+  .ledger-calendar-day small {
+    display: none;
+  }
+
+  .ledger-calendar-day > div:first-child span {
+    font-size: 9px;
+    padding: 2px 5px;
+  }
+
+  .ledger-calendar-money i {
+    height: 4px;
+  }
+
+  .ledger-fuel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-fuel-gauge {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .ledger-fuel-tank {
+    height: 152px;
+    width: 72px;
   }
 
   .ledger-schedule-row {
