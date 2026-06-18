@@ -1,5 +1,13 @@
-const CACHE_NAME = 'noa-shell-v1';
-const SHELL_ASSETS = ['/', '/manifest.webmanifest'];
+const CACHE_NAME = 'noa-shell-v2';
+const SHELL_ASSETS = [
+  '/',
+  '/manifest.webmanifest',
+  '/icons/noa-icon-180.png',
+  '/icons/noa-icon-192.png',
+  '/icons/noa-icon-512.png',
+  '/icons/noa-icon-maskable-192.png',
+  '/icons/noa-icon-maskable-512.png'
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)));
