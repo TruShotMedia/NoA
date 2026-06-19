@@ -65,7 +65,7 @@ type NoaWindowNotionTask = {
   client?: string;
   assignedTo?: string;
   capturedBy?: string;
-  payAud?: number;
+  payAud?: number | null;
   notes?: string;
 };
 
@@ -81,6 +81,7 @@ type NoaWindowNotionJob = {
   priority: string;
   deliverableTypes: string[];
   location: string;
+  payAud?: number | null;
   notes: string;
   attachments: Array<{ name: string; url: string }>;
   url: string;
@@ -90,6 +91,12 @@ type NoaWindowNotionJob = {
   completedTasks?: number;
   complete?: boolean;
   column?: string;
+  clientStatus?: string;
+  clientPriority?: string;
+  clientRetainer?: string;
+  clientIndustry?: string[];
+  clientContentTypes?: string[];
+  clientCoverImages?: Array<{ name: string; url: string }>;
   shootDate?: string;
   shootState?: string;
   archived: boolean;
@@ -99,9 +106,14 @@ type NoaWindowNotionReport = {
   clients: Array<{
     id: string;
     title: string;
-    email?: string;
-    phone?: string;
-    notes?: string;
+    status?: string;
+    priority?: string;
+    retainer?: string;
+    industry?: string[];
+    contentTypes?: string[];
+    coverImages?: Array<{ name: string; url: string }>;
+    jobIds?: string[];
+    jobCount?: number;
     url: string;
     archived: boolean;
   }>;

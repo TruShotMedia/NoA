@@ -237,7 +237,7 @@ type NotionTask = {
   assignedTo?: string;
   assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
   capturedBy?: string;
-  payAud?: number;
+  payAud?: number | null;
   description: string;
   notes?: string;
   attachments: Array<{ name: string; url: string }>;
@@ -265,9 +265,14 @@ type NotionJobsReport = {
   clients: Array<{
     id: string;
     title: string;
-    email?: string;
-    phone?: string;
-    notes?: string;
+    status?: string;
+    priority?: string;
+    retainer?: string;
+    industry?: string[];
+    contentTypes?: string[];
+    coverImages?: Array<{ name: string; url: string }>;
+    jobIds?: string[];
+    jobCount?: number;
     url: string;
     archived: boolean;
   }>;
@@ -287,6 +292,7 @@ type NotionJobsReport = {
     priority: string;
     deliverableTypes: string[];
     location: string;
+    payAud?: number | null;
     description?: string;
     notes: string;
     attachments: Array<{ name: string; url: string }>;
@@ -295,6 +301,12 @@ type NotionJobsReport = {
     completedTasks?: number;
     complete?: boolean;
     column?: string;
+    clientStatus?: string;
+    clientPriority?: string;
+    clientRetainer?: string;
+    clientIndustry?: string[];
+    clientContentTypes?: string[];
+    clientCoverImages?: Array<{ name: string; url: string }>;
     shootDate?: string;
     shootState?: string;
     url: string;
@@ -3182,8 +3194,15 @@ function JobCard({
         </span>
         {'effortSize' in task && task.effortSize && <span>{task.effortSize}</span>}
         {'client' in task && task.client && <span>{task.client}</span>}
+        {'payAud' in task && typeof task.payAud === 'number' && <span>{formatMoney(task.payAud, 'AUD')}</span>}
+        {'clientRetainer' in task && task.clientRetainer === 'Yes' && <span>Retainer</span>}
         {'openTasks' in task && typeof task.openTasks === 'number' && <span>{task.openTasks} open tasks</span>}
       </div>
+      {'clientContentTypes' in task && task.clientContentTypes && task.clientContentTypes.length > 0 && (
+        <div className="job-chip-row">
+          {task.clientContentTypes.slice(0, 3).map((type) => <span key={type}>{type}</span>)}
+        </div>
+      )}
       {onMove && (
         <div
           className="move-select"
@@ -7836,6 +7855,10 @@ function NotionItemModal({
                 </select>
               </label>
               <label className="notion-field">
+                <span>Pay ($AUD)</span>
+                <input type="number" value={values.payAud} onChange={(event) => updateValue('payAud', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field">
                 <span>Location</span>
                 <input value={values.location} onChange={(event) => updateValue('location', event.target.value)} readOnly={isReadOnly} />
               </label>
@@ -7907,10 +7930,6 @@ function NotionItemModal({
                   <option>Phone</option>
                   <option>Camera</option>
                 </select>
-              </label>
-              <label className="notion-field">
-                <span>Pay ($AUD)</span>
-                <input type="number" value={values.payAud} onChange={(event) => updateValue('payAud', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field wide">
                 <span>Description</span>
@@ -8037,6 +8056,7 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
       jobDate: job?.jobDate || '',
       dueDate: job?.dueDate || '',
       priority: job?.priority || '',
+      payAud: job?.payAud ? String(job.payAud) : '',
       location: job?.location || '',
       description: job?.description || '',
       notes: job?.notes || '',
@@ -8055,7 +8075,6 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
     priority: task?.priority || '',
     effortLevel: task?.effortLevel || '',
     capturedBy: task?.capturedBy || '',
-    payAud: task?.payAud ? String(task.payAud) : '',
     description: task?.description || '',
     notes: task?.notes || '',
     attachments: formatAttachmentValue(task?.attachments || [])
