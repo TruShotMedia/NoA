@@ -222,6 +222,9 @@ type InteractionMode = 'typed' | 'voice';
 type NotionTask = {
   id: string;
   title: string;
+  jobId?: string;
+  jobTitle?: string;
+  client?: string;
   status: string;
   priority: string;
   dueDate: string;
@@ -231,8 +234,12 @@ type NotionTask = {
   effortLevel: string;
   effortSize: string;
   taskTypes: string[];
+  assignedTo?: string;
   assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
+  capturedBy?: string;
+  payAud?: number;
   description: string;
+  notes?: string;
   attachments: Array<{ name: string; url: string }>;
   url: string;
   archived: boolean;
@@ -255,22 +262,41 @@ type CalendarJob = NotionUpcomingJob & {
 };
 
 type NotionJobsReport = {
+  clients: Array<{
+    id: string;
+    title: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+    url: string;
+    archived: boolean;
+  }>;
   tasks: NotionTask[];
-  pipelineTasks: NotionTask[];
+  pipelineTasks: NotionUpcomingJob[];
   taskList: NotionTask[];
   calendarTasks: NotionTask[];
   upcomingJobs: Array<{
     id: string;
     title: string;
+    clientId?: string;
     client: string;
     status: string;
     jobDate: string;
+    dueDate?: string;
     dueState: string;
     priority: string;
     deliverableTypes: string[];
     location: string;
+    description?: string;
     notes: string;
     attachments: Array<{ name: string; url: string }>;
+    taskCount?: number;
+    openTasks?: number;
+    completedTasks?: number;
+    complete?: boolean;
+    column?: string;
+    shootDate?: string;
+    shootState?: string;
     url: string;
     archived: boolean;
   }>;
@@ -603,6 +629,7 @@ type BudgetCalendarDay = {
 };
 
 const emptyJobsReport: NotionJobsReport = {
+  clients: [],
   tasks: [],
   pipelineTasks: [],
   taskList: [],
@@ -740,7 +767,7 @@ const emptyBudgetReport: BudgetReport = {
   settings: null
 };
 
-const jobColumns = ['Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes'];
+const jobColumns = ['Notes/Client Info', 'Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes', 'Ready To Post', 'Posted / Done'];
 
 if (!window.noa) {
   window.noa = createBrowserNoaClient();
@@ -872,10 +899,12 @@ const integrationSetups: IntegrationSetup[] = [
     ],
     fields: [
       { key: 'NOTION_TOKEN', label: 'Internal integration secret', type: 'password', required: true, placeholder: 'secret_...' },
-      { key: 'NOTION_TASKS_DATABASE_ID', label: 'Tasks database ID', required: true, placeholder: '36ff2ec220f2808ba6a8cfa333adefb5' },
-      { key: 'NOTION_PIPELINE_VIEW_ID', label: 'Pipeline view ID', required: true, placeholder: '36ff2ec220f280f18188000c8a4ed4e7' },
-      { key: 'NOTION_TASKS_VIEW_ID', label: 'Tasks view ID', required: true, placeholder: '370f2ec220f2816791d9000c3aadc277' },
-      { key: 'NOTION_JOBS_DATABASE_ID', label: 'Upcoming jobs database ID', required: true, placeholder: '36ff2ec220f280da9c3ac1072b0ef022' }
+      { key: 'NOTION_CLIENTS_DATABASE_ID', label: 'Clients database ID', required: true, placeholder: '5a836c85-e6ca-4fc5-b89e-b3b97b4bf38b' },
+      { key: 'NOTION_CLIENTS_DATA_SOURCE_ID', label: 'Clients data source ID', required: true, placeholder: '9b4ead34-fcaf-4a27-a999-72248287878b' },
+      { key: 'NOTION_JOBS_DATABASE_ID', label: 'Jobs database ID', required: true, placeholder: '47b8cec5-c99a-4975-a2d6-ff1e990eb2b1' },
+      { key: 'NOTION_JOBS_DATA_SOURCE_ID', label: 'Jobs data source ID', required: true, placeholder: 'e9c28fc3-a5ab-44ff-b589-898a31b05e55' },
+      { key: 'NOTION_TASKS_DATABASE_ID', label: 'Tasks database ID', required: true, placeholder: 'b5cdeb9c-0bcb-4c87-833b-ddeeee4ca956' },
+      { key: 'NOTION_TASKS_DATA_SOURCE_ID', label: 'Tasks data source ID', required: true, placeholder: '476fc915-819c-45e2-b990-8917290f675c' }
     ]
   },
   {
@@ -2924,19 +2953,19 @@ function PipelineBoard({
   isLoading: boolean;
   refreshJobs: () => Promise<NotionJobsReport>;
 }) {
-  const pipelineTasks = report.pipelineTasks?.length ? report.pipelineTasks : report.tasks;
-  const [boardTasks, setBoardTasks] = useState<NotionTask[]>(pipelineTasks);
+  const pipelineTasks = report.pipelineTasks?.length ? report.pipelineTasks : report.upcomingJobs;
+  const [boardTasks, setBoardTasks] = useState<NotionUpcomingJob[]>(pipelineTasks);
   const [draggingTaskId, setDraggingTaskId] = useState('');
   const [savingTaskId, setSavingTaskId] = useState('');
   const [pipelineMessage, setPipelineMessage] = useState('');
-  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null } | null>(null);
+  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionUpcomingJob | null } | null>(null);
 
   useEffect(() => {
     setBoardTasks(pipelineTasks);
   }, [pipelineTasks]);
 
   const tasksByColumn = useMemo(() => {
-    return jobColumns.reduce<Record<string, NotionTask[]>>((groups, column) => {
+    return jobColumns.reduce<Record<string, NotionUpcomingJob[]>>((groups, column) => {
       groups[column] = boardTasks.filter((task) => task.column === column);
       return groups;
     }, {});
@@ -2964,8 +2993,9 @@ function PipelineBoard({
       return;
     }
 
-    if (result.task) {
-      setBoardTasks((current) => current.map((item) => item.id === taskId ? { ...item, ...result.task } : item));
+    const updatedItem = result.item || result.task;
+    if (updatedItem) {
+      setBoardTasks((current) => current.map((item) => item.id === taskId ? { ...item, ...updatedItem } : item));
     }
     setPipelineMessage(result.message || `Moved ${task.title} to ${column}.`);
     setSavingTaskId('');
@@ -2974,7 +3004,7 @@ function PipelineBoard({
   const handleTaskSave = async (values: Record<string, string>) => {
     if (!editor || !window.noa?.manageNotionItem) return;
     const result = await window.noa.manageNotionItem({
-      kind: 'task',
+      kind: 'job',
       action: editor.mode === 'create' ? 'create' : 'update',
       id: editor.item?.id,
       values
@@ -2989,7 +3019,7 @@ function PipelineBoard({
 
   const handleTaskArchive = async () => {
     if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
-    const result = await window.noa.manageNotionItem({ kind: 'task', action: 'archive', id: editor.item.id });
+    const result = await window.noa.manageNotionItem({ kind: 'job', action: 'archive', id: editor.item.id });
     setPipelineMessage(result.message);
     if (result.ok) {
       setEditor(null);
@@ -3001,7 +3031,7 @@ function PipelineBoard({
     <section className="page-fade jobs-page">
       <article className="glass-card wide jobs-hero">
         <div>
-          <PanelTitle eyebrow="Notion pipeline view" title="Pipeline" />
+          <PanelTitle eyebrow="Notion jobs pipeline" title="Pipeline" />
           <p className="section-copy">
             Drag cards between columns to update the Status property in Notion.
           </p>
@@ -3010,14 +3040,14 @@ function PipelineBoard({
         <div className="jobs-actions">
           <div className="jobs-sync">
             <span>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleString()}` : 'Not synced yet'}</span>
-            <strong>{boardTasks.length} shown</strong>
+            <strong>{boardTasks.length} jobs</strong>
           </div>
           <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
             {isLoading ? 'Syncing...' : 'Sync pipeline'}
           </button>
-          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'task', item: null })}>
+          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'job', item: null })}>
             <Plus size={16} />
-            New task
+            New job
           </button>
         </div>
       </article>
@@ -3089,7 +3119,7 @@ function PipelineBoard({
       {editor && (
         <NotionItemModal
           mode={editor.mode}
-          kind="task"
+          kind="job"
           item={editor.item}
           onClose={() => setEditor(null)}
           onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
@@ -3111,7 +3141,7 @@ function JobCard({
   onDragStart,
   onDragEnd
 }: {
-  task: NotionTask;
+  task: NotionTask | NotionUpcomingJob;
   isDragging?: boolean;
   isSaving?: boolean;
   onOpen?: () => void;
@@ -3150,7 +3180,9 @@ function JobCard({
         <span className={`due-pill ${task.dueState === 'Overdue' ? 'danger' : task.dueState === 'Due today' ? 'today' : ''}`}>
           {task.dueDate ? `${task.dueState} · ${task.dueDate}` : 'No date'}
         </span>
-        {task.effortSize && <span>{task.effortSize}</span>}
+        {'effortSize' in task && task.effortSize && <span>{task.effortSize}</span>}
+        {'client' in task && task.client && <span>{task.client}</span>}
+        {'openTasks' in task && typeof task.openTasks === 'number' && <span>{task.openTasks} open tasks</span>}
       </div>
       {onMove && (
         <div
@@ -3174,7 +3206,7 @@ function JobCard({
           </select>
         </div>
       )}
-      {task.taskTypes.length > 0 && (
+      {'taskTypes' in task && task.taskTypes.length > 0 && (
         <div className="job-chip-row">
           {task.taskTypes.slice(0, 3).map((type) => <span key={type}>{type}</span>)}
         </div>
@@ -3189,7 +3221,7 @@ function JobCard({
           ))}
         </div>
       )}
-      {task.assignees.length > 0 && (
+      {'assignees' in task && task.assignees.length > 0 && (
         <p className="job-assignee">{task.assignees.map((person) => person.name).join(', ')}</p>
       )}
     </article>
@@ -3206,8 +3238,9 @@ function TasksView({
   refreshJobs: () => Promise<NotionJobsReport>;
 }) {
   const allTasks = report.taskList?.length ? report.taskList : [];
-  const visibleTasks = allTasks.filter((task) => !task.complete && isTaskInRecentWindow(task));
-  const hiddenOutsideWindowCount = allTasks.filter((task) => !task.complete && !isTaskInRecentWindow(task)).length;
+  const [assigneeFilter, setAssigneeFilter] = useState<'all' | 'John' | 'Jack'>('all');
+  const visibleTasks = allTasks.filter((task) => !task.complete && (assigneeFilter === 'all' || task.assignedTo === assigneeFilter));
+  const completedCount = allTasks.filter((task) => task.complete && (assigneeFilter === 'all' || task.assignedTo === assigneeFilter)).length;
   const highPriorityCount = visibleTasks.filter((task) => task.priority === 'High').length;
   const overdueCount = visibleTasks.filter((task) => task.dueState === 'Overdue').length;
   const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null } | null>(null);
@@ -3235,7 +3268,7 @@ function TasksView({
       id: task.id,
       values: {
         title: task.title,
-        complete: 'true'
+        status: 'Posted / Done'
       }
     });
     if (!result.ok) {
@@ -3262,7 +3295,7 @@ function TasksView({
         <div>
           <PanelTitle eyebrow="Notion tasks view" title="Tasks" />
           <p className="section-copy">
-            Showing incomplete Notion tasks from the last 7 days. Completion is controlled by your Notion checkbox.
+            Showing incomplete Notion tasks by assignee. Completion is controlled by Status = Posted / Done.
           </p>
         </div>
         <div className="jobs-actions">
@@ -3301,15 +3334,23 @@ function TasksView({
           <strong>{overdueCount}</strong>
         </article>
         <article>
-          <span>Outside window</span>
-          <strong>{hiddenOutsideWindowCount}</strong>
+          <span>Completed</span>
+          <strong>{completedCount}</strong>
         </article>
       </section>
+
+      <div className="page-switcher inline-tabs" role="tablist" aria-label="Task assignee filter">
+        {(['all', 'John', 'Jack'] as const).map((filter) => (
+          <button key={filter} className={assigneeFilter === filter ? 'active' : ''} onClick={() => setAssigneeFilter(filter)}>
+            {filter === 'all' ? 'All Tasks' : `${filter}'s Tasks`}
+          </button>
+        ))}
+      </div>
 
       <section className="task-list">
         {visibleTasks.length === 0 ? (
           <article className="glass-card wide">
-            <p className="empty-state">No incomplete tasks have a Due date or Shoot Date inside the last 7 days.</p>
+            <p className="empty-state">No incomplete tasks found for this view.</p>
           </article>
         ) : (
           visibleTasks.map((task) => (
@@ -3344,9 +3385,9 @@ function TaskRow({ task, onOpen, onEdit, onComplete }: { task: NotionTask; onOpe
       <span className="priority-dot" />
       <button className="task-row-main" onClick={onOpen}>
         <strong>{task.title}</strong>
-        <p>{task.description || task.attachments?.[0]?.name || task.status || 'No description'}</p>
+        <p>{[task.jobTitle, task.client, task.description || task.notes || task.attachments?.[0]?.name].filter(Boolean).join(' · ') || task.status || 'No description'}</p>
       </button>
-      <span>{task.complete ? 'Complete' : 'Open'}</span>
+      <span>{task.assignedTo || 'Unassigned'}</span>
       <span className={`due-pill ${task.dueState === 'Overdue' ? 'danger' : task.dueState === 'Due today' ? 'today' : ''}`}>
         {task.dueDate ? `${task.dueState} · ${task.dueDate}` : 'No date'}
       </span>
@@ -3410,7 +3451,7 @@ function UpcomingJobsView({
         <div>
           <PanelTitle eyebrow="Notion jobs database" title="Upcoming Jobs" />
           <p className="section-copy">
-            Job dates pulled from the Jobs database plus dated work in JOHN'S HUB tasks.
+            Job dates pulled from the new NoA Jobs database plus dated linked tasks.
           </p>
         </div>
         <div className="jobs-actions">
@@ -3441,7 +3482,7 @@ function UpcomingJobsView({
           <strong>{jobs.length}</strong>
         </article>
         <article>
-          <span>From JOHN'S HUB</span>
+          <span>Linked tasks</span>
           <strong>{taskSourcedCount}</strong>
         </article>
         <article>
@@ -7761,19 +7802,29 @@ function NotionItemModal({
                 <input value={values.client} onChange={(event) => updateValue('client', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field">
+                <span>Client relation ID</span>
+                <input value={values.clientId} onChange={(event) => updateValue('clientId', event.target.value)} readOnly={isReadOnly} placeholder="Notion client page id" />
+              </label>
+              <label className="notion-field">
                 <span>Status</span>
                 <select value={values.status} onChange={(event) => updateValue('status', event.target.value)} disabled={isReadOnly}>
                   <option value="">No status</option>
-                  <option>Not started</option>
-                  <option>In progress</option>
+                  <option>Notes/Client Info</option>
+                  <option>Not Started</option>
+                  <option>In Progress</option>
                   <option>Ready For Revision</option>
                   <option>Final Draft/Notes</option>
+                  <option>Ready To Post</option>
                   <option>Posted / Done</option>
                 </select>
               </label>
               <label className="notion-field">
-                <span>Job date</span>
+                <span>Shoot Date</span>
                 <input type="date" value={values.jobDate} onChange={(event) => updateValue('jobDate', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field">
+                <span>Due Date</span>
+                <input type="date" value={values.dueDate} onChange={(event) => updateValue('dueDate', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field">
                 <span>Priority</span>
@@ -7789,8 +7840,8 @@ function NotionItemModal({
                 <input value={values.location} onChange={(event) => updateValue('location', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field wide">
-                <span>Deliverables</span>
-                <input value={values.deliverableTypes} onChange={(event) => updateValue('deliverableTypes', event.target.value)} readOnly={isReadOnly} placeholder="Video, Photos, Reels" />
+                <span>Description</span>
+                <textarea value={values.description} onChange={(event) => updateValue('description', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field wide">
                 <span>Notes</span>
@@ -7802,11 +7853,25 @@ function NotionItemModal({
               <label className="notion-field">
                 <span>Status</span>
                 <select value={values.status} onChange={(event) => updateValue('status', event.target.value)} disabled={isReadOnly}>
-                  <option>Not started</option>
-                  <option>In progress</option>
+                  <option>Notes/Client Info</option>
+                  <option>Not Started</option>
+                  <option>In Progress</option>
                   <option>Ready For Revision</option>
                   <option>Final Draft/Notes</option>
+                  <option>Ready To Post</option>
                   <option>Posted / Done</option>
+                </select>
+              </label>
+              <label className="notion-field">
+                <span>Job relation ID</span>
+                <input value={values.jobId} onChange={(event) => updateValue('jobId', event.target.value)} readOnly={isReadOnly} placeholder="Notion job page id" />
+              </label>
+              <label className="notion-field">
+                <span>Assigned To</span>
+                <select value={values.assignedTo} onChange={(event) => updateValue('assignedTo', event.target.value)} disabled={isReadOnly}>
+                  <option value="">Unassigned</option>
+                  <option>John</option>
+                  <option>Jack</option>
                 </select>
               </label>
               <label className="notion-field">
@@ -7816,15 +7881,6 @@ function NotionItemModal({
               <label className="notion-field">
                 <span>Shoot Date</span>
                 <input type="date" value={values.shootDate} onChange={(event) => updateValue('shootDate', event.target.value)} readOnly={isReadOnly} />
-              </label>
-              <label className="notion-checkbox">
-                <input
-                  type="checkbox"
-                  checked={values.complete === 'true'}
-                  onChange={(event) => updateValue('complete', String(event.target.checked))}
-                  disabled={isReadOnly}
-                />
-                <span>Complete in Notion</span>
               </label>
               <label className="notion-field">
                 <span>Priority</span>
@@ -7844,13 +7900,25 @@ function NotionItemModal({
                   <option>Large</option>
                 </select>
               </label>
-              <label className="notion-field wide">
-                <span>Task types</span>
-                <input value={values.taskTypes} onChange={(event) => updateValue('taskTypes', event.target.value)} readOnly={isReadOnly} placeholder="Bug, Feature request, Polish" />
+              <label className="notion-field">
+                <span>Captured By</span>
+                <select value={values.capturedBy} onChange={(event) => updateValue('capturedBy', event.target.value)} disabled={isReadOnly}>
+                  <option value="">Not set</option>
+                  <option>Phone</option>
+                  <option>Camera</option>
+                </select>
+              </label>
+              <label className="notion-field">
+                <span>Pay ($AUD)</span>
+                <input type="number" value={values.payAud} onChange={(event) => updateValue('payAud', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field wide">
                 <span>Description</span>
                 <textarea value={values.description} onChange={(event) => updateValue('description', event.target.value)} readOnly={isReadOnly} />
+              </label>
+              <label className="notion-field wide">
+                <span>Notes</span>
+                <textarea value={values.notes} onChange={(event) => updateValue('notes', event.target.value)} readOnly={isReadOnly} />
               </label>
             </>
           )}
@@ -7963,12 +8031,14 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
     const job = item as NotionJobsReport['upcomingJobs'][number] | null | undefined;
     return {
       title: job?.title || '',
+      clientId: job?.clientId || '',
       client: job?.client || '',
       status: normalizeNotionStatusName(job?.status || ''),
       jobDate: job?.jobDate || '',
+      dueDate: job?.dueDate || '',
       priority: job?.priority || '',
       location: job?.location || '',
-      deliverableTypes: job?.deliverableTypes?.join(', ') || '',
+      description: job?.description || '',
       notes: job?.notes || '',
       attachments: formatAttachmentValue(job?.attachments || [])
     };
@@ -7977,14 +8047,17 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
   const task = item as NotionTask | null | undefined;
   return {
     title: task?.title || '',
-    status: normalizeNotionStatusName(task?.status || 'Not started'),
+    jobId: task?.jobId || '',
+    assignedTo: task?.assignedTo || '',
+    status: normalizeNotionStatusName(task?.status || 'Not Started'),
     dueDate: task?.dueDate || '',
     shootDate: task?.shootDate || '',
-    complete: task?.complete ? 'true' : 'false',
     priority: task?.priority || '',
     effortLevel: task?.effortLevel || '',
-    taskTypes: task?.taskTypes?.join(', ') || '',
+    capturedBy: task?.capturedBy || '',
+    payAud: task?.payAud ? String(task.payAud) : '',
     description: task?.description || '',
+    notes: task?.notes || '',
     attachments: formatAttachmentValue(task?.attachments || [])
   };
 }
@@ -8032,7 +8105,7 @@ function buildCalendarJobs(report: NotionJobsReport): CalendarJob[] {
   const seenTaskIds = new Set<string>();
   const sourceTasks = report.calendarTasks?.length
     ? report.calendarTasks
-    : [...(report.pipelineTasks || []), ...(report.taskList || []), ...(report.tasks || [])];
+    : [...(report.taskList || []), ...(report.tasks || [])];
   const taskJobs = sourceTasks
     .filter((task) => {
       if (!task.id || seenTaskIds.has(task.id) || !task.shootDate || task.archived) return false;
@@ -8228,7 +8301,7 @@ function Today({
   const calendarJobs = buildCalendarJobs(jobsReport);
   const todayJobs = calendarJobs.filter((job) => job.jobDate === todayKey).slice(0, 4);
   const nextJobs = calendarJobs.filter((job) => job.jobDate && job.jobDate >= todayKey).slice(0, 4);
-  const allTasks = dedupeTasks([...jobsReport.pipelineTasks, ...jobsReport.taskList, ...jobsReport.tasks]);
+  const allTasks = dedupeTasks([...jobsReport.taskList, ...jobsReport.tasks, ...jobsReport.calendarTasks]);
   const urgentTasks = allTasks
     .filter((task) => !task.complete && (['Overdue', 'Due today', 'Tomorrow'].includes(task.dueState) || task.priority === 'High'))
     .sort(sortTodayTasks)
@@ -8947,10 +9020,12 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 N8N_WEBHOOK_URL=your_n8n_webhook_url
 N8N_SHARED_SECRET=choose_a_long_random_secret
 NOTION_TOKEN=your_notion_token_optional
-NOTION_TASKS_DATABASE_ID=36ff2ec220f2808ba6a8cfa333adefb5
-NOTION_PIPELINE_VIEW_ID=36ff2ec220f280f18188000c8a4ed4e7
-NOTION_TASKS_VIEW_ID=370f2ec220f2816791d9000c3aadc277
-NOTION_JOBS_DATABASE_ID=36ff2ec220f280da9c3ac1072b0ef022
+NOTION_CLIENTS_DATABASE_ID=5a836c85-e6ca-4fc5-b89e-b3b97b4bf38b
+NOTION_CLIENTS_DATA_SOURCE_ID=9b4ead34-fcaf-4a27-a999-72248287878b
+NOTION_JOBS_DATABASE_ID=47b8cec5-c99a-4975-a2d6-ff1e990eb2b1
+NOTION_JOBS_DATA_SOURCE_ID=e9c28fc3-a5ab-44ff-b589-898a31b05e55
+NOTION_TASKS_DATABASE_ID=b5cdeb9c-0bcb-4c87-833b-ddeeee4ca956
+NOTION_TASKS_DATA_SOURCE_ID=476fc915-819c-45e2-b990-8917290f675c
 XERO_CLIENT_ID=your_xero_client_id
 XERO_CLIENT_SECRET=your_xero_client_secret
 XERO_REFRESH_TOKEN=your_xero_refresh_token

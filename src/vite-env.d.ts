@@ -41,6 +41,81 @@ interface SpeechRecognitionConstructor {
   new (): SpeechRecognition;
 }
 
+type NoaWindowNotionTask = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueDate: string;
+  dueState: string;
+  shootDate: string;
+  shootState: string;
+  effortLevel: string;
+  effortSize: string;
+  taskTypes: string[];
+  assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
+  description: string;
+  attachments: Array<{ name: string; url: string }>;
+  url: string;
+  archived: boolean;
+  complete: boolean;
+  column: string;
+  jobId?: string;
+  jobTitle?: string;
+  client?: string;
+  assignedTo?: string;
+  capturedBy?: string;
+  payAud?: number;
+  notes?: string;
+};
+
+type NoaWindowNotionJob = {
+  id: string;
+  title: string;
+  clientId?: string;
+  client: string;
+  status: string;
+  jobDate: string;
+  dueDate?: string;
+  dueState: string;
+  priority: string;
+  deliverableTypes: string[];
+  location: string;
+  notes: string;
+  attachments: Array<{ name: string; url: string }>;
+  url: string;
+  description?: string;
+  taskCount?: number;
+  openTasks?: number;
+  completedTasks?: number;
+  complete?: boolean;
+  column?: string;
+  shootDate?: string;
+  shootState?: string;
+  archived: boolean;
+};
+
+type NoaWindowNotionReport = {
+  clients: Array<{
+    id: string;
+    title: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+    url: string;
+    archived: boolean;
+  }>;
+  tasks: NoaWindowNotionTask[];
+  pipelineTasks: NoaWindowNotionJob[];
+  taskList: NoaWindowNotionTask[];
+  calendarTasks: NoaWindowNotionTask[];
+  upcomingJobs: NoaWindowNotionJob[];
+  fetchedAt: string;
+  mainJobsError: string;
+  tasksError: string;
+  upcomingJobsError: string;
+};
+
 interface Window {
   SpeechRecognition?: SpeechRecognitionConstructor;
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
@@ -156,133 +231,15 @@ interface Window {
       };
       errors: string[];
     }>;
-    getNotionJobs: () => Promise<{
-      tasks: Array<{
-        id: string;
-        title: string;
-        status: string;
-        priority: string;
-        dueDate: string;
-        dueState: string;
-        shootDate: string;
-        shootState: string;
-        effortLevel: string;
-        effortSize: string;
-        taskTypes: string[];
-        assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
-        description: string;
-        attachments: Array<{ name: string; url: string }>;
-        url: string;
-        archived: boolean;
-        complete: boolean;
-        column: string;
-      }>;
-      pipelineTasks: Array<{
-        id: string;
-        title: string;
-        status: string;
-        priority: string;
-        dueDate: string;
-        dueState: string;
-        shootDate: string;
-        shootState: string;
-        effortLevel: string;
-        effortSize: string;
-        taskTypes: string[];
-        assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
-        description: string;
-        attachments: Array<{ name: string; url: string }>;
-        url: string;
-        archived: boolean;
-        complete: boolean;
-        column: string;
-      }>;
-      taskList: Array<{
-        id: string;
-        title: string;
-        status: string;
-        priority: string;
-        dueDate: string;
-        dueState: string;
-        shootDate: string;
-        shootState: string;
-        effortLevel: string;
-        effortSize: string;
-        taskTypes: string[];
-        assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
-        description: string;
-        attachments: Array<{ name: string; url: string }>;
-        url: string;
-        archived: boolean;
-        complete: boolean;
-        column: string;
-      }>;
-      calendarTasks: Array<{
-        id: string;
-        title: string;
-        status: string;
-        priority: string;
-        dueDate: string;
-        dueState: string;
-        shootDate: string;
-        shootState: string;
-        effortLevel: string;
-        effortSize: string;
-        taskTypes: string[];
-        assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
-        description: string;
-        attachments: Array<{ name: string; url: string }>;
-        url: string;
-        archived: boolean;
-        complete: boolean;
-        column: string;
-      }>;
-      upcomingJobs: Array<{
-        id: string;
-        title: string;
-        client: string;
-        status: string;
-        jobDate: string;
-        dueState: string;
-        priority: string;
-        deliverableTypes: string[];
-        location: string;
-        notes: string;
-        attachments: Array<{ name: string; url: string }>;
-        url: string;
-        archived: boolean;
-      }>;
-      fetchedAt: string;
-      mainJobsError: string;
-      tasksError: string;
-      upcomingJobsError: string;
-    }>;
+    getNotionJobs: () => Promise<NoaWindowNotionReport>;
     updateNotionTaskStatus: (payload: {
       pageId: string;
       column: string;
     }) => Promise<{
       ok: boolean;
       message: string;
-      task?: {
-        id: string;
-        title: string;
-        status: string;
-        priority: string;
-        dueDate: string;
-        dueState: string;
-        shootDate: string;
-        shootState: string;
-        effortLevel: string;
-        effortSize: string;
-        taskTypes: string[];
-        assignees: Array<{ id: string; name: string; avatarUrl: string | null }>;
-        description: string;
-        attachments: Array<{ name: string; url: string }>;
-        url: string;
-        archived: boolean;
-        complete: boolean;
-        column: string;
-      };
+      task?: NoaWindowNotionTask;
+      item?: NoaWindowNotionJob;
     }>;
     manageNotionItem?: (payload: {
       kind: 'task' | 'job';
