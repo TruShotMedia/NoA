@@ -8,7 +8,6 @@ import {
   Database,
   Gauge,
   GitBranch,
-  Inbox,
   MessagesSquare,
   Network,
   PlugZap,
@@ -36,7 +35,6 @@ export const navItems: NavItem[] = [
   { id: 'noah', label: 'Noah', icon: MessagesSquare },
   { id: 'hubgauge', label: 'HubGauge', icon: Activity },
   { id: 'pipeline', label: 'Pipeline', icon: ClipboardList },
-  { id: 'tasks', label: 'Tasks', icon: Inbox },
   { id: 'upcoming-jobs', label: 'Upcoming Jobs', icon: CalendarDays },
   { id: 'xero', label: 'Xero', icon: CreditCard },
   { id: 'budgeting', label: 'Budgeting', icon: WalletCards },
@@ -174,7 +172,7 @@ export const metricCards = [
   { label: 'Approvals', value: '2', detail: 'waiting for you', icon: ShieldCheck },
   { label: 'Workflows', value: '3', detail: 'prepared routines', icon: GitBranch },
   { label: 'Memory', value: '4', detail: 'core context areas', icon: Database },
-  { label: 'Inbox', value: 'Calm', detail: 'nothing urgent shown', icon: Inbox },
+  { label: 'Inbox', value: 'Calm', detail: 'nothing urgent shown', icon: ClipboardList },
   { label: 'Noah', value: 'Ready', detail: 'advisor available', icon: Bot },
   { label: 'System', value: 'Private', detail: 'local workspace', icon: Activity }
 ];

@@ -56,7 +56,7 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
+const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'budgeting', 'xero'];
 type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -87,7 +87,7 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
-const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'tasks', 'pipeline', 'budgeting', 'xero'];
+const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'budgeting', 'xero'];
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -277,7 +277,7 @@ type NotionJobsReport = {
     archived: boolean;
   }>;
   tasks: NotionTask[];
-  pipelineTasks: NotionUpcomingJob[];
+  pipelineTasks: NotionTask[];
   taskList: NotionTask[];
   calendarTasks: NotionTask[];
   upcomingJobs: Array<{
@@ -1485,7 +1485,11 @@ function App() {
 
   useEffect(() => {
     if (!isUnlocked) return;
-    if ((screen === 'pipeline' || screen === 'tasks' || screen === 'upcoming-jobs') && !jobsReport.fetchedAt && !isLoadingJobs) {
+    if (screen === 'tasks') {
+      setScreen('pipeline');
+      return;
+    }
+    if ((screen === 'pipeline' || screen === 'upcoming-jobs') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
     if (screen === 'hubgauge' && !isLoadingHubGauge) {
@@ -2246,13 +2250,6 @@ function App() {
             refreshJobs={loadNotionJobs}
           />
         )}
-        {screen === 'tasks' && (
-          <TasksView
-            report={jobsReport}
-            isLoading={isLoadingJobs}
-            refreshJobs={loadNotionJobs}
-          />
-        )}
         {screen === 'upcoming-jobs' && (
           <UpcomingJobsView
             report={jobsReport}
@@ -2965,27 +2962,28 @@ function PipelineBoard({
   isLoading: boolean;
   refreshJobs: () => Promise<NotionJobsReport>;
 }) {
-  const pipelineTasks = report.pipelineTasks?.length ? report.pipelineTasks : report.upcomingJobs;
-  const [boardTasks, setBoardTasks] = useState<NotionUpcomingJob[]>(pipelineTasks);
+  const pipelineTasks = report.pipelineTasks?.length ? report.pipelineTasks : report.taskList;
+  const [boardTasks, setBoardTasks] = useState<NotionTask[]>(pipelineTasks);
   const [draggingTaskId, setDraggingTaskId] = useState('');
   const [savingTaskId, setSavingTaskId] = useState('');
   const [pipelineMessage, setPipelineMessage] = useState('');
-  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionUpcomingJob | null } | null>(null);
+  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null } | null>(null);
 
   useEffect(() => {
     setBoardTasks(pipelineTasks);
   }, [pipelineTasks]);
 
   const tasksByColumn = useMemo(() => {
-    return jobColumns.reduce<Record<string, NotionUpcomingJob[]>>((groups, column) => {
+    return jobColumns.reduce<Record<string, NotionTask[]>>((groups, column) => {
       groups[column] = boardTasks.filter((task) => task.column === column);
       return groups;
     }, {});
   }, [boardTasks]);
 
-  const overdueCount = boardTasks.filter((task) => task.dueState === 'Overdue').length;
-  const dueTodayCount = boardTasks.filter((task) => task.dueState === 'Due today').length;
-  const highPriorityCount = boardTasks.filter((task) => task.priority === 'High').length;
+  const openBoardTasks = boardTasks.filter((task) => !isCompleteNotionTask(task));
+  const overdueCount = openBoardTasks.filter((task) => task.dueState === 'Overdue').length;
+  const dueTodayCount = openBoardTasks.filter((task) => task.dueState === 'Due today').length;
+  const highPriorityCount = openBoardTasks.filter((task) => task.priority === 'High').length;
 
   const moveTaskToColumn = async (taskId: string, column: string) => {
     const task = boardTasks.find((item) => item.id === taskId);
@@ -3005,7 +3003,7 @@ function PipelineBoard({
       return;
     }
 
-    const updatedItem = result.item || result.task;
+    const updatedItem = result.task;
     if (updatedItem) {
       setBoardTasks((current) => current.map((item) => item.id === taskId ? { ...item, ...updatedItem } : item));
     }
@@ -3016,7 +3014,7 @@ function PipelineBoard({
   const handleTaskSave = async (values: Record<string, string>) => {
     if (!editor || !window.noa?.manageNotionItem) return;
     const result = await window.noa.manageNotionItem({
-      kind: 'job',
+      kind: 'task',
       action: editor.mode === 'create' ? 'create' : 'update',
       id: editor.item?.id,
       values
@@ -3031,7 +3029,7 @@ function PipelineBoard({
 
   const handleTaskArchive = async () => {
     if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
-    const result = await window.noa.manageNotionItem({ kind: 'job', action: 'archive', id: editor.item.id });
+    const result = await window.noa.manageNotionItem({ kind: 'task', action: 'archive', id: editor.item.id });
     setPipelineMessage(result.message);
     if (result.ok) {
       setEditor(null);
@@ -3043,31 +3041,31 @@ function PipelineBoard({
     <section className="page-fade jobs-page">
       <article className="glass-card wide jobs-hero">
         <div>
-          <PanelTitle eyebrow="Notion jobs pipeline" title="Pipeline" />
+          <PanelTitle eyebrow="Notion task pipeline" title="Pipeline" />
           <p className="section-copy">
-            Drag cards between columns to update the Status property in Notion.
+            Drag task cards between columns to update their Notion Status.
           </p>
           {pipelineMessage && <p className="pipeline-message">{pipelineMessage}</p>}
         </div>
         <div className="jobs-actions">
           <div className="jobs-sync">
             <span>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleString()}` : 'Not synced yet'}</span>
-            <strong>{boardTasks.length} jobs</strong>
+            <strong>{boardTasks.length} tasks</strong>
           </div>
           <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
             {isLoading ? 'Syncing...' : 'Sync pipeline'}
           </button>
-          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'job', item: null })}>
+          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'task', item: null })}>
             <Plus size={16} />
-            New job
+            New task
           </button>
         </div>
       </article>
 
-      {report.mainJobsError && (
+      {report.tasksError && (
         <article className="glass-card wide jobs-error">
           <CircleAlert size={20} />
-          <p>{report.mainJobsError}</p>
+          <p>{report.tasksError}</p>
         </article>
       )}
       <section className="jobs-metrics">
@@ -3131,7 +3129,7 @@ function PipelineBoard({
       {editor && (
         <NotionItemModal
           mode={editor.mode}
-          kind="job"
+          kind="task"
           item={editor.item}
           onClose={() => setEditor(null)}
           onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
@@ -3258,8 +3256,8 @@ function TasksView({
 }) {
   const allTasks = report.taskList?.length ? report.taskList : [];
   const [assigneeFilter, setAssigneeFilter] = useState<'all' | 'John' | 'Jack'>('all');
-  const visibleTasks = allTasks.filter((task) => !task.complete && (assigneeFilter === 'all' || task.assignedTo === assigneeFilter));
-  const completedCount = allTasks.filter((task) => task.complete && (assigneeFilter === 'all' || task.assignedTo === assigneeFilter)).length;
+  const visibleTasks = allTasks.filter((task) => !isCompleteNotionTask(task) && (assigneeFilter === 'all' || task.assignedTo === assigneeFilter));
+  const completedCount = allTasks.filter((task) => isCompleteNotionTask(task) && (assigneeFilter === 'all' || task.assignedTo === assigneeFilter)).length;
   const highPriorityCount = visibleTasks.filter((task) => task.priority === 'High').length;
   const overdueCount = visibleTasks.filter((task) => task.dueState === 'Overdue').length;
   const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null } | null>(null);
@@ -3314,7 +3312,7 @@ function TasksView({
         <div>
           <PanelTitle eyebrow="Notion tasks view" title="Tasks" />
           <p className="section-copy">
-            Showing incomplete Notion tasks by assignee. Completion is controlled by Status = Posted / Done.
+            Showing incomplete Notion tasks by assignee. Ready To Post and Posted / Done are treated as complete.
           </p>
         </div>
         <div className="jobs-actions">
@@ -7670,7 +7668,7 @@ function getInvoiceCandidateJobs(report: XeroReport, notionReport: NotionJobsRep
 
   return (notionReport.upcomingJobs || [])
     .filter((job) => job.title && !job.archived)
-    .filter((job) => !['Posted / Done', 'Archived'].includes(normalizeNotionStatusName(job.status)))
+    .filter((job) => !isCompleteNotionStatus(job.status))
     .filter((job) => !invoiceMatchText.some((text) => textIncludes(text, job.title) || textIncludes(text, job.client)))
     .sort((a, b) => {
       if (a.jobDate && !b.jobDate) return -1;
@@ -8322,7 +8320,7 @@ function Today({
   const nextJobs = calendarJobs.filter((job) => job.jobDate && job.jobDate >= todayKey).slice(0, 4);
   const allTasks = dedupeTasks([...jobsReport.taskList, ...jobsReport.tasks, ...jobsReport.calendarTasks]);
   const urgentTasks = allTasks
-    .filter((task) => !task.complete && (['Overdue', 'Due today', 'Tomorrow'].includes(task.dueState) || task.priority === 'High'))
+    .filter((task) => !isCompleteNotionTask(task) && (['Overdue', 'Due today', 'Tomorrow'].includes(task.dueState) || task.priority === 'High'))
     .sort(sortTodayTasks)
     .slice(0, 5);
   const moneyDue = xeroReport.totals.amountDue + xeroReport.totals.billsDue;
@@ -8358,7 +8356,7 @@ function Today({
               <BriefcaseBusiness size={16} />
               Open calendar
             </button>
-            <button className="secondary-action" onClick={() => setScreen('tasks')}>
+            <button className="secondary-action" onClick={() => setScreen('pipeline')}>
               <ListTodo size={16} />
               Review tasks
             </button>
@@ -8473,7 +8471,7 @@ function Today({
         <button onClick={() => setScreen('pipeline')}>
           <Kanban size={18} />
           <span>Pipeline</span>
-          <strong>{jobsReport.pipelineTasks.length} active</strong>
+          <strong>{jobsReport.pipelineTasks.filter((task) => !isCompleteNotionTask(task)).length} active</strong>
         </button>
         <button onClick={() => setScreen('upcoming-jobs')}>
           <BriefcaseBusiness size={18} />
@@ -9283,6 +9281,15 @@ function statusForColumn(column: string) {
 
 function normalizeNotionStatusName(status: string) {
   return /^done$/i.test(String(status || '').trim()) ? 'Posted / Done' : String(status || '').trim();
+}
+
+function isCompleteNotionStatus(status: string) {
+  const normalized = normalizeNotionStatusName(status);
+  return normalized === 'Posted / Done' || normalized === 'Ready To Post' || normalized === 'Archived';
+}
+
+function isCompleteNotionTask(task: Pick<NotionTask, 'complete' | 'status'>) {
+  return Boolean(task.complete) || isCompleteNotionStatus(task.status);
 }
 
 function getLocalNoahReply(input: string, notes: CaptureNote[], briefing: SmartBriefing) {

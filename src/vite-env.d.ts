@@ -118,7 +118,7 @@ type NoaWindowNotionReport = {
     archived: boolean;
   }>;
   tasks: NoaWindowNotionTask[];
-  pipelineTasks: NoaWindowNotionJob[];
+  pipelineTasks: NoaWindowNotionTask[];
   taskList: NoaWindowNotionTask[];
   calendarTasks: NoaWindowNotionTask[];
   upcomingJobs: NoaWindowNotionJob[];
