@@ -779,7 +779,7 @@ const emptyBudgetReport: BudgetReport = {
   settings: null
 };
 
-const jobColumns = ['Notes/Client Info', 'Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes', 'Ready To Post', 'Posted / Done'];
+const jobColumns = ['Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes'];
 
 if (!window.noa) {
   window.noa = createBrowserNoaClient();
