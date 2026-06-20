@@ -2662,9 +2662,13 @@ h3 {
   display: grid;
   inset: 0;
   justify-items: center;
-  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
   position: fixed;
+  touch-action: none;
   z-index: 80;
 }
 
@@ -2680,9 +2684,12 @@ h3 {
   display: grid;
   gap: 18px;
   width: min(760px, calc(100vw - 28px));
-  max-height: calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  max-height: calc(100vh - 36px);
+  max-height: calc(100svh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   overflow: auto;
+  overscroll-behavior: contain;
   position: relative;
+  touch-action: pan-y;
   margin: 0;
   border-radius: 24px;
   background: linear-gradient(145deg, rgba(20, 28, 42, 0.98), rgba(11, 16, 28, 0.98));
@@ -6812,19 +6819,49 @@ h3 {
     padding: 10px;
   }
 
+  .modal-shell {
+    align-items: center;
+    justify-items: stretch;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: hidden;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  }
+
   .notion-modal {
     border-radius: 20px;
     margin: 0;
-    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100vh - 20px);
+    max-height: calc(100svh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     padding: 16px;
+    width: 100%;
+  }
+
+  .notion-modal .modal-head {
+    align-items: center;
+    background: linear-gradient(180deg, rgba(20, 28, 42, 0.98), rgba(20, 28, 42, 0.9));
+    border-radius: 16px 16px 8px 8px;
+    margin: -16px -16px 0;
+    padding: 16px 16px 10px;
+    position: sticky;
+    top: -16px;
+    z-index: 3;
+  }
+
+  .notion-modal .icon-close {
+    background: rgba(255, 255, 255, 0.11);
+    flex: 0 0 auto;
+    height: 42px;
+    min-width: 42px;
   }
 
   .calendar-day-modal {
     border-radius: 20px;
     margin: 0;
-    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100vh - 20px);
+    max-height: calc(100svh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     padding: 16px 14px calc(20px + env(safe-area-inset-bottom));
-    width: min(100%, calc(100vw - 24px));
+    width: 100%;
   }
 
   .calendar-day-headline {
