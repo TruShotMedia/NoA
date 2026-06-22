@@ -417,6 +417,13 @@ h3 {
 
 .page-fade {
   animation: fade 320ms ease both;
+  align-content: start;
+  display: grid;
+  gap: 18px;
+}
+
+.page-fade > * {
+  min-width: 0;
 }
 
 @keyframes fade {
@@ -588,6 +595,7 @@ h3 {
 .glass-card {
   padding: 24px;
   color: rgba(255, 255, 255, 0.75);
+  min-width: 0;
 }
 
 .metric-card h3,
@@ -6573,6 +6581,10 @@ h3 {
 }
 
 @media (max-width: 760px) {
+  .page-fade {
+    gap: 14px;
+  }
+
   .client-card-grid,
   .client-budget-numbers {
     grid-template-columns: 1fr;
