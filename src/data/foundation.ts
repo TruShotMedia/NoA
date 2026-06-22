@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  UsersRound,
   WalletCards,
   Workflow
 } from 'lucide-react';
@@ -36,6 +37,7 @@ export const navItems: NavItem[] = [
   { id: 'hubgauge', label: 'HubGauge', icon: Activity },
   { id: 'pipeline', label: 'Pipeline', icon: ClipboardList },
   { id: 'upcoming-jobs', label: 'Upcoming Jobs', icon: CalendarDays },
+  { id: 'clients', label: 'Clients', icon: UsersRound },
   { id: 'xero', label: 'Xero', icon: CreditCard },
   { id: 'budgeting', label: 'Budgeting', icon: WalletCards },
   { id: 'plan', label: 'Plan', icon: ClipboardList },

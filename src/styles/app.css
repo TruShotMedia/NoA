@@ -2491,6 +2491,196 @@ h3 {
   margin-top: 7px;
 }
 
+.client-budget-overview {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.2fr 1fr 1fr;
+}
+
+.client-balance-card,
+.client-budget-card,
+.john-pay-panel {
+  background: rgba(255, 255, 255, 0.075);
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.22);
+}
+
+.client-balance-card {
+  min-height: 150px;
+  padding: 20px;
+}
+
+.client-balance-card.dark {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.96));
+}
+
+.client-balance-card.calm {
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.18), rgba(15, 23, 42, 0.95));
+}
+
+.client-balance-card.danger {
+  background: linear-gradient(145deg, rgba(248, 113, 113, 0.2), rgba(15, 23, 42, 0.95));
+}
+
+.client-balance-card span,
+.client-balance-card small {
+  color: var(--faint);
+}
+
+.client-balance-card strong {
+  color: #fff;
+  display: block;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1;
+  margin: 14px 0 10px;
+}
+
+.clients-layout {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr);
+}
+
+.client-card-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.client-budget-card,
+.john-pay-panel {
+  padding: 18px;
+}
+
+.client-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.client-card-head h3 {
+  color: #fff;
+  font-size: 22px;
+  margin: 4px 0 0;
+}
+
+.priority-badge {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.budget-meter {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  height: 12px;
+  margin: 18px 0 14px;
+  overflow: hidden;
+}
+
+.budget-meter div {
+  background: linear-gradient(90deg, #7dd3fc, #34d399, #fbbf24);
+  border-radius: inherit;
+  height: 100%;
+}
+
+.client-budget-numbers {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.client-budget-numbers div {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.client-budget-numbers span,
+.client-budget-copy,
+.john-pay-list span {
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.client-budget-numbers strong,
+.john-pay-total strong {
+  color: #fff;
+  display: block;
+  margin-top: 4px;
+}
+
+.client-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.client-chip-row span {
+  background: rgba(147, 197, 253, 0.12);
+  border-radius: 999px;
+  color: #bfdbfe;
+  font-size: 12px;
+  padding: 6px 9px;
+}
+
+.client-job-list,
+.john-pay-list {
+  display: grid;
+  gap: 9px;
+}
+
+.client-job-list a,
+.john-pay-list a {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 16px;
+  color: inherit;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+  text-decoration: none;
+}
+
+.client-job-list span,
+.john-pay-list strong {
+  color: #fff;
+}
+
+.client-job-list strong,
+.john-pay-list em {
+  color: #bbf7d0;
+  flex: 0 0 auto;
+  font-style: normal;
+}
+
+.john-pay-panel {
+  position: sticky;
+  top: 18px;
+}
+
+.john-pay-total {
+  background: linear-gradient(145deg, rgba(96, 165, 250, 0.2), rgba(15, 23, 42, 0.95));
+  border-radius: 20px;
+  margin: 16px 0;
+  padding: 16px;
+}
+
+.john-pay-total span {
+  color: var(--faint);
+}
+
+.john-pay-total strong {
+  font-size: 34px;
+}
+
 .jobs-board {
   display: grid;
   gap: 14px;
@@ -6155,6 +6345,15 @@ h3 {
 }
 
 @media (max-width: 1180px) {
+  .clients-layout,
+  .client-budget-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .john-pay-panel {
+    position: static;
+  }
+
   body {
     min-width: 0;
     overflow: auto;
@@ -6374,6 +6573,22 @@ h3 {
 }
 
 @media (max-width: 760px) {
+  .client-card-grid,
+  .client-budget-numbers {
+    grid-template-columns: 1fr;
+  }
+
+  .client-balance-card {
+    min-height: 132px;
+  }
+
+  .client-card-head,
+  .client-job-list a,
+  .john-pay-list a {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   body {
     min-height: 100dvh;
     overflow: hidden;

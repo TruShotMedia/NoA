@@ -81,6 +81,7 @@ type NoaWindowNotionJob = {
   priority: string;
   deliverableTypes: string[];
   location: string;
+  johnsCut?: number | null;
   payAud?: number | null;
   notes: string;
   attachments: Array<{ name: string; url: string }>;
@@ -109,6 +110,7 @@ type NoaWindowNotionReport = {
     status?: string;
     priority?: string;
     retainer?: string;
+    budget?: number | null;
     industry?: string[];
     contentTypes?: string[];
     coverImages?: Array<{ name: string; url: string }>;

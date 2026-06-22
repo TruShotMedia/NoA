@@ -56,7 +56,7 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'budgeting', 'xero'];
+const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero'];
 type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -87,7 +87,7 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
-const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'budgeting', 'xero'];
+const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero'];
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -268,6 +268,7 @@ type NotionJobsReport = {
     status?: string;
     priority?: string;
     retainer?: string;
+    budget?: number | null;
     industry?: string[];
     contentTypes?: string[];
     coverImages?: Array<{ name: string; url: string }>;
@@ -292,6 +293,7 @@ type NotionJobsReport = {
     priority: string;
     deliverableTypes: string[];
     location: string;
+    johnsCut?: number | null;
     payAud?: number | null;
     description?: string;
     notes: string;
@@ -1489,7 +1491,7 @@ function App() {
       setScreen('pipeline');
       return;
     }
-    if ((screen === 'pipeline' || screen === 'upcoming-jobs') && !jobsReport.fetchedAt && !isLoadingJobs) {
+    if ((screen === 'pipeline' || screen === 'upcoming-jobs' || screen === 'clients') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
     if (screen === 'hubgauge' && !isLoadingHubGauge) {
@@ -2252,6 +2254,13 @@ function App() {
         )}
         {screen === 'upcoming-jobs' && (
           <UpcomingJobsView
+            report={jobsReport}
+            isLoading={isLoadingJobs}
+            refreshJobs={loadNotionJobs}
+          />
+        )}
+        {screen === 'clients' && (
+          <ClientsView
             report={jobsReport}
             isLoading={isLoadingJobs}
             refreshJobs={loadNotionJobs}
@@ -3192,7 +3201,7 @@ function JobCard({
         </span>
         {'effortSize' in task && task.effortSize && <span>{task.effortSize}</span>}
         {'client' in task && task.client && <span>{task.client}</span>}
-        {'payAud' in task && typeof task.payAud === 'number' && <span>{formatMoney(task.payAud, 'AUD')}</span>}
+        {'johnsCut' in task && getJobJohnsCut(task) > 0 && <span>{formatMoney(getJobJohnsCut(task), 'AUD')}</span>}
         {'clientRetainer' in task && task.clientRetainer === 'Yes' && <span>Retainer</span>}
         {'openTasks' in task && typeof task.openTasks === 'number' && <span>{task.openTasks} open tasks</span>}
       </div>
@@ -3414,6 +3423,152 @@ function TaskRow({ task, onOpen, onEdit, onComplete }: { task: NotionTask; onOpe
         <button onClick={onComplete} aria-label={`Mark ${task.title} complete`}><CheckCircle2 size={14} /></button>
       </div>
     </article>
+  );
+}
+
+function ClientsView({
+  report,
+  isLoading,
+  refreshJobs
+}: {
+  report: NotionJobsReport;
+  isLoading: boolean;
+  refreshJobs: () => Promise<NotionJobsReport>;
+}) {
+  const monthKey = brisbaneToday().slice(0, 7);
+  const monthLabel = formatCalendarMonth(monthKey);
+  const summaries = useMemo(() => buildClientBudgetSummaries(report, monthKey), [report, monthKey]);
+  const activeClients = summaries.filter((client) => client.status === 'Active' || client.retainer === 'Yes');
+  const totalBudget = summaries.reduce((sum, client) => sum + client.budget, 0);
+  const totalJohnsCut = summaries.reduce((sum, client) => sum + client.johnsCutThisMonth, 0);
+  const remainingBudget = totalBudget - totalJohnsCut;
+  const johnJobs = summaries
+    .flatMap((client) => client.monthJobs.map((job) => ({ ...job, clientTitle: client.title })))
+    .filter((job) => getJobJohnsCut(job) > 0)
+    .sort((a, b) => (b.jobDate || b.dueDate || '').localeCompare(a.jobDate || a.dueDate || ''));
+
+  return (
+    <section className="page-fade clients-page">
+      <article className="glass-card wide clients-hero">
+        <div>
+          <PanelTitle eyebrow="Notion clients" title="Client budget command" />
+          <p className="section-copy">
+            Track client monthly budgets against John's contractor cut from linked Notion jobs.
+          </p>
+        </div>
+        <div className="jobs-actions">
+          <div className="jobs-sync">
+            <span>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleString()}` : 'Not synced yet'}</span>
+            <strong>{summaries.length} clients</strong>
+          </div>
+          <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
+            {isLoading ? 'Syncing...' : 'Sync clients'}
+          </button>
+        </div>
+      </article>
+
+      {report.upcomingJobsError && (
+        <article className="glass-card wide jobs-error">
+          <CircleAlert size={20} />
+          <p>{report.upcomingJobsError}</p>
+        </article>
+      )}
+
+      <section className="client-budget-overview">
+        <article className="client-balance-card">
+          <span>{monthLabel} budget</span>
+          <strong>{formatMoney(totalBudget, 'AUD')}</strong>
+          <small>{activeClients.length} active/retainer clients tracked</small>
+        </article>
+        <article className="client-balance-card dark">
+          <span>John's cut</span>
+          <strong>{formatMoney(totalJohnsCut, 'AUD')}</strong>
+          <small>{johnJobs.length} paid job(s) this month</small>
+        </article>
+        <article className={`client-balance-card ${remainingBudget < 0 ? 'danger' : 'calm'}`}>
+          <span>Remaining</span>
+          <strong>{formatMoney(remainingBudget, 'AUD')}</strong>
+          <small>{remainingBudget < 0 ? 'Over allocated across client budgets' : 'Budget still available'}</small>
+        </article>
+      </section>
+
+      <section className="clients-layout">
+        <div className="client-card-grid">
+          {summaries.length === 0 ? (
+            <article className="glass-card wide">
+              <p className="empty-state">No clients were returned from Notion yet.</p>
+            </article>
+          ) : summaries.map((client) => (
+            <article className="client-budget-card" key={client.id}>
+              <div className="client-card-head">
+                <div>
+                  <span className="eyebrow">{[client.status, client.retainer === 'Yes' ? 'Retainer' : 'Project'].filter(Boolean).join(' - ')}</span>
+                  <h3>{client.title}</h3>
+                </div>
+                <span className={`priority-badge priority-${(client.priority || 'none').toLowerCase()}`}>{client.priority || 'No priority'}</span>
+              </div>
+              <div className="budget-meter">
+                <div style={{ width: `${Math.min(100, Math.max(0, client.utilization))}%` }} />
+              </div>
+              <div className="client-budget-numbers">
+                <div>
+                  <span>Budget</span>
+                  <strong>{client.budget ? formatMoney(client.budget, 'AUD') : 'Not set'}</strong>
+                </div>
+                <div>
+                  <span>John</span>
+                  <strong>{formatMoney(client.johnsCutThisMonth, 'AUD')}</strong>
+                </div>
+                <div>
+                  <span>Left</span>
+                  <strong>{client.budget ? formatMoney(client.remaining, 'AUD') : '-'}</strong>
+                </div>
+              </div>
+              <p className="client-budget-copy">
+                {client.budget
+                  ? `${Math.round(client.utilization)}% of this month's budget is allocated to John's cut.`
+                  : 'Add a monthly Budget in Notion to activate budget tracking for this client.'}
+              </p>
+              <div className="client-chip-row">
+                {[...(client.industry || []), ...(client.contentTypes || [])].slice(0, 5).map((chip) => <span key={chip}>{chip}</span>)}
+              </div>
+              <div className="client-job-list">
+                {client.monthJobs.length === 0 ? (
+                  <p className="empty-state">No jobs in {monthLabel}.</p>
+                ) : client.monthJobs.slice(0, 3).map((job) => (
+                  <a href={job.url} target="_blank" rel="noreferrer" key={job.id}>
+                    <span>{job.title}</span>
+                    <strong>{formatMoney(getJobJohnsCut(job), 'AUD')}</strong>
+                  </a>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <aside className="john-pay-panel">
+          <PanelTitle eyebrow="Contractor view" title="John's cut" />
+          <p className="section-copy">Jobs Jack can expect John to invoice through John's ABN this month.</p>
+          <div className="john-pay-total">
+            <span>{monthLabel}</span>
+            <strong>{formatMoney(totalJohnsCut, 'AUD')}</strong>
+          </div>
+          <div className="john-pay-list">
+            {johnJobs.length === 0 ? (
+              <p className="empty-state">No John's Cut values found for this month.</p>
+            ) : johnJobs.slice(0, 8).map((job) => (
+              <a href={job.url} target="_blank" rel="noreferrer" key={job.id}>
+                <div>
+                  <strong>{job.title}</strong>
+                  <span>{[job.clientTitle, job.jobDate || job.dueDate, job.status].filter(Boolean).join(' - ')}</span>
+                </div>
+                <em>{formatMoney(getJobJohnsCut(job), 'AUD')}</em>
+              </a>
+            ))}
+          </div>
+        </aside>
+      </section>
+    </section>
   );
 }
 
@@ -7829,9 +7984,6 @@ function NotionItemModal({
                   <option>Notes/Client Info</option>
                   <option>Not Started</option>
                   <option>In Progress</option>
-                  <option>Ready For Revision</option>
-                  <option>Final Draft/Notes</option>
-                  <option>Ready To Post</option>
                   <option>Posted / Done</option>
                 </select>
               </label>
@@ -7853,8 +8005,8 @@ function NotionItemModal({
                 </select>
               </label>
               <label className="notion-field">
-                <span>Pay ($AUD)</span>
-                <input type="number" value={values.payAud} onChange={(event) => updateValue('payAud', event.target.value)} readOnly={isReadOnly} />
+                <span>John's Cut</span>
+                <input type="number" value={values.johnsCut} onChange={(event) => updateValue('johnsCut', event.target.value)} readOnly={isReadOnly} />
               </label>
               <label className="notion-field">
                 <span>Location</span>
@@ -8054,7 +8206,7 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
       jobDate: job?.jobDate || '',
       dueDate: job?.dueDate || '',
       priority: job?.priority || '',
-      payAud: job?.payAud ? String(job.payAud) : '',
+      johnsCut: getJobJohnsCut(job || {}) ? String(getJobJohnsCut(job || {})) : '',
       location: job?.location || '',
       description: job?.description || '',
       notes: job?.notes || '',
@@ -8111,6 +8263,52 @@ function parseAttachmentValue(value: string) {
       return { name: name || `Attachment ${index + 1}`, url };
     })
     .filter((attachment): attachment is { name: string; url: string } => Boolean(attachment));
+}
+
+function getJobJohnsCut(job: Pick<NotionUpcomingJob, 'johnsCut' | 'payAud'>) {
+  return typeof job.johnsCut === 'number'
+    ? job.johnsCut
+    : typeof job.payAud === 'number'
+      ? job.payAud
+      : 0;
+}
+
+function getJobMonthKey(job: Pick<NotionUpcomingJob, 'jobDate' | 'dueDate' | 'shootDate'>) {
+  const date = job.jobDate || job.shootDate || job.dueDate || '';
+  return date ? date.slice(0, 7) : '';
+}
+
+function buildClientBudgetSummaries(report: NotionJobsReport, monthKey: string) {
+  const jobs = report.upcomingJobs || [];
+  return (report.clients || [])
+    .filter((client) => !client.archived)
+    .map((client) => {
+      const clientJobs = jobs.filter((job) => (
+        job.clientId === client.id || namesLikelyMatch(job.client, client.title)
+      ));
+      const monthJobs = clientJobs.filter((job) => getJobMonthKey(job) === monthKey);
+      const budget = typeof client.budget === 'number' ? client.budget : 0;
+      const johnsCutThisMonth = monthJobs.reduce((sum, job) => sum + getJobJohnsCut(job), 0);
+      const johnsCutAllTime = clientJobs.reduce((sum, job) => sum + getJobJohnsCut(job), 0);
+      const remaining = budget - johnsCutThisMonth;
+      const utilization = budget > 0 ? (johnsCutThisMonth / budget) * 100 : 0;
+      return {
+        ...client,
+        budget,
+        jobs: clientJobs,
+        monthJobs,
+        johnsCutThisMonth,
+        johnsCutAllTime,
+        remaining,
+        utilization,
+        activeJobCount: clientJobs.filter((job) => !isCompleteNotionStatus(job.status)).length
+      };
+    })
+    .sort((a, b) => {
+      if (b.johnsCutThisMonth !== a.johnsCutThisMonth) return b.johnsCutThisMonth - a.johnsCutThisMonth;
+      if (b.budget !== a.budget) return b.budget - a.budget;
+      return a.title.localeCompare(b.title);
+    });
 }
 
 function buildCalendarJobs(report: NotionJobsReport): CalendarJob[] {
@@ -9211,6 +9409,7 @@ function screenTitle(screen: Screen) {
     pipeline: 'Pipeline',
     tasks: 'Tasks',
     'upcoming-jobs': 'Upcoming Jobs',
+    clients: 'Clients',
     xero: 'Xero',
     budgeting: 'Budgeting',
     plan: 'Build Plan',
