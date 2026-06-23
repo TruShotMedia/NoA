@@ -260,6 +260,7 @@ type CalendarJob = NotionUpcomingJob & {
   sourceLabel: string;
   task?: NotionTask;
 };
+const EMPTY_UPCOMING_JOBS: NotionUpcomingJob[] = [];
 
 type NotionJobsReport = {
   clients: Array<{
@@ -3140,6 +3141,7 @@ function PipelineBoard({
           mode={editor.mode}
           kind="task"
           item={editor.item}
+          availableJobs={report.upcomingJobs}
           onClose={() => setEditor(null)}
           onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
           onSave={handleTaskSave}
@@ -3395,6 +3397,7 @@ function TasksView({
           mode={editor.mode}
           kind="task"
           item={editor.item}
+          availableJobs={report.upcomingJobs}
           onClose={() => setEditor(null)}
           onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
           onSave={handleTaskSave}
@@ -3749,6 +3752,7 @@ function UpcomingJobsView({
           mode={editor.mode}
           kind={editor.kind}
           item={editor.item}
+          availableJobs={report.upcomingJobs}
           onClose={() => setEditor(null)}
           onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
           onSave={handleJobSave}
@@ -7858,6 +7862,7 @@ function NotionItemModal({
   mode,
   kind,
   item,
+  availableJobs,
   onClose,
   onEdit,
   onSave,
@@ -7866,14 +7871,17 @@ function NotionItemModal({
   mode: NotionEditorMode;
   kind: NotionItemKind;
   item?: (NotionTask | NotionJobsReport['upcomingJobs'][number]) | null;
+  availableJobs?: NotionUpcomingJob[];
   onClose: () => void;
   onEdit: () => void;
   onSave: (values: Record<string, string>) => Promise<void>;
   onArchive?: () => Promise<void>;
 }) {
   const isJob = kind === 'job';
+  const jobOptions = availableJobs ?? EMPTY_UPCOMING_JOBS;
   const [values, setValues] = useState<Record<string, string>>(() => getInitialNotionValues(kind, item));
   const [attachments, setAttachments] = useState<AttachmentDraft[]>(() => attachmentDraftsFromValue(values.attachments));
+  const [jobSearch, setJobSearch] = useState(() => getTaskJobSearchLabel(getInitialNotionValues(kind, item), jobOptions));
   const [isSaving, setIsSaving] = useState(false);
   const [formMessage, setFormMessage] = useState('');
   const firstInputRef = useRef<HTMLInputElement | null>(null);
@@ -7883,6 +7891,33 @@ function NotionItemModal({
     : values.title || (isJob ? 'Job details' : 'Task details');
 
   const updateValue = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }));
+  const selectedTaskJob = useMemo(() => jobOptions.find((job) => job.id === values.jobId) || null, [jobOptions, values.jobId]);
+  const filteredTaskJobs = useMemo(() => {
+    if (isJob || isReadOnly) return [];
+    const search = normalizeMatchText(jobSearch);
+    const selectedFirst = selectedTaskJob ? [selectedTaskJob] : [];
+    const matches = jobOptions.filter((job) => {
+      if (job.id === selectedTaskJob?.id) return false;
+      if (!search) return true;
+      return normalizeMatchText([
+        job.title,
+        job.client,
+        job.status,
+        job.jobDate,
+        job.dueDate,
+        job.location
+      ].filter(Boolean).join(' ')).includes(search);
+    });
+    return [...selectedFirst, ...matches].slice(0, 8);
+  }, [isJob, isReadOnly, jobOptions, jobSearch, selectedTaskJob]);
+  const selectTaskJob = (job: NotionUpcomingJob) => {
+    setValues((current) => ({ ...current, jobId: job.id, jobTitle: job.title }));
+    setJobSearch(job.title);
+  };
+  const clearTaskJob = () => {
+    setValues((current) => ({ ...current, jobId: '', jobTitle: '' }));
+    setJobSearch('');
+  };
   const updateAttachment = (id: string, key: 'name' | 'url', value: string) => {
     setAttachments((current) => current.map((attachment) => (
       attachment.id === id ? { ...attachment, [key]: value } : attachment
@@ -7899,9 +7934,10 @@ function NotionItemModal({
     const nextValues = getInitialNotionValues(kind, item);
     setValues(nextValues);
     setAttachments(attachmentDraftsFromValue(nextValues.attachments));
+    setJobSearch(getTaskJobSearchLabel(nextValues, jobOptions));
     setFormMessage('');
     setIsSaving(false);
-  }, [kind, item, mode]);
+  }, [kind, item, mode, jobOptions]);
 
   useEffect(() => {
     if (mode === 'edit' || mode === 'create') {
@@ -8036,8 +8072,51 @@ function NotionItemModal({
                 </select>
               </label>
               <label className="notion-field">
-                <span>Job relation ID</span>
-                <input value={values.jobId} onChange={(event) => updateValue('jobId', event.target.value)} readOnly={isReadOnly} placeholder="Notion job page id" />
+                <span>Linked job</span>
+                {isReadOnly ? (
+                  <div className="selected-job-pill">
+                    <strong>{selectedTaskJob?.title || values.jobTitle || 'No linked job'}</strong>
+                    {(selectedTaskJob?.client || selectedTaskJob?.jobDate || selectedTaskJob?.status) && (
+                      <small>{[selectedTaskJob?.client, selectedTaskJob?.jobDate, selectedTaskJob?.status].filter(Boolean).join(' - ')}</small>
+                    )}
+                  </div>
+                ) : (
+                  <div className="task-job-picker">
+                    <input
+                      value={jobSearch}
+                      onChange={(event) => {
+                        const nextSearch = event.target.value;
+                        setJobSearch(nextSearch);
+                        if (values.jobId) {
+                          setValues((current) => ({ ...current, jobId: '', jobTitle: '' }));
+                        }
+                      }}
+                      placeholder="Search jobs by title or client"
+                    />
+                    {values.jobId && (
+                      <button type="button" className="job-picker-clear" onClick={clearTaskJob}>
+                        Clear
+                      </button>
+                    )}
+                    <div className="job-picker-results">
+                      {filteredTaskJobs.length === 0 ? (
+                        <p className="job-picker-empty">No matching jobs found.</p>
+                      ) : (
+                        filteredTaskJobs.map((job) => (
+                          <button
+                            type="button"
+                            className={job.id === values.jobId ? 'job-picker-option selected' : 'job-picker-option'}
+                            key={job.id}
+                            onClick={() => selectTaskJob(job)}
+                          >
+                            <strong>{job.title}</strong>
+                            <small>{[job.client, job.jobDate || job.dueDate, job.status].filter(Boolean).join(' - ') || 'No extra details'}</small>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </label>
               <label className="notion-field">
                 <span>Assigned To</span>
@@ -8218,6 +8297,7 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
   return {
     title: task?.title || '',
     jobId: task?.jobId || '',
+    jobTitle: task?.jobTitle || '',
     assignedTo: task?.assignedTo || '',
     status: normalizeNotionStatusName(task?.status || 'Not Started'),
     dueDate: task?.dueDate || '',
@@ -8229,6 +8309,12 @@ function getInitialNotionValues(kind: NotionItemKind, item?: (NotionTask | Notio
     notes: task?.notes || '',
     attachments: formatAttachmentValue(task?.attachments || [])
   };
+}
+
+function getTaskJobSearchLabel(values: Record<string, string>, jobs: NotionUpcomingJob[]) {
+  if (!values.jobId) return values.jobTitle || '';
+  const selectedJob = jobs.find((job) => job.id === values.jobId);
+  return selectedJob?.title || values.jobTitle || '';
 }
 
 function formatAttachmentValue(attachments: Array<{ name: string; url: string }>) {

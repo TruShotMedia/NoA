@@ -2966,6 +2966,70 @@ h3 {
   opacity: 1;
 }
 
+.task-job-picker {
+  display: grid;
+  gap: 9px;
+}
+
+.job-picker-clear {
+  justify-self: start;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 11px;
+}
+
+.job-picker-results {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.job-picker-option,
+.selected-job-pill {
+  border: 0;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.job-picker-option {
+  cursor: pointer;
+}
+
+.job-picker-option:hover,
+.job-picker-option.selected {
+  background: rgba(147, 197, 253, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(191, 219, 254, 0.28);
+}
+
+.job-picker-option strong,
+.selected-job-pill strong {
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.job-picker-option small,
+.selected-job-pill small,
+.job-picker-empty {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .notion-checkbox {
   align-items: center;
   background: rgba(0, 0, 0, 0.18);
