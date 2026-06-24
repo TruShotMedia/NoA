@@ -7884,7 +7884,8 @@ h3 {
   .mobile-sidebar-menu {
     display: block;
     inset: 0;
-    overscroll-behavior-x: contain;
+    overflow: hidden;
+    overscroll-behavior: contain;
     position: fixed;
     touch-action: pan-y;
     z-index: 45;
@@ -7910,10 +7911,14 @@ h3 {
     gap: 18px;
     left: 0;
     max-width: min(86vw, 360px);
+    min-width: 0;
+    overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 18px 14px calc(18px + env(safe-area-inset-bottom));
     position: absolute;
     top: 0;
+    touch-action: pan-y;
     transform: translate3d(var(--drawer-x, 0), 0, 0);
     transition: transform 260ms cubic-bezier(0.2, 0.82, 0.2, 1);
     will-change: transform;
@@ -7991,6 +7996,9 @@ h3 {
   .mobile-sidebar-subpages {
     display: grid;
     gap: 7px;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .mobile-sidebar-section > span {
@@ -8011,6 +8019,8 @@ h3 {
     display: flex;
     gap: 10px;
     min-height: 44px;
+    min-width: 0;
+    overflow: hidden;
     padding: 10px;
     text-align: left;
     width: 100%;
@@ -8018,6 +8028,10 @@ h3 {
 
   .mobile-sidebar-section button span {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mobile-sidebar-section button.active {
@@ -8028,6 +8042,7 @@ h3 {
   .mobile-sidebar-subpages {
     border-left: 1px solid rgba(255, 255, 255, 0.08);
     margin-left: 18px;
+    max-width: calc(100% - 18px);
     padding-left: 8px;
   }
 

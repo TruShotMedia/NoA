@@ -1190,9 +1190,8 @@ function App() {
     const touch = event.touches[0];
     const sheetWidth = Math.min(window.innerWidth * 0.86, 360);
     const canOpenFromEdge = !isMoreMenuOpen && touch.clientX <= 34;
-    const canCloseFromSheet = isMoreMenuOpen && touch.clientX <= sheetWidth;
 
-    if (!canOpenFromEdge && !canCloseFromSheet) {
+    if (!canOpenFromEdge) {
       resetMobileMenuSwipe();
       return;
     }
