@@ -12,6 +12,8 @@ import {
   CircleAlert,
   CalendarDays,
   Clock3,
+  Cloud,
+  CloudSun,
   Copy,
   CreditCard,
   Database,
@@ -21,9 +23,12 @@ import {
   BriefcaseBusiness,
   Kanban,
   LockKeyhole,
+  Mail,
   ListTodo,
   MessageSquareText,
   Menu,
+  MonitorSmartphone,
+  Music,
   Plus,
   PieChart,
   Pause,
@@ -56,7 +61,7 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero'];
+const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
 type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -87,7 +92,7 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
-const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero'];
+const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -2289,6 +2294,7 @@ function App() {
             setSection={setBudgetSection}
           />
         )}
+        {screen === 'map' && <MapView />}
         {screen === 'plan' && <Plan />}
         {screen === 'memory' && <Memory notes={notes} />}
         {screen === 'automations' && <Automations />}
@@ -8989,6 +8995,448 @@ function Automations() {
   );
 }
 
+type MapMode = 'overview' | 'live' | 'debug' | 'focus';
+type MapNodeStatus = 'connected' | 'syncing' | 'idle' | 'error' | 'needs-auth';
+type MapNodeCategory = 'AI / Reasoning' | 'Data Sources' | 'App Backend' | 'Communication' | 'Display Outputs' | 'Automation / Deployment';
+type MapDirection = 'in' | 'out' | 'two-way' | 'dependency';
+
+type IntegrationNode = {
+  id: string;
+  label: string;
+  type: MapNodeCategory;
+  description: string;
+  icon: React.ElementType;
+  status: MapNodeStatus;
+  lastSync: string;
+  health: number;
+  metadata: string;
+  data: string[];
+  features: string[];
+  config: string[];
+  error?: string;
+  x: number;
+  y: number;
+  dominant?: boolean;
+};
+
+type IntegrationConnection = {
+  source: string;
+  target: string;
+  label: string;
+  direction: MapDirection;
+  status: MapNodeStatus;
+  animated: boolean;
+  description: string;
+};
+
+const mapModes: Array<{ id: MapMode; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'live', label: 'Live' },
+  { id: 'debug', label: 'Debug' },
+  { id: 'focus', label: 'Focus' }
+];
+
+const mapNodes: IntegrationNode[] = [
+  {
+    id: 'core',
+    label: 'NoA Core',
+    type: 'AI / Reasoning',
+    description: 'AI reasoning, policy, orchestration, and user intent layer.',
+    icon: BrainCircuit,
+    status: 'connected',
+    lastSync: 'Live',
+    health: 96,
+    metadata: 'Reasoning hub',
+    data: ['Tool routing', 'User context', 'Approval policy', 'Response planning'],
+    features: ['Noah chat', 'Today card', 'Map orchestration', 'Automation decisions'],
+    config: ['OPENAI_API_KEY', 'NOA_PIN_CODE'],
+    x: 500,
+    y: 310,
+    dominant: true
+  },
+  {
+    id: 'notion',
+    label: 'Notion',
+    type: 'Data Sources',
+    description: 'Tasks, jobs, notes, clients, pipeline state, and linked work context.',
+    icon: ListTodo,
+    status: 'connected',
+    lastSync: '2 min ago',
+    health: 91,
+    metadata: 'Tasks / jobs / clients',
+    data: ['Tasks', 'Jobs', 'Clients', 'Pipeline statuses', 'Google Drive links'],
+    features: ['Pipeline', 'Upcoming jobs', 'Clients', 'Today focus'],
+    config: ['NOTION_TOKEN', 'NOTION_TASKS_DATABASE_ID', 'NOTION_JOBS_DATABASE_ID', 'NOTION_CLIENTS_DATABASE_ID'],
+    x: 220,
+    y: 130
+  },
+  {
+    id: 'supabase',
+    label: 'Supabase',
+    type: 'App Backend',
+    description: 'Application database, private settings, auth support, and budget data bridge.',
+    icon: Database,
+    status: 'connected',
+    lastSync: '1 min ago',
+    health: 94,
+    metadata: 'Database / settings',
+    data: ['Budget rows', 'Private tokens', 'Integration settings', 'App state'],
+    features: ['Budgeting', 'Xero token storage', 'Integration setup', 'Secure backend reads'],
+    config: ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'],
+    x: 520,
+    y: 95
+  },
+  {
+    id: 'gmail',
+    label: 'Gmail',
+    type: 'Communication',
+    description: 'Email intake, scheduled tenant notices, invoice context, and user communication.',
+    icon: Mail,
+    status: 'needs-auth',
+    lastSync: 'Waiting for OAuth',
+    health: 62,
+    metadata: 'Email input',
+    data: ['Inbox signals', 'Tenant emails', 'Receipts', 'Client threads'],
+    features: ['Budget automation', 'Email intake', 'Noah summaries'],
+    config: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'],
+    error: 'OAuth credentials are required before automated Gmail actions can run.',
+    x: 785,
+    y: 130
+  },
+  {
+    id: 'calendar',
+    label: 'Google Calendar',
+    type: 'Data Sources',
+    description: 'Schedule awareness for job dates, reminders, and day planning.',
+    icon: CalendarDays,
+    status: 'idle',
+    lastSync: 'Ready',
+    health: 76,
+    metadata: 'Schedule awareness',
+    data: ['Events', 'Job reminders', 'Availability windows'],
+    features: ['Today card', 'Upcoming jobs', 'Planning'],
+    config: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+    x: 835,
+    y: 310
+  },
+  {
+    id: 'xero',
+    label: 'Xero',
+    type: 'Data Sources',
+    description: 'Invoices, bills, contacts, accounts, cashflow, and finance analytics.',
+    icon: CreditCard,
+    status: 'connected',
+    lastSync: '4 min ago',
+    health: 88,
+    metadata: 'Finance layer',
+    data: ['Invoices', 'Bills', 'Contacts', 'Balances', 'Cashflow'],
+    features: ['Xero overview', 'Bills', 'Invoices', 'Client finance intelligence'],
+    config: ['XERO_CLIENT_ID', 'XERO_CLIENT_SECRET', 'XERO_TENANT_ID'],
+    x: 730,
+    y: 520
+  },
+  {
+    id: 'vercel',
+    label: 'Vercel',
+    type: 'Automation / Deployment',
+    description: 'Deployment, hosting, serverless runtime, and public app delivery.',
+    icon: Cloud,
+    status: 'connected',
+    lastSync: 'Deployment live',
+    health: 87,
+    metadata: 'Runtime / hosting',
+    data: ['Deployments', 'Runtime health', 'Environment variables'],
+    features: ['Remote mobile access', 'Serverless APIs', 'Public PWA'],
+    config: ['VERCEL_PROJECT_ID', 'VERCEL_ENVIRONMENT'],
+    x: 500,
+    y: 535
+  },
+  {
+    id: 'weather',
+    label: 'Weather',
+    type: 'Data Sources',
+    description: 'Live weather telemetry for shoot planning and job-day awareness.',
+    icon: CloudSun,
+    status: 'syncing',
+    lastSync: 'Updating',
+    health: 82,
+    metadata: 'Telemetry',
+    data: ['Forecast', 'Conditions', 'Shoot-day risk'],
+    features: ['HubGauge', 'Today card', 'Job preparation'],
+    config: ['WEATHER_API_KEY'],
+    x: 260,
+    y: 510
+  },
+  {
+    id: 'spotify',
+    label: 'Spotify',
+    type: 'Data Sources',
+    description: 'Currently playing media state and ambience signals.',
+    icon: Music,
+    status: 'idle',
+    lastSync: 'Idle',
+    health: 73,
+    metadata: 'Media state',
+    data: ['Track', 'Playback state', 'Device context'],
+    features: ['HubGauge', 'Ambient dashboard'],
+    config: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN'],
+    x: 155,
+    y: 320
+  },
+  {
+    id: 'dashboards',
+    label: 'Dashboard Displays',
+    type: 'Display Outputs',
+    description: 'Screens, tablets, widgets, kiosk views, and visual output surfaces.',
+    icon: MonitorSmartphone,
+    status: 'connected',
+    lastSync: 'Live',
+    health: 90,
+    metadata: 'Output surfaces',
+    data: ['Today view', 'HubGauge', 'Map', 'Calendar', 'Finance cards'],
+    features: ['Tablet kiosk', 'Mobile PWA', 'Desktop command centre'],
+    config: ['PWA_MANIFEST', 'SERVICE_WORKER_CACHE'],
+    x: 845,
+    y: 455
+  }
+];
+
+const mapConnections: IntegrationConnection[] = [
+  { source: 'notion', target: 'core', label: 'Work context', direction: 'in', status: 'connected', animated: true, description: 'Reads tasks, jobs, clients, notes, and pipeline updates.' },
+  { source: 'core', target: 'notion', label: 'Task updates', direction: 'out', status: 'connected', animated: true, description: 'Pushes status changes, edits, new tasks, and linked job updates.' },
+  { source: 'supabase', target: 'core', label: 'App state', direction: 'two-way', status: 'connected', animated: true, description: 'Stores private settings, budget records, tokens, and app state.' },
+  { source: 'gmail', target: 'core', label: 'Email intake', direction: 'in', status: 'needs-auth', animated: false, description: 'Will read approved email signals and prepare communication workflows.' },
+  { source: 'core', target: 'gmail', label: 'Approved sends', direction: 'out', status: 'needs-auth', animated: false, description: 'Sends tenant notices and drafted messages only after configured approval.' },
+  { source: 'calendar', target: 'core', label: 'Schedule awareness', direction: 'in', status: 'idle', animated: false, description: 'Provides event context and planning windows.' },
+  { source: 'xero', target: 'core', label: 'Finance intelligence', direction: 'in', status: 'connected', animated: true, description: 'Pulls invoices, bills, contacts, balances, and cashflow analytics.' },
+  { source: 'core', target: 'vercel', label: 'Runtime dependency', direction: 'dependency', status: 'connected', animated: false, description: 'Uses Vercel deployment and serverless functions for remote access.' },
+  { source: 'weather', target: 'core', label: 'Shoot telemetry', direction: 'in', status: 'syncing', animated: true, description: 'Feeds weather signals into shoot-day planning.' },
+  { source: 'spotify', target: 'core', label: 'Media state', direction: 'in', status: 'idle', animated: false, description: 'Feeds current playback state into display surfaces.' },
+  { source: 'core', target: 'dashboards', label: 'Visual output', direction: 'out', status: 'connected', animated: true, description: 'Publishes processed context into desktop, tablet, mobile, and kiosk views.' },
+  { source: 'notion', target: 'dashboards', label: 'Job calendar', direction: 'out', status: 'connected', animated: true, description: 'Surfaces upcoming jobs and task calendars as readable dashboards.' },
+  { source: 'xero', target: 'dashboards', label: 'Finance views', direction: 'out', status: 'connected', animated: true, description: 'Displays invoice, bill, cashflow, and client finance analytics.' },
+  { source: 'supabase', target: 'dashboards', label: 'Budget views', direction: 'out', status: 'connected', animated: true, description: 'Displays ledger, mortgage, fuel, and budget analytics.' }
+];
+
+function MapView() {
+  const [mode, setMode] = useState<MapMode>('overview');
+  const [selectedNodeId, setSelectedNodeId] = useState('core');
+  const [hoveredNodeId, setHoveredNodeId] = useState('');
+  const [hoveredConnectionIndex, setHoveredConnectionIndex] = useState<number | null>(null);
+  const selectedNode = mapNodes.find((node) => node.id === selectedNodeId) || mapNodes[0];
+  const activeNodeId = hoveredNodeId || (mode === 'focus' ? selectedNodeId : '');
+  const categorySummaries = useMemo(() => {
+    const categories: MapNodeCategory[] = ['AI / Reasoning', 'Data Sources', 'App Backend', 'Communication', 'Display Outputs', 'Automation / Deployment'];
+    return categories.map((category) => {
+      const nodes = mapNodes.filter((node) => node.type === category);
+      const healthy = nodes.filter((node) => ['connected', 'syncing', 'idle'].includes(node.status)).length;
+      return { category, count: nodes.length, healthy };
+    });
+  }, []);
+
+  const connectedIds = useMemo(() => {
+    if (!activeNodeId) return new Set<string>();
+    return new Set(mapConnections.flatMap((connection) => (
+      connection.source === activeNodeId || connection.target === activeNodeId
+        ? [connection.source, connection.target]
+        : []
+    )));
+  }, [activeNodeId]);
+
+  return (
+    <section className="map-page page-fade">
+      <article className="map-hero">
+        <div>
+          <PanelTitle eyebrow="System intelligence" title="Orchestration Map" />
+          <p className="section-copy">
+            A live-facing view of how NoA reasons across integrations, data sources, automation surfaces, and dashboards.
+          </p>
+        </div>
+        <div className="map-mode-switcher" role="tablist" aria-label="Map mode">
+          {mapModes.map((item) => (
+            <button key={item.id} className={mode === item.id ? 'active' : ''} onClick={() => setMode(item.id)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </article>
+
+      <section className={`map-shell map-mode-${mode}`}>
+        <aside className="map-sidebar">
+          <PanelTitle eyebrow="Categories" title="Integration groups" />
+          <div className="map-category-list">
+            {categorySummaries.map((summary) => (
+              <button
+                key={summary.category}
+                onClick={() => {
+                  const firstNode = mapNodes.find((node) => node.type === summary.category);
+                  if (firstNode) setSelectedNodeId(firstNode.id);
+                  setMode('focus');
+                }}
+              >
+                <span>{summary.category}</span>
+                <strong>{summary.healthy}/{summary.count}</strong>
+              </button>
+            ))}
+          </div>
+          <div className="map-health-card">
+            <span>System health</span>
+            <strong>{Math.round(mapNodes.reduce((sum, node) => sum + node.health, 0) / mapNodes.length)}%</strong>
+            <small>{mapConnections.filter((connection) => connection.animated).length} active pathways</small>
+          </div>
+        </aside>
+
+        <div className="map-canvas-shell">
+          <div className="map-canvas-toolbar">
+            <span>{mode === 'debug' ? 'Latency and auth view' : mode === 'live' ? 'Animated activity view' : mode === 'focus' ? 'Focused dependency path' : 'Complete ecosystem'}</span>
+            <div>
+              <button type="button" aria-label="Zoom out">-</button>
+              <button type="button" aria-label="Reset zoom">100%</button>
+              <button type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+
+          <div className="map-canvas" onMouseLeave={() => setHoveredNodeId('')}>
+            <svg className="map-connections" viewBox="0 0 1000 620" aria-hidden="true">
+              <defs>
+                <marker id="map-arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L8,3 z" />
+                </marker>
+                <marker id="map-arrow-start" markerWidth="10" markerHeight="10" refX="1" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M8,0 L8,6 L0,3 z" />
+                </marker>
+              </defs>
+              {mapConnections.map((connection, index) => {
+                const source = mapNodes.find((node) => node.id === connection.source);
+                const target = mapNodes.find((node) => node.id === connection.target);
+                if (!source || !target) return null;
+                const path = getMapConnectionPath(source, target, index);
+                const isRelated = !activeNodeId || connection.source === activeNodeId || connection.target === activeNodeId;
+                const isHovered = hoveredConnectionIndex === index;
+                const shouldAnimate = connection.animated && (mode === 'live' || mode === 'overview') && isRelated;
+                return (
+                  <g
+                    key={`${connection.source}-${connection.target}-${connection.label}`}
+                    className={`map-connection ${statusClass(connection.status)} ${isRelated ? 'related' : 'dimmed'} ${isHovered ? 'hovered' : ''}`}
+                    onMouseEnter={() => setHoveredConnectionIndex(index)}
+                    onMouseLeave={() => setHoveredConnectionIndex(null)}
+                  >
+                    <path className="map-connection-hit" d={path} />
+                    <path
+                      id={`map-path-${index}`}
+                      className="map-connection-line"
+                      d={path}
+                      markerEnd={connection.direction !== 'in' ? 'url(#map-arrow)' : undefined}
+                      markerStart={connection.direction === 'two-way' || connection.direction === 'in' ? 'url(#map-arrow-start)' : undefined}
+                    />
+                    {shouldAnimate && (
+                      <circle r="4" className="map-flow-dot">
+                        <animateMotion dur={`${3.4 + (index % 4) * 0.35}s`} repeatCount="indefinite">
+                          <mpath href={`#map-path-${index}`} />
+                        </animateMotion>
+                      </circle>
+                    )}
+                    {(isHovered || (mode === 'debug' && connection.status !== 'connected')) && (
+                      <text className="map-connection-label" x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 12}>
+                        {connection.label}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+
+            {mapNodes.map((node) => {
+              const Icon = node.icon;
+              const isActive = selectedNodeId === node.id || hoveredNodeId === node.id;
+              const isRelated = !activeNodeId || connectedIds.has(node.id) || node.id === activeNodeId;
+              const isDimmed = mode === 'focus' ? !connectedIds.has(node.id) : Boolean(activeNodeId && !isRelated);
+              return (
+                <button
+                  key={node.id}
+                  className={`map-node ${node.dominant ? 'core' : ''} ${statusClass(node.status)} ${isActive ? 'active' : ''} ${isDimmed ? 'dimmed' : ''}`}
+                  style={{ left: `${node.x}px`, top: `${node.y}px` }}
+                  onClick={() => {
+                    setSelectedNodeId(node.id);
+                    if (mode === 'overview') setMode('focus');
+                  }}
+                  onMouseEnter={() => setHoveredNodeId(node.id)}
+                  onMouseLeave={() => setHoveredNodeId('')}
+                >
+                  <span className="map-node-icon"><Icon size={node.dominant ? 28 : 19} /></span>
+                  <span className="map-node-copy">
+                    <strong>{node.label}</strong>
+                    <small>{node.description}</small>
+                  </span>
+                  <span className={`map-node-status ${statusClass(node.status)}`}>{node.status.replace('-', ' ')}</span>
+                  <span className="map-node-meta">{node.lastSync} / {node.metadata}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <aside className="map-inspector">
+          <div className="map-inspector-head">
+            <span className="map-node-icon">{React.createElement(selectedNode.icon, { size: 20 })}</span>
+            <div>
+              <p className="eyebrow">{selectedNode.type}</p>
+              <h3>{selectedNode.label}</h3>
+            </div>
+          </div>
+          <div className="map-inspector-status">
+            <span className={`map-node-status ${statusClass(selectedNode.status)}`}>{selectedNode.status.replace('-', ' ')}</span>
+            <strong>{selectedNode.health}% health</strong>
+          </div>
+          <p>{selectedNode.description}</p>
+          <MapInspectorBlock title="Provides" items={selectedNode.data} />
+          <MapInspectorBlock title="Used by" items={selectedNode.features} />
+          <MapInspectorBlock title="Config keys" items={selectedNode.config} />
+          <div className="map-inspector-meta">
+            <span>Last sync</span>
+            <strong>{selectedNode.lastSync}</strong>
+          </div>
+          {selectedNode.error && (
+            <div className="map-error-box">
+              <span>Last error</span>
+              <p>{selectedNode.error}</p>
+            </div>
+          )}
+        </aside>
+      </section>
+    </section>
+  );
+}
+
+function MapInspectorBlock({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="map-inspector-block">
+      <span>{title}</span>
+      <div>
+        {items.map((item) => <small key={item}>{item}</small>)}
+      </div>
+    </div>
+  );
+}
+
+function getMapConnectionPath(source: IntegrationNode, target: IntegrationNode, index: number) {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const distance = Math.max(1, Math.hypot(dx, dy));
+  const curve = index % 2 === 0 ? 0.18 : -0.18;
+  const offsetX = (-dy / distance) * distance * curve;
+  const offsetY = (dx / distance) * distance * curve;
+  const c1x = source.x + dx * 0.36 + offsetX;
+  const c1y = source.y + dy * 0.36 + offsetY;
+  const c2x = source.x + dx * 0.64 + offsetX;
+  const c2y = source.y + dy * 0.64 + offsetY;
+  return `M ${source.x} ${source.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${target.x} ${target.y}`;
+}
+
+function statusClass(status: MapNodeStatus) {
+  return `status-${status}`;
+}
+
 function NetworkView() {
   return (
     <section className="network page-fade">
@@ -9498,6 +9946,7 @@ function screenTitle(screen: Screen) {
     clients: 'Clients',
     xero: 'Xero',
     budgeting: 'Budgeting',
+    map: 'Map',
     plan: 'Build Plan',
     memory: 'Memory',
     automations: 'Automations',
