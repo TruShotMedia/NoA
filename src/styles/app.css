@@ -16,6 +16,7 @@
   --violet: #a78bfa;
   --danger: #fb7185;
   --shadow: 0 28px 90px rgba(0, 0, 0, 0.24);
+  --page-gap: 18px;
 }
 
 * {
@@ -355,7 +356,7 @@ p {
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(190px, auto) minmax(0, 1fr) auto;
-  margin-bottom: 16px;
+  margin-bottom: calc(var(--page-gap) + 14px);
   padding: 8px 10px;
   position: sticky;
   top: 14px;
@@ -488,7 +489,7 @@ p {
   align-items: center;
   display: flex;
   gap: 8px;
-  margin: -4px 0 18px;
+  margin: 0 0 var(--page-gap);
   overflow-x: auto;
   padding-bottom: 4px;
 }
@@ -584,7 +585,7 @@ h3 {
   animation: fade 320ms ease both;
   align-content: start;
   display: grid;
-  gap: 18px;
+  gap: var(--page-gap);
 }
 
 .page-fade > * {
@@ -1384,7 +1385,7 @@ h3 {
 }
 
 .map-page {
-  gap: 16px;
+  gap: var(--page-gap);
 }
 
 .map-hero {
@@ -1592,6 +1593,15 @@ h3 {
   padding: 4px;
 }
 
+.map-canvas-toolbar div span {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.72);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 0 8px;
+}
+
 .map-canvas-toolbar button {
   border: 0;
   border-radius: 999px;
@@ -1612,12 +1622,18 @@ h3 {
     linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
   background-size: auto, auto, 34px 34px, 34px 34px;
   border-radius: 0 0 24px 24px;
-  min-height: 620px;
-  min-width: 1000px;
+  cursor: grab;
+  min-height: clamp(520px, 62vh, 720px);
+  min-width: 0;
+  width: 100%;
   overflow: hidden;
   position: relative;
   touch-action: none;
   user-select: none;
+}
+
+.map-canvas:active {
+  cursor: grabbing;
 }
 
 .map-viewport-inner {
@@ -1626,6 +1642,7 @@ h3 {
   position: absolute;
   top: 0;
   transform-origin: 50% 50%;
+  will-change: transform;
   width: 1000px;
 }
 
@@ -7084,6 +7101,7 @@ h3 {
     align-items: flex-start;
     display: flex;
     flex-direction: column;
+    margin-bottom: var(--page-gap);
     position: static;
     padding: 12px;
   }
@@ -7295,7 +7313,7 @@ h3 {
 
   .map-canvas-shell {
     order: 2;
-    overflow-x: auto;
+    overflow: hidden;
   }
 
   .map-inspector {
@@ -7367,11 +7385,9 @@ h3 {
   }
 
   .map-canvas {
-    min-width: 930px;
-  }
-
-  .map-connections {
-    width: 930px;
+    min-height: 560px;
+    min-width: 0;
+    width: 100%;
   }
 
   body {
