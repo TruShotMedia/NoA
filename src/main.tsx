@@ -2156,8 +2156,8 @@ function App() {
           <div className="desktop-brand">
             <div className="brand-mark">NoA</div>
             <div>
-              <strong>NoA</strong>
-              <span>Personal command centre</span>
+              <strong>Noetic Advisor</strong>
+              <span>Command Centre</span>
             </div>
           </div>
           <DesktopTopNav
@@ -2666,8 +2666,8 @@ function MobileNav({
               <div className="brand mobile-brand">
                 <div className="brand-mark">NoA</div>
                 <div>
-                  <strong>NoA</strong>
-                  <span>Personal command centre</span>
+                  <strong>Noetic Advisor</strong>
+                  <span>Command Centre</span>
                 </div>
               </div>
               <button onClick={closeMoreMenu} aria-label="Close navigation"><X size={18} /></button>

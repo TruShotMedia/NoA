@@ -344,19 +344,19 @@ p {
   height: 100vh;
   height: 100dvh;
   overflow: auto;
-  padding: 24px 28px 28px;
+  padding: 18px 28px 28px;
 }
 
 .topbar {
   align-items: center;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
+  border-radius: 24px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), 0 24px 70px rgba(0, 0, 0, 0.18);
   display: grid;
-  gap: 14px 18px;
+  gap: 12px;
   grid-template-columns: minmax(190px, auto) minmax(0, 1fr) auto;
-  margin-bottom: 18px;
-  padding: 12px;
+  margin-bottom: 16px;
+  padding: 8px 10px;
   position: sticky;
   top: 14px;
   z-index: 40;
@@ -364,15 +364,13 @@ p {
 }
 
 .topbar-title {
-  grid-column: 1 / -1;
-  min-width: 0;
-  padding: 2px 6px 4px;
+  display: none;
 }
 
 .desktop-top-nav {
   align-items: center;
   background: rgba(255, 255, 255, 0.07);
-  border-radius: 20px;
+  border-radius: 18px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075);
   display: flex;
   gap: 4px;
@@ -380,7 +378,7 @@ p {
   max-width: 100%;
   min-width: 0;
   overflow: visible;
-  padding: 5px;
+  padding: 4px;
 }
 
 .desktop-top-nav > button,
@@ -394,8 +392,8 @@ p {
   font-size: 13px;
   font-weight: 850;
   gap: 6px;
-  min-height: 39px;
-  padding: 10px 13px;
+  min-height: 36px;
+  padding: 8px 12px;
   white-space: nowrap;
 }
 
@@ -476,9 +474,9 @@ p {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075);
   color: rgba(255, 255, 255, 0.75);
   display: inline-flex;
-  height: 42px;
+  height: 38px;
   justify-content: center;
-  width: 42px;
+  width: 38px;
 }
 
 .desktop-utility-actions button:hover {
@@ -544,7 +542,7 @@ h3 {
 }
 
 .top-actions {
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   grid-column: 1 / -1;
   justify-content: flex-end;
@@ -7087,10 +7085,16 @@ h3 {
     display: flex;
     flex-direction: column;
     position: static;
+    padding: 12px;
   }
 
   .topbar-title {
+    display: block;
     padding: 0;
+  }
+
+  .top-actions {
+    display: flex;
   }
 
   .page-switcher {
