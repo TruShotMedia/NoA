@@ -1,7 +1,9 @@
 const {
   getBudgetSummary,
   manageBudgetItem,
+  manageGroceryItem,
   saveBudgetSettings,
+  saveBudgetProfile,
   saveBudgetEmailSettings,
   sendBudgetTenantEmail,
   runBudgetTenantEmailSchedule,
@@ -22,6 +24,16 @@ module.exports = async function handler(req, res) {
   if (action === 'item') {
     if (req.method !== 'POST') return methodNotAllowed(res);
     return sendJson(res, 200, await manageBudgetItem(req));
+  }
+
+  if (action === 'grocery') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return sendJson(res, 200, await manageGroceryItem(req));
+  }
+
+  if (action === 'profile') {
+    if (req.method !== 'POST') return methodNotAllowed(res);
+    return sendJson(res, 200, await saveBudgetProfile(req));
   }
 
   if (action === 'email-settings') {
@@ -46,6 +58,6 @@ module.exports = async function handler(req, res) {
 
   return sendJson(res, 404, {
     ok: false,
-    message: 'Unknown budget route. Use /api/budget/summary, /api/budget/item, /api/budget/settings, /api/budget/email-settings, /api/budget/tenant-email, or /api/budget/tenant-email-schedule.'
+    message: 'Unknown budget route. Use /api/budget/summary, /api/budget/item, /api/budget/grocery, /api/budget/profile, /api/budget/settings, /api/budget/email-settings, /api/budget/tenant-email, or /api/budget/tenant-email-schedule.'
   });
 };

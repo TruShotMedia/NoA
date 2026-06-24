@@ -466,6 +466,18 @@ interface Window {
           active: boolean;
         }>;
       };
+      groceryItems: Array<{
+        id: string;
+        item: string;
+        quantity: string;
+        category: string;
+        addedBy: string;
+        addedByUserId?: string;
+        completed: boolean;
+        completedAt?: string;
+        createdAt?: string;
+        updatedAt?: string;
+      }>;
       tenantEmailActivity: Array<{
         id: string;
         createdAt: string;
@@ -497,6 +509,15 @@ interface Window {
       message: string;
       item?: unknown;
     }>;
+    manageGroceryItem?: (payload: {
+      action: 'create' | 'update' | 'delete';
+      id?: string;
+      values?: Record<string, unknown>;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      item?: unknown;
+    }>;
     saveBudgetSettings?: (payload: {
       defaultMode?: string;
       categories?: string[];
@@ -506,6 +527,13 @@ interface Window {
       ok: boolean;
       message: string;
       settings?: unknown;
+    }>;
+    saveBudgetProfile?: (payload: {
+      displayName?: string;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      owner?: unknown;
     }>;
     saveBudgetEmailSettings?: (payload: {
       settings: Record<string, unknown>;

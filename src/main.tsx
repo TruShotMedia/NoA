@@ -64,13 +64,14 @@ import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
 const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
-type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'fuel' | 'settings' | 'automation';
+type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'groceries' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', detail: 'Cashflow, analytics, and attention cards', icon: PieChart },
   { id: 'ledger', label: 'Ledger', detail: 'Income, expenses, debts, savings, and assets', icon: Database },
   { id: 'calendar', label: 'Calendar', detail: 'Scheduled payments and transfer planning', icon: CalendarDays },
   { id: 'property', label: 'Property', detail: 'Mortgage costs, tenant offsets, and tenant billing', icon: Building2 },
+  { id: 'groceries', label: 'Groceries List', detail: 'Shared house shopping list', icon: ListTodo },
   { id: 'fuel', label: 'Fuel', detail: 'Fuel budget calculator and expense setup', icon: Activity },
   { id: 'settings', label: 'Settings', detail: 'Categories, defaults, cloud status, and checklist', icon: ServerCog },
   { id: 'automation', label: 'Automation', detail: 'Email activity and schedule checks', icon: Zap }
@@ -591,6 +592,19 @@ type BudgetEmailActivity = {
   message: string;
 };
 
+type GroceryItem = {
+  id: string;
+  item: string;
+  quantity: string;
+  category: string;
+  addedBy: string;
+  addedByUserId?: string;
+  completed: boolean;
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type BudgetTenantBillingRow = {
   tenant: BudgetTenant;
   mortgage: BudgetMortgageBill | null;
@@ -614,6 +628,7 @@ type BudgetReport = {
   };
   emailSettings: BudgetEmailSettings;
   tenantEmailActivity: BudgetEmailActivity[];
+  groceryItems: GroceryItem[];
   settings: Record<string, unknown> | null;
 };
 
@@ -786,6 +801,7 @@ const emptyBudgetReport: BudgetReport = {
     tenants: []
   },
   tenantEmailActivity: [],
+  groceryItems: [],
   settings: null
 };
 
@@ -825,7 +841,9 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     getXeroSummary: () => fetch('/api/xero/summary').then((response) => response.json()),
     getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
+    manageGroceryItem: (payload) => postJson('/api/budget/grocery', payload),
     saveBudgetSettings: (payload) => postJson('/api/budget/settings', payload),
+    saveBudgetProfile: (payload) => postJson('/api/budget/profile', payload),
     saveBudgetEmailSettings: (payload) => postJson('/api/budget/email-settings', payload),
     sendBudgetTenantEmail: (payload) => postJson('/api/budget/tenant-email', payload),
     runBudgetTenantEmailSchedule: (payload) => postJson('/api/budget/tenant-email-schedule', payload),
@@ -4809,6 +4827,14 @@ function BudgetingView({
         <BudgetSchedulePage tables={filteredTables} />
       )}
 
+      {section === 'groceries' && (
+        <BudgetGroceriesPage
+          items={report.groceryItems}
+          owner={report.owner}
+          onMutated={onMutated}
+        />
+      )}
+
       {section === 'ledger' && ledgerSection === 'debts' && (
         <BudgetLedgerPage
           eyebrow="Ledger debt strategy"
@@ -4878,6 +4904,7 @@ function BudgetingView({
           setShowInactiveRows={setShowInactiveRows}
           refreshBudget={refreshBudget}
           isLoading={isLoading}
+          onMutated={onMutated}
         />
       )}
 
@@ -5551,6 +5578,210 @@ function BudgetFuelPage({
   );
 }
 
+function BudgetGroceriesPage({
+  items,
+  owner,
+  onMutated
+}: {
+  items: GroceryItem[];
+  owner: BudgetOwner;
+  onMutated: () => void;
+}) {
+  const [itemName, setItemName] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [category, setCategory] = useState('General');
+  const [message, setMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [updatingId, setUpdatingId] = useState('');
+  const activeItems = items.filter((item) => !item.completed);
+  const completedItems = items.filter((item) => item.completed);
+  const categories = ['General', 'Fresh food', 'Pantry', 'Household', 'Personal', 'Other'];
+
+  const addItem = async () => {
+    const cleanedName = itemName.trim();
+    if (!cleanedName) {
+      setMessage('Add an item name first.');
+      return;
+    }
+    if (!window.noa?.manageGroceryItem) {
+      setMessage('Grocery list needs the Vercel/desktop API.');
+      return;
+    }
+    setIsSaving(true);
+    setMessage('');
+    const response = await window.noa.manageGroceryItem({
+      action: 'create',
+      values: {
+        item: cleanedName,
+        quantity: quantity.trim(),
+        category,
+        addedBy: owner.displayName || owner.email
+      }
+    });
+    setIsSaving(false);
+    setMessage(response.message || (response.ok ? 'Grocery item added.' : 'Could not add grocery item.'));
+    if (response.ok) {
+      setItemName('');
+      setQuantity('');
+      setCategory('General');
+      onMutated();
+    }
+  };
+
+  const updateItem = async (id: string, values: Record<string, unknown>) => {
+    if (!window.noa?.manageGroceryItem) {
+      setMessage('Grocery list needs the Vercel/desktop API.');
+      return;
+    }
+    setUpdatingId(id);
+    setMessage('');
+    const response = await window.noa.manageGroceryItem({ action: 'update', id, values });
+    setUpdatingId('');
+    setMessage(response.message || (response.ok ? 'Grocery list updated.' : 'Could not update grocery item.'));
+    if (response.ok) onMutated();
+  };
+
+  const deleteItem = async (id: string) => {
+    if (!window.noa?.manageGroceryItem) {
+      setMessage('Grocery list needs the Vercel/desktop API.');
+      return;
+    }
+    setUpdatingId(id);
+    setMessage('');
+    const response = await window.noa.manageGroceryItem({ action: 'delete', id });
+    setUpdatingId('');
+    setMessage(response.message || (response.ok ? 'Grocery item removed.' : 'Could not remove grocery item.'));
+    if (response.ok) onMutated();
+  };
+
+  return (
+    <section className="ledger-subpage grocery-subpage">
+      <article className="glass-card wide ledger-subpage-hero grocery-hero">
+        <div>
+          <PanelTitle eyebrow="Shared household list" title="Groceries List" />
+          <p>Add, complete, and remove house grocery items. This is stored separately from the ledger so it can later power a simple home-screen grocery page.</p>
+        </div>
+        <div className="grocery-summary-pill">
+          <ListTodo size={18} />
+          <span>{activeItems.length} active</span>
+        </div>
+      </article>
+
+      <article className="glass-card wide grocery-entry-card">
+        <div className="grocery-entry-grid">
+          <label>
+            <span>Item</span>
+            <input
+              value={itemName}
+              onChange={(event) => setItemName(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void addItem();
+              }}
+              placeholder="Milk, bread, washing powder..."
+            />
+          </label>
+          <label>
+            <span>Quantity</span>
+            <input
+              value={quantity}
+              onChange={(event) => setQuantity(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void addItem();
+              }}
+              placeholder="1x, 2L, large..."
+            />
+          </label>
+          <label>
+            <span>Category</span>
+            <select value={category} onChange={(event) => setCategory(event.currentTarget.value)}>
+              {categories.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <button className="primary-action" onClick={() => void addItem()} disabled={isSaving}>
+            <Plus size={16} />
+            {isSaving ? 'Adding...' : 'Add item'}
+          </button>
+        </div>
+        {message && <p className="form-message">{message}</p>}
+      </article>
+
+      <section className="grocery-layout">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="To buy" title="Active items" />
+            <span>{activeItems.length} item(s)</span>
+          </div>
+          <div className="grocery-list">
+            {activeItems.length === 0 ? (
+              <div className="empty-state">The house grocery list is clear.</div>
+            ) : activeItems.map((item) => (
+              <GroceryItemRow
+                key={item.id}
+                item={item}
+                isUpdating={updatingId === item.id}
+                onToggle={(completed) => void updateItem(item.id, { completed })}
+                onDelete={() => void deleteItem(item.id)}
+              />
+            ))}
+          </div>
+        </article>
+
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Recently done" title="Completed" />
+            <span>{completedItems.length} item(s)</span>
+          </div>
+          <div className="grocery-list compact">
+            {completedItems.length === 0 ? (
+              <div className="empty-state">Completed items will appear here.</div>
+            ) : completedItems.slice(0, 12).map((item) => (
+              <GroceryItemRow
+                key={item.id}
+                item={item}
+                isUpdating={updatingId === item.id}
+                onToggle={(completed) => void updateItem(item.id, { completed })}
+                onDelete={() => void deleteItem(item.id)}
+              />
+            ))}
+          </div>
+        </article>
+      </section>
+    </section>
+  );
+}
+
+function GroceryItemRow({
+  item,
+  isUpdating,
+  onToggle,
+  onDelete
+}: {
+  item: GroceryItem;
+  isUpdating: boolean;
+  onToggle: (completed: boolean) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <article className={`grocery-item ${item.completed ? 'completed' : ''}`}>
+      <button
+        className="grocery-check"
+        onClick={() => onToggle(!item.completed)}
+        disabled={isUpdating}
+        aria-label={item.completed ? `Restore ${item.item}` : `Mark ${item.item} complete`}
+      >
+        {item.completed ? <CheckCircle2 size={18} /> : <span />}
+      </button>
+      <div>
+        <strong>{item.item}</strong>
+        <p>{[item.quantity, item.category, item.addedBy ? `Added by ${item.addedBy}` : ''].filter(Boolean).join(' - ')}</p>
+      </div>
+      <button className="icon-action danger" onClick={onDelete} disabled={isUpdating} aria-label={`Remove ${item.item}`}>
+        <Trash2 size={16} />
+      </button>
+    </article>
+  );
+}
+
 function BudgetSettingsPage({
   report,
   modeFilter,
@@ -5558,7 +5789,8 @@ function BudgetSettingsPage({
   showInactiveRows,
   setShowInactiveRows,
   refreshBudget,
-  isLoading
+  isLoading,
+  onMutated
 }: {
   report: BudgetReport;
   modeFilter: BudgetModeFilter;
@@ -5567,6 +5799,7 @@ function BudgetSettingsPage({
   setShowInactiveRows: (show: boolean) => void;
   refreshBudget: () => Promise<BudgetReport>;
   isLoading: boolean;
+  onMutated: () => void;
 }) {
   const settings = report.settings || {};
   const rawData = (settings.raw_data as Record<string, unknown> | undefined) || {};
@@ -5576,7 +5809,10 @@ function BudgetSettingsPage({
   const [categories, setCategories] = useState<string[]>(storedCategories.length ? storedCategories : budgetDefaultCategories);
   const [catColors, setCatColors] = useState<string[]>(storedColors.length ? storedColors : budgetDefaultCategoryColors);
   const [message, setMessage] = useState('');
+  const [profileMessage, setProfileMessage] = useState('');
+  const [displayNameDraft, setDisplayNameDraft] = useState(report.owner.displayName || '');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
     const nextRaw = (report.settings?.raw_data as Record<string, unknown> | undefined) || {};
@@ -5586,6 +5822,10 @@ function BudgetSettingsPage({
     setCategories(nextCategories.length ? nextCategories : budgetDefaultCategories);
     setCatColors(nextColors.length ? nextColors : budgetDefaultCategoryColors);
   }, [report.settings]);
+
+  useEffect(() => {
+    setDisplayNameDraft(report.owner.displayName || '');
+  }, [report.owner.displayName]);
 
   const updateCategory = (index: number, value: string) => {
     setCategories((current) => current.map((category, categoryIndex) => categoryIndex === index ? value : category));
@@ -5633,6 +5873,19 @@ function BudgetSettingsPage({
       setModeFilter(defaultMode === 'business' ? 'business' : 'personal');
       await refreshBudget();
     }
+  };
+
+  const saveProfile = async () => {
+    if (!window.noa?.saveBudgetProfile) {
+      setProfileMessage('Profile settings are only available through the Vercel/desktop API.');
+      return;
+    }
+    setIsSavingProfile(true);
+    setProfileMessage('');
+    const response = await window.noa.saveBudgetProfile({ displayName: displayNameDraft.trim() });
+    setIsSavingProfile(false);
+    setProfileMessage(response.message || (response.ok ? 'Profile saved.' : 'Could not save profile.'));
+    if (response.ok) onMutated();
   };
 
   return (
@@ -5686,6 +5939,28 @@ function BudgetSettingsPage({
             </div>
             <div><span>Categories</span><strong>{categories.filter(Boolean).length}</strong></div>
             <div><span>Last synced</span><strong>{report.fetchedAt ? new Date(report.fetchedAt).toLocaleString() : 'Not synced'}</strong></div>
+          </div>
+        </article>
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Account" title="Your profile" />
+            <UsersRound size={20} />
+          </div>
+          <div className="profile-settings-form">
+            <label>
+              <span>Display name</span>
+              <input
+                value={displayNameDraft}
+                onChange={(event) => setDisplayNameDraft(event.currentTarget.value)}
+                placeholder="Your name"
+              />
+            </label>
+            <p>NoA uses this name when adding groceries and presenting account-owned Budget data.</p>
+            <button className="secondary-action" onClick={() => void saveProfile()} disabled={isSavingProfile}>
+              <Save size={16} />
+              {isSavingProfile ? 'Saving...' : 'Save profile'}
+            </button>
+            {profileMessage && <p className="form-message">{profileMessage}</p>}
           </div>
         </article>
         <article className="glass-card budget-panel wide">
@@ -6551,6 +6826,7 @@ function mergeBudgetReport(report: Partial<BudgetReport>): BudgetReport {
     },
     emailSettings: normalizeBudgetEmailSettings(report.emailSettings),
     tenantEmailActivity: Array.isArray(report.tenantEmailActivity) ? report.tenantEmailActivity : [],
+    groceryItems: Array.isArray(report.groceryItems) ? report.groceryItems : [],
     settings: report.settings || null
   };
 }
