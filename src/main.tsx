@@ -63,7 +63,7 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const tabletQuickScreens: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
+const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
 type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -94,7 +94,7 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
-const workspaceScreenIds: Screen[] = ['today', 'hubgauge', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
+const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -1452,10 +1452,11 @@ function App() {
         checkedAt: ''
       });
 
-      const [notionResult, xeroResult, budgetResult] = await Promise.allSettled([
+      const [notionResult, xeroResult, budgetResult, integrationsResult] = await Promise.allSettled([
         loadNotionJobs(),
         loadXeroSummary(),
-        loadBudgetSummary()
+        loadBudgetSummary(),
+        runIntegrationTests()
       ]);
 
       if (!isMounted) return;
@@ -1479,9 +1480,15 @@ function App() {
         issues.push('Budget needs attention');
       }
 
+      if (integrationsResult.status === 'rejected') {
+        issues.push('Integration tests failed');
+      } else if (integrationsResult.value.some((result) => !result.ok)) {
+        issues.push('Some integrations need attention');
+      }
+
       setStartupSync({
         status: issues.length ? 'partial' : 'synced',
-        message: issues.length ? issues.join(' - ') : 'Notion, Xero, and Budgeting are synced.',
+        message: issues.length ? issues.join(' - ') : 'All integrations and data sources are synced.',
         checkedAt: new Date().toISOString()
       });
     };
@@ -1499,11 +1506,12 @@ function App() {
       setScreen('pipeline');
       return;
     }
+    if (['hubgauge', 'plan', 'automations'].includes(screen as string)) {
+      setScreen('today');
+      return;
+    }
     if ((screen === 'pipeline' || screen === 'upcoming-jobs' || screen === 'clients' || screen === 'map') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
-    }
-    if (screen === 'hubgauge' && !isLoadingHubGauge) {
-      void loadHubGauge();
     }
     if ((screen === 'xero' || screen === 'map') && !xeroReport.fetchedAt && !isLoadingXero) {
       void loadXeroSummary();
@@ -2227,13 +2235,6 @@ function App() {
             isNoahThinking={isNoahThinking}
           />
         )}
-        {screen === 'hubgauge' && (
-          <HubGaugeView
-            payload={hubGaugePayload}
-            isLoading={isLoadingHubGauge}
-            refresh={loadHubGauge}
-          />
-        )}
         {screen === 'pipeline' && (
           <PipelineBoard
             report={jobsReport}
@@ -2291,9 +2292,7 @@ function App() {
             runIntegrationTests={runIntegrationTests}
           />
         )}
-        {screen === 'plan' && <Plan />}
         {screen === 'memory' && <Memory notes={notes} />}
-        {screen === 'automations' && <Automations />}
         {screen === 'integrations' && (
           <Integrations
             integrationStatus={integrationStatus}
@@ -9311,11 +9310,11 @@ const baseMapNodes: IntegrationNode[] = [
     health: 82,
     metadata: 'Telemetry',
     data: ['Forecast', 'Conditions', 'Shoot-day risk'],
-    features: ['HubGauge', 'Today card', 'Job preparation'],
+    features: ['Today card', 'Job preparation', 'Map telemetry'],
     config: ['WEATHER_API_KEY'],
     x: 260,
     y: 510,
-    route: 'hubgauge'
+    route: 'today'
   },
   {
     id: 'spotify',
@@ -9329,11 +9328,11 @@ const baseMapNodes: IntegrationNode[] = [
     health: 73,
     metadata: 'Media state',
     data: ['Track', 'Playback state', 'Device context'],
-    features: ['HubGauge', 'Ambient dashboard'],
+    features: ['Ambient dashboard', 'Map telemetry'],
     config: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN'],
     x: 155,
     y: 320,
-    route: 'hubgauge'
+    route: 'integrations'
   },
   {
     id: 'dashboards',
@@ -9346,7 +9345,7 @@ const baseMapNodes: IntegrationNode[] = [
     lastSync: 'Live',
     health: 90,
     metadata: 'Output surfaces',
-    data: ['Today view', 'HubGauge', 'Map', 'Calendar', 'Finance cards'],
+    data: ['Today view', 'Map', 'Calendar', 'Finance cards'],
     features: ['Tablet kiosk', 'Mobile PWA', 'Desktop command centre'],
     config: ['PWA_MANIFEST', 'SERVICE_WORKER_CACHE'],
     x: 845,

@@ -16,7 +16,6 @@ import {
   Sparkles,
   UsersRound,
   WalletCards,
-  Workflow
 } from 'lucide-react';
 import type {
   ApprovalItem,
@@ -33,16 +32,13 @@ import type {
 export const navItems: NavItem[] = [
   { id: 'today', label: 'Today', icon: Gauge },
   { id: 'noah', label: 'Noah', icon: MessagesSquare },
-  { id: 'hubgauge', label: 'HubGauge', icon: Activity },
   { id: 'pipeline', label: 'Pipeline', icon: ClipboardList },
   { id: 'upcoming-jobs', label: 'Upcoming Jobs', icon: CalendarDays },
   { id: 'clients', label: 'Clients', icon: UsersRound },
   { id: 'xero', label: 'Xero', icon: CreditCard },
   { id: 'budgeting', label: 'Budgeting', icon: WalletCards },
   { id: 'map', label: 'Map', icon: Map },
-  { id: 'plan', label: 'Plan', icon: ClipboardList },
   { id: 'memory', label: 'Memory', icon: BrainCircuit },
-  { id: 'automations', label: 'Automations', icon: Workflow },
   { id: 'integrations', label: 'Integrations', icon: PlugZap },
   { id: 'settings', label: 'Settings', icon: Settings }
 ];
