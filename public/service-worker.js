@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noa-shell-v3';
+const CACHE_NAME = 'noa-shell-v4';
 const SHELL_ASSETS = [
   '/',
   '/manifest.webmanifest',

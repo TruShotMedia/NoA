@@ -1496,19 +1496,19 @@ function App() {
       setScreen('pipeline');
       return;
     }
-    if ((screen === 'pipeline' || screen === 'upcoming-jobs' || screen === 'clients') && !jobsReport.fetchedAt && !isLoadingJobs) {
+    if ((screen === 'pipeline' || screen === 'upcoming-jobs' || screen === 'clients' || screen === 'map') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
     if (screen === 'hubgauge' && !isLoadingHubGauge) {
       void loadHubGauge();
     }
-    if (screen === 'xero' && !xeroReport.fetchedAt && !isLoadingXero) {
+    if ((screen === 'xero' || screen === 'map') && !xeroReport.fetchedAt && !isLoadingXero) {
       void loadXeroSummary();
     }
     if (screen === 'xero' && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
-    if (screen === 'budgeting' && !budgetReport.fetchedAt && !isLoadingBudget) {
+    if ((screen === 'budgeting' || screen === 'map') && !budgetReport.fetchedAt && !isLoadingBudget) {
       void loadBudgetSummary();
     }
   }, [screen, isUnlocked]);
@@ -2293,7 +2293,20 @@ function App() {
             setSection={setBudgetSection}
           />
         )}
-        {screen === 'map' && <MapView />}
+        {screen === 'map' && (
+          <MapView
+            integrationStatus={integrationStatus}
+            testResults={testResults}
+            jobsReport={jobsReport}
+            xeroReport={xeroReport}
+            budgetReport={budgetReport}
+            isLoadingJobs={isLoadingJobs}
+            isLoadingXero={isLoadingXero}
+            isLoadingBudget={isLoadingBudget}
+            setScreen={setScreen}
+            runIntegrationTests={runIntegrationTests}
+          />
+        )}
         {screen === 'plan' && <Plan />}
         {screen === 'memory' && <Memory notes={notes} />}
         {screen === 'automations' && <Automations />}
@@ -8997,11 +9010,13 @@ type MapMode = 'overview' | 'live' | 'debug' | 'focus';
 type MapNodeStatus = 'connected' | 'syncing' | 'idle' | 'error' | 'needs-auth';
 type MapNodeCategory = 'AI / Reasoning' | 'Data Sources' | 'App Backend' | 'Communication' | 'Display Outputs' | 'Automation / Deployment';
 type MapDirection = 'in' | 'out' | 'two-way' | 'dependency';
+type MapDomain = 'work' | 'finance' | 'communication' | 'backend' | 'display';
 
 type IntegrationNode = {
   id: string;
   label: string;
   type: MapNodeCategory;
+  domain: MapDomain;
   description: string;
   icon: React.ElementType;
   status: MapNodeStatus;
@@ -9015,6 +9030,8 @@ type IntegrationNode = {
   x: number;
   y: number;
   dominant?: boolean;
+  integrationId?: IntegrationId;
+  route?: Screen;
 };
 
 type IntegrationConnection = {
@@ -9034,11 +9051,21 @@ const mapModes: Array<{ id: MapMode; label: string }> = [
   { id: 'focus', label: 'Focus' }
 ];
 
-const mapNodes: IntegrationNode[] = [
+const mapDomains: Array<{ id: 'all' | MapDomain; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'work', label: 'Work' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'communication', label: 'Comms' },
+  { id: 'backend', label: 'Backend' },
+  { id: 'display', label: 'Displays' }
+];
+
+const baseMapNodes: IntegrationNode[] = [
   {
     id: 'core',
     label: 'NoA Core',
     type: 'AI / Reasoning',
+    domain: 'backend',
     description: 'AI reasoning, policy, orchestration, and user intent layer.',
     icon: BrainCircuit,
     status: 'connected',
@@ -9050,12 +9077,15 @@ const mapNodes: IntegrationNode[] = [
     config: ['OPENAI_API_KEY', 'NOA_PIN_CODE'],
     x: 500,
     y: 310,
-    dominant: true
+    dominant: true,
+    integrationId: 'openai',
+    route: 'noah'
   },
   {
     id: 'notion',
     label: 'Notion',
     type: 'Data Sources',
+    domain: 'work',
     description: 'Tasks, jobs, notes, clients, pipeline state, and linked work context.',
     icon: ListTodo,
     status: 'connected',
@@ -9066,12 +9096,15 @@ const mapNodes: IntegrationNode[] = [
     features: ['Pipeline', 'Upcoming jobs', 'Clients', 'Today focus'],
     config: ['NOTION_TOKEN', 'NOTION_TASKS_DATABASE_ID', 'NOTION_JOBS_DATABASE_ID', 'NOTION_CLIENTS_DATABASE_ID'],
     x: 220,
-    y: 130
+    y: 130,
+    integrationId: 'notion',
+    route: 'pipeline'
   },
   {
     id: 'supabase',
     label: 'Supabase',
     type: 'App Backend',
+    domain: 'backend',
     description: 'Application database, private settings, auth support, and budget data bridge.',
     icon: Database,
     status: 'connected',
@@ -9082,12 +9115,15 @@ const mapNodes: IntegrationNode[] = [
     features: ['Budgeting', 'Xero token storage', 'Integration setup', 'Secure backend reads'],
     config: ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'],
     x: 520,
-    y: 95
+    y: 95,
+    integrationId: 'supabase',
+    route: 'budgeting'
   },
   {
     id: 'gmail',
     label: 'Gmail',
     type: 'Communication',
+    domain: 'communication',
     description: 'Email intake, scheduled tenant notices, invoice context, and user communication.',
     icon: Mail,
     status: 'needs-auth',
@@ -9099,12 +9135,15 @@ const mapNodes: IntegrationNode[] = [
     config: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'],
     error: 'OAuth credentials are required before automated Gmail actions can run.',
     x: 785,
-    y: 130
+    y: 130,
+    integrationId: 'email',
+    route: 'integrations'
   },
   {
     id: 'calendar',
     label: 'Google Calendar',
     type: 'Data Sources',
+    domain: 'work',
     description: 'Schedule awareness for job dates, reminders, and day planning.',
     icon: CalendarDays,
     status: 'idle',
@@ -9115,12 +9154,14 @@ const mapNodes: IntegrationNode[] = [
     features: ['Today card', 'Upcoming jobs', 'Planning'],
     config: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     x: 835,
-    y: 310
+    y: 310,
+    route: 'upcoming-jobs'
   },
   {
     id: 'xero',
     label: 'Xero',
     type: 'Data Sources',
+    domain: 'finance',
     description: 'Invoices, bills, contacts, accounts, cashflow, and finance analytics.',
     icon: CreditCard,
     status: 'connected',
@@ -9131,12 +9172,15 @@ const mapNodes: IntegrationNode[] = [
     features: ['Xero overview', 'Bills', 'Invoices', 'Client finance intelligence'],
     config: ['XERO_CLIENT_ID', 'XERO_CLIENT_SECRET', 'XERO_TENANT_ID'],
     x: 730,
-    y: 520
+    y: 520,
+    integrationId: 'xero',
+    route: 'xero'
   },
   {
     id: 'vercel',
     label: 'Vercel',
     type: 'Automation / Deployment',
+    domain: 'backend',
     description: 'Deployment, hosting, serverless runtime, and public app delivery.',
     icon: Cloud,
     status: 'connected',
@@ -9147,12 +9191,14 @@ const mapNodes: IntegrationNode[] = [
     features: ['Remote mobile access', 'Serverless APIs', 'Public PWA'],
     config: ['VERCEL_PROJECT_ID', 'VERCEL_ENVIRONMENT'],
     x: 500,
-    y: 535
+    y: 535,
+    route: 'integrations'
   },
   {
     id: 'weather',
     label: 'Weather',
     type: 'Data Sources',
+    domain: 'work',
     description: 'Live weather telemetry for shoot planning and job-day awareness.',
     icon: CloudSun,
     status: 'syncing',
@@ -9163,12 +9209,14 @@ const mapNodes: IntegrationNode[] = [
     features: ['HubGauge', 'Today card', 'Job preparation'],
     config: ['WEATHER_API_KEY'],
     x: 260,
-    y: 510
+    y: 510,
+    route: 'hubgauge'
   },
   {
     id: 'spotify',
     label: 'Spotify',
     type: 'Data Sources',
+    domain: 'display',
     description: 'Currently playing media state and ambience signals.',
     icon: Music,
     status: 'idle',
@@ -9179,12 +9227,14 @@ const mapNodes: IntegrationNode[] = [
     features: ['HubGauge', 'Ambient dashboard'],
     config: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN'],
     x: 155,
-    y: 320
+    y: 320,
+    route: 'hubgauge'
   },
   {
     id: 'dashboards',
     label: 'Dashboard Displays',
     type: 'Display Outputs',
+    domain: 'display',
     description: 'Screens, tablets, widgets, kiosk views, and visual output surfaces.',
     icon: MonitorSmartphone,
     status: 'connected',
@@ -9195,7 +9245,8 @@ const mapNodes: IntegrationNode[] = [
     features: ['Tablet kiosk', 'Mobile PWA', 'Desktop command centre'],
     config: ['PWA_MANIFEST', 'SERVICE_WORKER_CACHE'],
     x: 845,
-    y: 455
+    y: 455,
+    route: 'today'
   }
 ];
 
@@ -9216,13 +9267,60 @@ const mapConnections: IntegrationConnection[] = [
   { source: 'supabase', target: 'dashboards', label: 'Budget views', direction: 'out', status: 'connected', animated: true, description: 'Displays ledger, mortgage, fuel, and budget analytics.' }
 ];
 
-function MapView() {
-  const [mode, setMode] = useState<MapMode>('overview');
-  const [selectedNodeId, setSelectedNodeId] = useState('core');
+function MapView({
+  integrationStatus,
+  testResults,
+  jobsReport,
+  xeroReport,
+  budgetReport,
+  isLoadingJobs,
+  isLoadingXero,
+  isLoadingBudget,
+  setScreen,
+  runIntegrationTests
+}: {
+  integrationStatus: IntegrationStatus;
+  testResults: IntegrationTestResult[];
+  jobsReport: NotionJobsReport;
+  xeroReport: XeroReport;
+  budgetReport: BudgetReport;
+  isLoadingJobs: boolean;
+  isLoadingXero: boolean;
+  isLoadingBudget: boolean;
+  setScreen: (screen: Screen) => void;
+  runIntegrationTests: () => Promise<IntegrationTestResult[]>;
+}) {
+  const [mode, setMode] = useState<MapMode>(() => getStoredMapMode());
+  const [selectedNodeId, setSelectedNodeId] = useState(() => window.localStorage.getItem('noa.map.selectedNode') || 'core');
   const [hoveredNodeId, setHoveredNodeId] = useState('');
   const [hoveredConnectionIndex, setHoveredConnectionIndex] = useState<number | null>(null);
+  const [domainFilter, setDomainFilter] = useState<'all' | MapDomain>(() => getStoredMapDomain());
+  const [showIssuesOnly, setShowIssuesOnly] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [actionMessage, setActionMessage] = useState('');
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
+  const mapNodes = useMemo(() => buildRuntimeMapNodes({
+    integrationStatus,
+    testResults,
+    jobsReport,
+    xeroReport,
+    budgetReport,
+    isLoadingJobs,
+    isLoadingXero,
+    isLoadingBudget
+  }), [integrationStatus, testResults, jobsReport, xeroReport, budgetReport, isLoadingJobs, isLoadingXero, isLoadingBudget]);
+  const mapConnections = useMemo(() => buildRuntimeMapConnections(mapNodes), [mapNodes]);
   const selectedNode = mapNodes.find((node) => node.id === selectedNodeId) || mapNodes[0];
-  const activeNodeId = hoveredNodeId || (mode === 'focus' ? selectedNodeId : '');
+  const issueNodes = mapNodes.filter((node) => isMapIssue(node));
+  const hoveredConnection = hoveredConnectionIndex === null ? null : mapConnections[hoveredConnectionIndex];
+  const hoveredConnectionNodes = hoveredConnection
+    ? {
+        source: mapNodes.find((node) => node.id === hoveredConnection.source),
+        target: mapNodes.find((node) => node.id === hoveredConnection.target)
+      }
+    : null;
+  const activeNodeId = hoveredNodeId || (mode === 'focus' ? selectedNode.id : '');
   const categorySummaries = useMemo(() => {
     const categories: MapNodeCategory[] = ['AI / Reasoning', 'Data Sources', 'App Backend', 'Communication', 'Display Outputs', 'Automation / Deployment'];
     return categories.map((category) => {
@@ -9230,7 +9328,7 @@ function MapView() {
       const healthy = nodes.filter((node) => ['connected', 'syncing', 'idle'].includes(node.status)).length;
       return { category, count: nodes.length, healthy };
     });
-  }, []);
+  }, [mapNodes]);
 
   const connectedIds = useMemo(() => {
     if (!activeNodeId) return new Set<string>();
@@ -9239,7 +9337,61 @@ function MapView() {
         ? [connection.source, connection.target]
         : []
     )));
-  }, [activeNodeId]);
+  }, [activeNodeId, mapConnections]);
+
+  useEffect(() => {
+    window.localStorage.setItem('noa.map.mode', mode);
+  }, [mode]);
+
+  useEffect(() => {
+    window.localStorage.setItem('noa.map.selectedNode', selectedNode.id);
+  }, [selectedNode.id]);
+
+  useEffect(() => {
+    window.localStorage.setItem('noa.map.domain', domainFilter);
+  }, [domainFilter]);
+
+  const resetCanvas = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const zoomCanvas = (delta: number) => {
+    setZoom((current) => Math.min(1.35, Math.max(0.72, Number((current + delta).toFixed(2)))));
+  };
+
+  const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('.map-node') || target.closest('.map-canvas-toolbar')) return;
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setPan({
+      x: drag.panX + event.clientX - drag.x,
+      y: drag.panY + event.clientY - drag.y
+    });
+  };
+
+  const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+  };
+
+  const testSelectedIntegration = async () => {
+    if (!selectedNode.integrationId) return;
+    setActionMessage(`Testing ${selectedNode.label}...`);
+    const results = await runIntegrationTests();
+    const result = [...results].reverse().find((item) => item.id === selectedNode.integrationId);
+    setActionMessage(result ? `${selectedNode.label}: ${result.message}` : `Test run completed. ${selectedNode.label} did not return a direct result.`);
+  };
+
+  const copyConfigKeys = async () => {
+    await navigator.clipboard.writeText(selectedNode.config.join('\n'));
+    setActionMessage(`Copied ${selectedNode.label} config keys.`);
+  };
 
   return (
     <section className="map-page page-fade">
@@ -9250,18 +9402,25 @@ function MapView() {
             A live-facing view of how NoA reasons across integrations, data sources, automation surfaces, and dashboards.
           </p>
         </div>
-        <div className="map-mode-switcher" role="tablist" aria-label="Map mode">
-          {mapModes.map((item) => (
-            <button key={item.id} className={mode === item.id ? 'active' : ''} onClick={() => setMode(item.id)}>
-              {item.label}
-            </button>
-          ))}
-        </div>
+          <div className="map-mode-switcher" role="tablist" aria-label="Map mode">
+            {mapModes.map((item) => (
+              <button key={item.id} className={mode === item.id ? 'active' : ''} onClick={() => setMode(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
       </article>
 
       <section className={`map-shell map-mode-${mode}`}>
         <aside className="map-sidebar">
           <PanelTitle eyebrow="Categories" title="Integration groups" />
+          <div className="map-domain-filter" aria-label="Map domain filter">
+            {mapDomains.map((domain) => (
+              <button key={domain.id} className={domainFilter === domain.id ? 'active' : ''} onClick={() => setDomainFilter(domain.id)}>
+                {domain.label}
+              </button>
+            ))}
+          </div>
           <div className="map-category-list">
             {categorySummaries.map((summary) => (
               <button
@@ -9280,7 +9439,28 @@ function MapView() {
           <div className="map-health-card">
             <span>System health</span>
             <strong>{Math.round(mapNodes.reduce((sum, node) => sum + node.health, 0) / mapNodes.length)}%</strong>
-            <small>{mapConnections.filter((connection) => connection.animated).length} active pathways</small>
+            <small>{issueNodes.length ? `${issueNodes.length} issue${issueNodes.length === 1 ? '' : 's'} visible` : `${mapConnections.filter((connection) => connection.animated).length} active pathways`}</small>
+          </div>
+          <div className="map-issue-panel">
+            <div className="map-issue-head">
+              <span>Issues</span>
+              <button className={showIssuesOnly ? 'active' : ''} onClick={() => setShowIssuesOnly((current) => !current)}>
+                {showIssuesOnly ? 'Show all' : 'Filter'}
+              </button>
+            </div>
+            {issueNodes.length === 0 ? (
+              <p>No critical integration issues detected.</p>
+            ) : (
+              issueNodes.map((node) => (
+                <button key={node.id} onClick={() => {
+                  setSelectedNodeId(node.id);
+                  setMode('debug');
+                }}>
+                  <strong>{node.label}</strong>
+                  <span>{node.error || `${node.health}% health`}</span>
+                </button>
+              ))
+            )}
           </div>
         </aside>
 
@@ -9288,13 +9468,21 @@ function MapView() {
           <div className="map-canvas-toolbar">
             <span>{mode === 'debug' ? 'Latency and auth view' : mode === 'live' ? 'Animated activity view' : mode === 'focus' ? 'Focused dependency path' : 'Complete ecosystem'}</span>
             <div>
-              <button type="button" aria-label="Zoom out">-</button>
-              <button type="button" aria-label="Reset zoom">100%</button>
-              <button type="button" aria-label="Zoom in">+</button>
+              <button type="button" aria-label="Zoom out" onClick={() => zoomCanvas(-0.08)}>-</button>
+              <button type="button" aria-label="Reset zoom" onClick={resetCanvas}>{Math.round(zoom * 100)}%</button>
+              <button type="button" aria-label="Zoom in" onClick={() => zoomCanvas(0.08)}>+</button>
             </div>
           </div>
 
-          <div className="map-canvas" onMouseLeave={() => setHoveredNodeId('')}>
+          <div
+            className="map-canvas"
+            onMouseLeave={() => setHoveredNodeId('')}
+            onPointerDown={beginPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+          >
+            <div className="map-viewport-inner" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
             <svg className="map-connections" viewBox="0 0 1000 620" aria-hidden="true">
               <defs>
                 <marker id="map-arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
@@ -9312,10 +9500,12 @@ function MapView() {
                 const isRelated = !activeNodeId || connection.source === activeNodeId || connection.target === activeNodeId;
                 const isHovered = hoveredConnectionIndex === index;
                 const shouldAnimate = connection.animated && (mode === 'live' || mode === 'overview') && isRelated;
+                const isDomainFiltered = domainFilter !== 'all' && source.domain !== domainFilter && target.domain !== domainFilter;
+                const isIssueFiltered = showIssuesOnly && !isMapIssue(source) && !isMapIssue(target);
                 return (
                   <g
                     key={`${connection.source}-${connection.target}-${connection.label}`}
-                    className={`map-connection ${statusClass(connection.status)} ${isRelated ? 'related' : 'dimmed'} ${isHovered ? 'hovered' : ''}`}
+                    className={`map-connection ${statusClass(connection.status)} ${isRelated && !isDomainFiltered && !isIssueFiltered ? 'related' : 'dimmed'} ${isHovered ? 'hovered' : ''}`}
                     onMouseEnter={() => setHoveredConnectionIndex(index)}
                     onMouseLeave={() => setHoveredConnectionIndex(null)}
                   >
@@ -9343,12 +9533,27 @@ function MapView() {
                 );
               })}
             </svg>
+            {hoveredConnection && hoveredConnectionNodes?.source && hoveredConnectionNodes.target && (
+              <div
+                className="map-connection-tooltip"
+                style={{
+                  left: `${(hoveredConnectionNodes.source.x + hoveredConnectionNodes.target.x) / 2}px`,
+                  top: `${(hoveredConnectionNodes.source.y + hoveredConnectionNodes.target.y) / 2}px`
+                }}
+              >
+                <strong>{hoveredConnection.label}</strong>
+                <span>{hoveredConnection.direction.replace('-', ' ')} / {hoveredConnection.status.replace('-', ' ')}</span>
+                <p>{hoveredConnection.description}</p>
+              </div>
+            )}
 
             {mapNodes.map((node) => {
               const Icon = node.icon;
               const isActive = selectedNodeId === node.id || hoveredNodeId === node.id;
               const isRelated = !activeNodeId || connectedIds.has(node.id) || node.id === activeNodeId;
-              const isDimmed = mode === 'focus' ? !connectedIds.has(node.id) : Boolean(activeNodeId && !isRelated);
+              const isDomainFiltered = domainFilter !== 'all' && node.domain !== domainFilter;
+              const isIssueFiltered = showIssuesOnly && !isMapIssue(node);
+              const isDimmed = (mode === 'focus' ? !connectedIds.has(node.id) : Boolean(activeNodeId && !isRelated)) || isDomainFiltered || isIssueFiltered;
               return (
                 <button
                   key={node.id}
@@ -9371,6 +9576,7 @@ function MapView() {
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
 
@@ -9390,10 +9596,17 @@ function MapView() {
           <MapInspectorBlock title="Provides" items={selectedNode.data} />
           <MapInspectorBlock title="Used by" items={selectedNode.features} />
           <MapInspectorBlock title="Config keys" items={selectedNode.config} />
+          <div className="map-inspector-actions">
+            <button type="button" onClick={() => setScreen(selectedNode.route || 'integrations')}>Open related page</button>
+            <button type="button" onClick={() => setScreen('integrations')}>Integration settings</button>
+            <button type="button" onClick={() => void copyConfigKeys()}>Copy config keys</button>
+            <button type="button" onClick={() => void testSelectedIntegration()} disabled={!selectedNode.integrationId}>Test connection</button>
+          </div>
           <div className="map-inspector-meta">
             <span>Last sync</span>
             <strong>{selectedNode.lastSync}</strong>
           </div>
+          {actionMessage && <p className="map-action-message">{actionMessage}</p>}
           {selectedNode.error && (
             <div className="map-error-box">
               <span>Last error</span>
@@ -9433,6 +9646,143 @@ function getMapConnectionPath(source: IntegrationNode, target: IntegrationNode, 
 
 function statusClass(status: MapNodeStatus) {
   return `status-${status}`;
+}
+
+function buildRuntimeMapNodes({
+  integrationStatus,
+  testResults,
+  jobsReport,
+  xeroReport,
+  budgetReport,
+  isLoadingJobs,
+  isLoadingXero,
+  isLoadingBudget
+}: {
+  integrationStatus: IntegrationStatus;
+  testResults: IntegrationTestResult[];
+  jobsReport: NotionJobsReport;
+  xeroReport: XeroReport;
+  budgetReport: BudgetReport;
+  isLoadingJobs: boolean;
+  isLoadingXero: boolean;
+  isLoadingBudget: boolean;
+}) {
+  const latestResult = (id: IntegrationId) => [...testResults].reverse().find((result) => result.id === id);
+  const integrationState = (id: IntegrationId, fallback: MapNodeStatus = 'needs-auth'): MapNodeStatus => {
+    const result = latestResult(id);
+    if (result) return result.ok ? 'connected' : 'error';
+    return integrationStatus[id] ? 'connected' : fallback;
+  };
+
+  return baseMapNodes.map((node) => {
+    if (node.id === 'core') {
+      const status = integrationState('openai');
+      return {
+        ...node,
+        status,
+        health: status === 'connected' ? 96 : 58,
+        lastSync: latestResult('openai') ? 'Last tested' : node.lastSync,
+        error: status === 'connected' ? undefined : latestResult('openai')?.message || 'OpenAI configuration has not been confirmed.'
+      };
+    }
+
+    if (node.id === 'notion') {
+      const hasErrors = notionHasErrors(jobsReport);
+      const status: MapNodeStatus = isLoadingJobs ? 'syncing' : hasErrors ? 'error' : integrationState('notion');
+      return {
+        ...node,
+        status,
+        health: status === 'connected' ? 92 : status === 'syncing' ? 84 : 52,
+        lastSync: formatMapSyncTime(jobsReport.fetchedAt, isLoadingJobs ? 'Syncing' : node.lastSync),
+        metadata: `${jobsReport.taskList.length || jobsReport.tasks.length} tasks / ${jobsReport.upcomingJobs.length} jobs`,
+        error: hasErrors ? [jobsReport.mainJobsError, jobsReport.tasksError, jobsReport.upcomingJobsError].filter(Boolean).join(' ') : latestResult('notion')?.ok === false ? latestResult('notion')?.message : undefined
+      };
+    }
+
+    if (node.id === 'supabase') {
+      const status: MapNodeStatus = isLoadingBudget ? 'syncing' : budgetReport.ok ? 'connected' : integrationState('supabase');
+      return {
+        ...node,
+        status,
+        health: status === 'connected' ? 94 : status === 'syncing' ? 82 : 55,
+        lastSync: formatMapSyncTime(budgetReport.fetchedAt, isLoadingBudget ? 'Syncing' : node.lastSync),
+        metadata: budgetReport.ok ? 'Budget data reachable' : 'Database/settings layer',
+        error: budgetReport.ok ? undefined : budgetReport.message || latestResult('supabase')?.message
+      };
+    }
+
+    if (node.id === 'gmail') {
+      const status = integrationState('email');
+      return {
+        ...node,
+        status,
+        health: status === 'connected' ? 86 : status === 'error' ? 48 : 62,
+        lastSync: latestResult('email') ? 'Last tested' : node.lastSync,
+        error: status === 'connected' ? undefined : latestResult('email')?.message || node.error
+      };
+    }
+
+    if (node.id === 'xero') {
+      const status: MapNodeStatus = isLoadingXero ? 'syncing' : xeroReport.ok ? 'connected' : integrationState('xero');
+      return {
+        ...node,
+        status,
+        health: status === 'connected' ? 90 : status === 'syncing' ? 84 : 50,
+        lastSync: formatMapSyncTime(xeroReport.fetchedAt, isLoadingXero ? 'Syncing' : node.lastSync),
+        metadata: xeroReport.ok ? `${xeroReport.totals.invoiceCount} invoices / ${xeroReport.totals.billCount} bills` : 'Finance layer',
+        error: xeroReport.ok ? undefined : xeroReport.message || latestResult('xero')?.message
+      };
+    }
+
+    return node;
+  });
+}
+
+function buildRuntimeMapConnections(nodes: IntegrationNode[]) {
+  const nodeById = Object.fromEntries(nodes.map((node) => [node.id, node]));
+  return mapConnections.map((connection) => {
+    const source = nodeById[connection.source];
+    const target = nodeById[connection.target];
+    const status = strongestMapStatus([connection.status, source?.status, target?.status].filter(Boolean) as MapNodeStatus[]);
+    return {
+      ...connection,
+      status,
+      animated: connection.animated && status !== 'error' && status !== 'needs-auth'
+    };
+  });
+}
+
+function strongestMapStatus(statuses: MapNodeStatus[]): MapNodeStatus {
+  if (statuses.includes('error')) return 'error';
+  if (statuses.includes('needs-auth')) return 'needs-auth';
+  if (statuses.includes('syncing')) return 'syncing';
+  if (statuses.includes('connected')) return 'connected';
+  return 'idle';
+}
+
+function isMapIssue(node: IntegrationNode) {
+  return node.status === 'error' || node.status === 'needs-auth' || node.health < 70;
+}
+
+function formatMapSyncTime(value: string, fallback: string) {
+  if (!value) return fallback;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return fallback;
+  const diff = Date.now() - time;
+  if (diff < 60_000) return 'Just now';
+  if (diff < 3_600_000) return `${Math.max(1, Math.round(diff / 60_000))} min ago`;
+  if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)} hr ago`;
+  return new Date(value).toLocaleDateString();
+}
+
+function getStoredMapMode(): MapMode {
+  const value = window.localStorage.getItem('noa.map.mode');
+  return mapModes.some((mode) => mode.id === value) ? value as MapMode : 'overview';
+}
+
+function getStoredMapDomain(): 'all' | MapDomain {
+  const value = window.localStorage.getItem('noa.map.domain');
+  return mapDomains.some((domain) => domain.id === value) ? value as 'all' | MapDomain : 'all';
 }
 
 function Integrations({
