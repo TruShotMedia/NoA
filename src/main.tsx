@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import {
   Activity,
   ArrowUpRight,
@@ -4048,6 +4049,7 @@ function CalendarDayModal({
   }, {});
 
   return (
+    <ModalPortal>
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={`Calendar items for ${date}`}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Close calendar day" />
       <section className="notion-modal calendar-day-modal">
@@ -4156,6 +4158,7 @@ function CalendarDayModal({
         </div>
       </section>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -6170,6 +6173,7 @@ function BudgetEditorModal({
   };
 
   return (
+    <ModalPortal>
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={modalTitle}>
       <button className="modal-backdrop" aria-label="Close budget editor" onClick={onClose} />
       <article className="notion-modal budget-modal">
@@ -6263,6 +6267,7 @@ function BudgetEditorModal({
         </div>
       </article>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -7810,6 +7815,7 @@ function XeroInvoiceDrawer({
   const balanceTone = invoice.isOverdue ? 'danger' : invoice.amountDue > 0 ? 'warn' : 'calm';
 
   return (
+    <ModalPortal>
     <div className="modal-shell xero-drawer-shell" role="dialog" aria-modal="true" aria-label={`${recordLabel} ${invoice.number}`}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Close invoice details" />
       <aside className="xero-invoice-drawer">
@@ -7906,6 +7912,7 @@ function XeroInvoiceDrawer({
         </div>
       </aside>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -7983,6 +7990,7 @@ function XeroDraftInvoiceModal({
   };
 
   return (
+    <ModalPortal>
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={`Draft invoice for ${job.title}`}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Close draft invoice" />
       <form className="notion-modal xero-draft-modal" onSubmit={submit}>
@@ -8053,6 +8061,7 @@ function XeroDraftInvoiceModal({
         </div>
       </form>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -8333,6 +8342,10 @@ function useModalEscape(onClose: () => void) {
   }, [onClose]);
 }
 
+function ModalPortal({ children }: { children: React.ReactNode }) {
+  return createPortal(children, document.body);
+}
+
 function NotionItemModal({
   mode,
   kind,
@@ -8460,6 +8473,7 @@ function NotionItemModal({
   };
 
   return (
+    <ModalPortal>
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={title}>
       <button className="modal-backdrop" onClick={onClose} aria-label="Close" />
       <form className="notion-modal" onSubmit={submit}>
@@ -8747,6 +8761,7 @@ function NotionItemModal({
         </div>
       </form>
     </div>
+    </ModalPortal>
   );
 }
 
