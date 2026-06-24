@@ -2436,11 +2436,32 @@ function DesktopTopNav({
 }) {
   const primaryItems = navItems.filter((item) => workspaceScreenIds.includes(item.id));
   const secondaryItems = navItems.filter((item) => !workspaceScreenIds.includes(item.id));
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDetailsElement | null>(null);
   const activate = (id: Screen) => {
     if (id === 'budgeting') setBudgetSection('overview');
     if (id === 'xero') setXeroSection('overview');
     setScreen(id);
+    setIsMoreOpen(false);
   };
+
+  useEffect(() => {
+    if (!isMoreOpen) return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) {
+        setIsMoreOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMoreOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMoreOpen]);
 
   return (
     <nav className="desktop-top-nav" aria-label="Desktop primary navigation">
@@ -2449,8 +2470,11 @@ function DesktopTopNav({
           {item.label}
         </button>
       ))}
-      <details className="desktop-more-menu">
-        <summary>
+      <details className="desktop-more-menu" open={isMoreOpen} ref={moreMenuRef}>
+        <summary onClick={(event) => {
+          event.preventDefault();
+          setIsMoreOpen((current) => !current);
+        }}>
           More
           <ChevronRight size={14} />
         </summary>
@@ -9080,6 +9104,10 @@ type MapDomain = 'work' | 'finance' | 'communication' | 'backend' | 'display';
 const MAP_CANVAS_WIDTH = 1000;
 const MAP_CANVAS_HEIGHT = 620;
 const MAP_CANVAS_PADDING = 36;
+const MAP_FIT_MIN_ZOOM = 0.26;
+const MAP_MIN_ZOOM = 0.32;
+const MAP_MAX_ZOOM = 1.55;
+const MAP_WHEEL_SENSITIVITY = 0.00035;
 
 type IntegrationNode = {
   id: string;
@@ -9131,6 +9159,10 @@ const mapDomains: Array<{ id: 'all' | MapDomain; label: string }> = [
 
 function getPointDistance(first: { x: number; y: number }, second: { x: number; y: number }) {
   return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function clampValue(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 const baseMapNodes: IntegrationNode[] = [
@@ -9427,43 +9459,71 @@ function MapView({
     window.localStorage.setItem('noa.map.domain', domainFilter);
   }, [domainFilter]);
 
-  const fitCanvas = () => {
+  const getCanvasViewport = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    const nextZoom = Math.min(
+    if (!canvas) return null;
+    return { width: canvas.clientWidth, height: canvas.clientHeight };
+  };
+
+  const clampMapPan = (nextPan: { x: number; y: number }, nextZoom: number) => {
+    const viewport = getCanvasViewport();
+    if (!viewport) return nextPan;
+    const contentWidth = MAP_CANVAS_WIDTH * nextZoom;
+    const contentHeight = MAP_CANVAS_HEIGHT * nextZoom;
+    const clampAxis = (nextValue: number, viewportSize: number, contentSize: number) => {
+      if (contentSize <= viewportSize - MAP_CANVAS_PADDING * 2) {
+        return Math.round((viewportSize - contentSize) / 2);
+      }
+      return Math.round(clampValue(nextValue, viewportSize - contentSize - MAP_CANVAS_PADDING, MAP_CANVAS_PADDING));
+    };
+    return {
+      x: clampAxis(nextPan.x, viewport.width, contentWidth),
+      y: clampAxis(nextPan.y, viewport.height, contentHeight)
+    };
+  };
+
+  const getFittedMapViewport = () => {
+    const viewport = getCanvasViewport();
+    if (!viewport) return null;
+    const { width, height } = viewport;
+    const fitZoom = Math.min(
       1,
-      Math.max(0.48, Math.min((width - MAP_CANVAS_PADDING * 2) / MAP_CANVAS_WIDTH, (height - MAP_CANVAS_PADDING * 2) / MAP_CANVAS_HEIGHT))
+      Math.max(
+        MAP_FIT_MIN_ZOOM,
+        Math.min((width - MAP_CANVAS_PADDING * 2) / MAP_CANVAS_WIDTH, (height - MAP_CANVAS_PADDING * 2) / MAP_CANVAS_HEIGHT)
+      )
     );
-    setZoom(Number(nextZoom.toFixed(3)));
-    setPan({
-      x: Math.round((width - MAP_CANVAS_WIDTH * nextZoom) / 2),
-      y: Math.round((height - MAP_CANVAS_HEIGHT * nextZoom) / 2)
-    });
+    const nextZoom = Number(fitZoom.toFixed(3));
+    return {
+      zoom: nextZoom,
+      pan: {
+        x: Math.round((width - MAP_CANVAS_WIDTH * nextZoom) / 2),
+        y: Math.round((height - MAP_CANVAS_HEIGHT * nextZoom) / 2)
+      }
+    };
+  };
+
+  const fitCanvas = () => {
+    const fitted = getFittedMapViewport();
+    if (!fitted) return;
+    setZoom(fitted.zoom);
+    setPan(fitted.pan);
   };
 
   const zoomCanvasAt = (clientX: number, clientY: number, nextZoom: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    setPan((currentPan) => {
-      setZoom((currentZoom) => {
-        const clampedZoom = Math.min(1.65, Math.max(0.45, Number(nextZoom.toFixed(3))));
-        const originX = clientX - rect.left;
-        const originY = clientY - rect.top;
-        const contentX = (originX - currentPan.x) / currentZoom;
-        const contentY = (originY - currentPan.y) / currentZoom;
-        window.requestAnimationFrame(() => {
-          setPan({
-            x: Math.round(originX - contentX * clampedZoom),
-            y: Math.round(originY - contentY * clampedZoom)
-          });
-        });
-        return clampedZoom;
-      });
-      return currentPan;
-    });
+    const clampedZoom = Number(clampValue(nextZoom, MAP_MIN_ZOOM, MAP_MAX_ZOOM).toFixed(3));
+    const originX = clientX - rect.left;
+    const originY = clientY - rect.top;
+    const contentX = (originX - pan.x) / zoom;
+    const contentY = (originY - pan.y) / zoom;
+    setZoom(clampedZoom);
+    setPan(clampMapPan({
+      x: originX - contentX * clampedZoom,
+      y: originY - contentY * clampedZoom
+    }, clampedZoom));
   };
 
   useEffect(() => {
@@ -9477,8 +9537,8 @@ function MapView({
 
   const handleCanvasWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const delta = event.deltaY > 0 ? -0.08 : 0.08;
-    zoomCanvasAt(event.clientX, event.clientY, zoom + delta);
+    const nextZoom = zoom * Math.exp(-event.deltaY * MAP_WHEEL_SENSITIVITY);
+    zoomCanvasAt(event.clientX, event.clientY, nextZoom);
   };
 
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -9510,20 +9570,25 @@ function MapView({
       const [first, second] = Array.from(pointersRef.current.values());
       const nextDistance = getPointDistance(first, second);
       const nextCenter = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
-      const nextZoom = Math.min(1.65, Math.max(0.45, pinchRef.current.zoom * (nextDistance / pinchRef.current.distance)));
-      setZoom(Number(nextZoom.toFixed(3)));
-      setPan({
-        x: Math.round(pinchRef.current.panX + nextCenter.x - pinchRef.current.centerX),
-        y: Math.round(pinchRef.current.panY + nextCenter.y - pinchRef.current.centerY)
-      });
+      const nextZoom = Number(clampValue(pinchRef.current.zoom * (nextDistance / pinchRef.current.distance), MAP_MIN_ZOOM, MAP_MAX_ZOOM).toFixed(3));
+      const contentX = (pinchRef.current.centerX - (canvasRef.current?.getBoundingClientRect().left || 0) - pinchRef.current.panX) / pinchRef.current.zoom;
+      const contentY = (pinchRef.current.centerY - (canvasRef.current?.getBoundingClientRect().top || 0) - pinchRef.current.panY) / pinchRef.current.zoom;
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const originX = canvasRect ? nextCenter.x - canvasRect.left : nextCenter.x;
+      const originY = canvasRect ? nextCenter.y - canvasRect.top : nextCenter.y;
+      setZoom(nextZoom);
+      setPan(clampMapPan({
+        x: originX - contentX * nextZoom,
+        y: originY - contentY * nextZoom
+      }, nextZoom));
       return;
     }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    setPan({
+    setPan(clampMapPan({
       x: drag.panX + event.clientX - drag.x,
       y: drag.panY + event.clientY - drag.y
-    });
+    }, zoom));
   };
 
   const endPan = (event: React.PointerEvent<HTMLDivElement>) => {

@@ -1581,6 +1581,7 @@ h3 {
 }
 
 .map-canvas-shell {
+  align-self: start;
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;
@@ -1638,7 +1639,8 @@ h3 {
   background-size: auto, auto, 34px 34px, 34px 34px;
   border-radius: 0 0 24px 24px;
   cursor: grab;
-  min-height: clamp(520px, 62vh, 720px);
+  height: clamp(540px, 62vh, 720px);
+  min-height: 0;
   min-width: 0;
   width: 100%;
   overflow: hidden;
@@ -1656,7 +1658,7 @@ h3 {
   left: 0;
   position: absolute;
   top: 0;
-  transform-origin: 50% 50%;
+  transform-origin: 0 0;
   will-change: transform;
   width: 1000px;
 }
