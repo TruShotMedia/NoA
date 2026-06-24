@@ -7674,14 +7674,17 @@ h3 {
     inset: 0;
     overscroll-behavior-x: contain;
     position: fixed;
+    touch-action: pan-y;
     z-index: 45;
   }
 
   .mobile-menu-backdrop {
-    background: rgba(0, 0, 0, 0.48);
+    background: rgba(0, 0, 0, calc(0.48 * var(--drawer-backdrop-opacity, 1)));
     border: 0;
     inset: 0;
+    opacity: var(--drawer-backdrop-opacity, 1);
     position: absolute;
+    transition: opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1), background 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
     width: 100%;
   }
 
@@ -7699,7 +7702,51 @@ h3 {
     padding: 18px 14px calc(18px + env(safe-area-inset-bottom));
     position: absolute;
     top: 0;
+    transform: translate3d(var(--drawer-x, 0), 0, 0);
+    transition: transform 260ms cubic-bezier(0.2, 0.82, 0.2, 1);
+    will-change: transform;
     width: 100%;
+  }
+
+  .mobile-sidebar-menu.dragging .mobile-menu-backdrop,
+  .mobile-sidebar-menu.dragging .mobile-sidebar-sheet {
+    transition: none;
+  }
+
+  .mobile-sidebar-menu.open:not(.dragging):not(.closing) .mobile-sidebar-sheet {
+    animation: mobileDrawerIn 260ms cubic-bezier(0.2, 0.82, 0.2, 1);
+  }
+
+  .mobile-sidebar-menu.open:not(.dragging):not(.closing) .mobile-menu-backdrop {
+    animation: mobileDrawerBackdropIn 220ms ease-out;
+  }
+
+  .mobile-sidebar-grabber {
+    background: rgba(223, 243, 255, 0.18);
+    border-radius: 999px;
+    height: 38px;
+    position: absolute;
+    right: -12px;
+    top: calc(50% - 19px);
+    width: 5px;
+  }
+
+  @keyframes mobileDrawerIn {
+    from {
+      transform: translate3d(-24px, 0, 0);
+    }
+    to {
+      transform: translate3d(var(--drawer-x, 0), 0, 0);
+    }
+  }
+
+  @keyframes mobileDrawerBackdropIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: var(--drawer-backdrop-opacity, 1);
+    }
   }
 
   .mobile-sidebar-head {

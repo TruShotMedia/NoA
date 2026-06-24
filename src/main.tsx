@@ -1003,6 +1003,9 @@ function App() {
   const [budgetSection, setBudgetSection] = useState<BudgetSection>('overview');
   const [xeroSection, setXeroSection] = useState<XeroSection>('overview');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [mobileDrawerDragX, setMobileDrawerDragX] = useState(0);
+  const [isMobileDrawerDragging, setIsMobileDrawerDragging] = useState(false);
+  const [isMobileDrawerClosing, setIsMobileDrawerClosing] = useState(false);
   const [command, setCommand] = useState('');
   const [capture, setCapture] = useState('');
   const [notes, setNotes] = useState<CaptureNote[]>(() => {
@@ -1078,13 +1081,16 @@ function App() {
   const xeroRequestRef = useRef<Promise<XeroReport> | null>(null);
   const budgetRequestRef = useRef<Promise<BudgetReport> | null>(null);
   const lockTimerRef = useRef<number | null>(null);
+  const mobileDrawerCloseTimerRef = useRef<number | null>(null);
   const mobileMenuSwipeRef = useRef({
     active: false,
     startX: 0,
     startY: 0,
     lastX: 0,
     lastY: 0,
-    acted: false
+    startOpen: false,
+    sheetWidth: 0,
+    startedAt: 0
   });
   const voiceSupported = false;
   const recordingSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined';
@@ -1102,6 +1108,9 @@ function App() {
       lockTimerRef.current = null;
     }
     setIsMoreMenuOpen(false);
+    setIsMobileDrawerDragging(false);
+    setIsMobileDrawerClosing(false);
+    setMobileDrawerDragX(0);
     setPinInput('');
     setPinError('');
     setIsUnlocked(false);
@@ -1157,8 +1166,13 @@ function App() {
       startY: 0,
       lastX: 0,
       lastY: 0,
-      acted: false
+      startOpen: false,
+      sheetWidth: 0,
+      startedAt: 0
     };
+    setIsMobileDrawerDragging(false);
+    setIsMobileDrawerClosing(false);
+    setMobileDrawerDragX(0);
   };
 
   const shouldIgnoreMobileMenuSwipe = (target: EventTarget | null) => {
@@ -1174,7 +1188,7 @@ function App() {
 
     const touch = event.touches[0];
     const sheetWidth = Math.min(window.innerWidth * 0.86, 360);
-    const canOpenFromEdge = !isMoreMenuOpen && touch.clientX <= 28;
+    const canOpenFromEdge = !isMoreMenuOpen && touch.clientX <= 34;
     const canCloseFromSheet = isMoreMenuOpen && touch.clientX <= sheetWidth;
 
     if (!canOpenFromEdge && !canCloseFromSheet) {
@@ -1188,8 +1202,12 @@ function App() {
       startY: touch.clientY,
       lastX: touch.clientX,
       lastY: touch.clientY,
-      acted: false
+      startOpen: isMoreMenuOpen,
+      sheetWidth,
+      startedAt: performance.now()
     };
+    setIsMobileDrawerDragging(false);
+    setMobileDrawerDragX(isMoreMenuOpen ? 0 : -sheetWidth);
   };
 
   const handleMobileMenuTouchMove = (event: React.TouchEvent<HTMLElement>) => {
@@ -1201,46 +1219,88 @@ function App() {
     gesture.lastY = touch.clientY;
     const deltaX = touch.clientX - gesture.startX;
     const deltaY = touch.clientY - gesture.startY;
-    const horizontalIntent = Math.abs(deltaX) > 28 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35;
+    const horizontalIntent = Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY) * 1.15;
 
     if (Math.abs(deltaY) > 46 && Math.abs(deltaY) > Math.abs(deltaX)) {
       resetMobileMenuSwipe();
       return;
     }
 
-    if (!horizontalIntent || gesture.acted) return;
-
-    if (!isMoreMenuOpen && deltaX > 72) {
+    if (!horizontalIntent) return;
+    event.preventDefault();
+    if (!isMobileDrawerDragging) setIsMobileDrawerDragging(true);
+    if (!isMoreMenuOpen) {
       setIsMoreMenuOpen(true);
-      gesture.acted = true;
-      return;
     }
-
-    if (isMoreMenuOpen && deltaX < -72) {
-      setIsMoreMenuOpen(false);
-      gesture.acted = true;
-    }
+    const baseX = gesture.startOpen ? 0 : -gesture.sheetWidth;
+    const nextX = Math.min(0, Math.max(-gesture.sheetWidth, baseX + deltaX));
+    setMobileDrawerDragX(nextX);
   };
 
   const handleMobileMenuTouchEnd = () => {
     const gesture = mobileMenuSwipeRef.current;
-    if (!gesture.active || gesture.acted) {
+    if (!gesture.active) {
       resetMobileMenuSwipe();
       return;
     }
 
     const deltaX = gesture.lastX - gesture.startX;
     const deltaY = gesture.lastY - gesture.startY;
-    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-      if (!isMoreMenuOpen && deltaX > 58) setIsMoreMenuOpen(true);
-      if (isMoreMenuOpen && deltaX < -58) setIsMoreMenuOpen(false);
+    const elapsed = Math.max(1, performance.now() - gesture.startedAt);
+    const velocity = deltaX / elapsed;
+    const baseX = gesture.startOpen ? 0 : -gesture.sheetWidth;
+    const finalX = Math.min(0, Math.max(-gesture.sheetWidth, baseX + deltaX));
+    const openProgress = 1 + finalX / gesture.sheetWidth;
+    const horizontalIntent = Math.abs(deltaX) > Math.abs(deltaY) * 1.1;
+    if (horizontalIntent) {
+      const shouldOpen = velocity > 0.45 || (velocity > -0.35 && openProgress > 0.44);
+      setIsMoreMenuOpen(shouldOpen);
     }
     resetMobileMenuSwipe();
+  };
+
+  const openMobileMenu = () => {
+    if (mobileDrawerCloseTimerRef.current) {
+      window.clearTimeout(mobileDrawerCloseTimerRef.current);
+      mobileDrawerCloseTimerRef.current = null;
+    }
+    setIsMobileDrawerClosing(false);
+    setIsMobileDrawerDragging(false);
+    setMobileDrawerDragX(0);
+    setIsMoreMenuOpen(true);
+  };
+
+  const closeMobileMenu = () => {
+    if (mobileDrawerCloseTimerRef.current) window.clearTimeout(mobileDrawerCloseTimerRef.current);
+    if (typeof window !== 'undefined' && window.innerWidth <= 920 && isMoreMenuOpen) {
+      const sheetWidth = Math.min(window.innerWidth * 0.86, 360);
+      setIsMobileDrawerDragging(false);
+      setIsMobileDrawerClosing(true);
+      setMobileDrawerDragX(-sheetWidth);
+      mobileDrawerCloseTimerRef.current = window.setTimeout(() => {
+        setIsMoreMenuOpen(false);
+        setIsMobileDrawerClosing(false);
+        setMobileDrawerDragX(0);
+        mobileDrawerCloseTimerRef.current = null;
+      }, 240);
+      return;
+    }
+    setIsMobileDrawerDragging(false);
+    setIsMobileDrawerClosing(false);
+    setMobileDrawerDragX(0);
+    setIsMoreMenuOpen(false);
   };
 
   useEffect(() => {
     window.localStorage.setItem('noa.quickCapture', JSON.stringify(notes));
   }, [notes]);
+
+  useEffect(() => () => {
+    if (mobileDrawerCloseTimerRef.current) {
+      window.clearTimeout(mobileDrawerCloseTimerRef.current);
+      mobileDrawerCloseTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem('noa.integrationStatus', JSON.stringify(integrationStatus));
@@ -2175,7 +2235,7 @@ function App() {
     >
       <section className="workspace">
         <header className="topbar">
-          <button className="mobile-more-trigger" onClick={() => setIsMoreMenuOpen((current) => !current)} aria-label="Open navigation">
+          <button className="mobile-more-trigger" onClick={isMoreMenuOpen ? closeMobileMenu : openMobileMenu} aria-label="Open navigation">
             <Menu size={18} />
             Menu
           </button>
@@ -2328,22 +2388,25 @@ function App() {
         screen={screen}
         setScreen={(nextScreen) => {
           setScreen(nextScreen);
-          setIsMoreMenuOpen(false);
+          closeMobileMenu();
         }}
         budgetSection={budgetSection}
         setBudgetSection={(nextSection) => {
           setBudgetSection(nextSection);
           setScreen('budgeting');
-          setIsMoreMenuOpen(false);
+          closeMobileMenu();
         }}
         xeroSection={xeroSection}
         setXeroSection={(nextSection) => {
           setXeroSection(nextSection);
           setScreen('xero');
-          setIsMoreMenuOpen(false);
+          closeMobileMenu();
         }}
         isMoreMenuOpen={isMoreMenuOpen}
-        closeMoreMenu={() => setIsMoreMenuOpen(false)}
+        dragX={mobileDrawerDragX}
+        isDragging={isMobileDrawerDragging}
+        isClosing={isMobileDrawerClosing}
+        closeMoreMenu={closeMobileMenu}
       />
     </main>
   );
@@ -2683,6 +2746,9 @@ function MobileNav({
   xeroSection,
   setXeroSection,
   isMoreMenuOpen,
+  dragX,
+  isDragging,
+  isClosing,
   closeMoreMenu,
 }: {
   screen: Screen;
@@ -2692,17 +2758,30 @@ function MobileNav({
   xeroSection: XeroSection;
   setXeroSection: (section: XeroSection) => void;
   isMoreMenuOpen: boolean;
+  dragX: number;
+  isDragging: boolean;
+  isClosing: boolean;
   closeMoreMenu: () => void;
 }) {
   const primaryItems = navItems.filter((item) => workspaceScreenIds.includes(item.id));
   const secondaryItems = navItems.filter((item) => !primaryItems.some((primary) => primary.id === item.id));
+  const shouldRender = isMoreMenuOpen || isDragging || isClosing;
+  const drawerProgress = Math.max(0, Math.min(1, 1 + dragX / Math.min(window.innerWidth * 0.86, 360)));
+  const drawerStyle = {
+    '--drawer-x': `${isDragging || isClosing ? dragX : 0}px`,
+    '--drawer-backdrop-opacity': String(isDragging ? drawerProgress : isClosing ? 0 : 1)
+  } as React.CSSProperties;
 
   return (
     <>
-      {isMoreMenuOpen && (
-        <div className="mobile-sidebar-menu">
+      {shouldRender && (
+        <div
+          className={`mobile-sidebar-menu ${isMoreMenuOpen ? 'open' : ''} ${isDragging ? 'dragging' : ''} ${isClosing ? 'closing' : ''}`}
+          style={drawerStyle}
+        >
           <button className="mobile-menu-backdrop" onClick={closeMoreMenu} aria-label="Close navigation" />
-          <aside className="mobile-sidebar-sheet" aria-label="Mobile navigation">
+          <aside className="mobile-sidebar-sheet" aria-label="Mobile navigation" aria-hidden={!isMoreMenuOpen && !isDragging}>
+            <div className="mobile-sidebar-grabber" aria-hidden="true" />
             <div className="mobile-sidebar-head">
               <div className="brand mobile-brand">
                 <div className="brand-mark">NoA</div>
