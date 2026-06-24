@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-export type Screen = 'today' | 'noah' | 'hubgauge' | 'pipeline' | 'tasks' | 'upcoming-jobs' | 'clients' | 'xero' | 'budgeting' | 'map' | 'plan' | 'memory' | 'automations' | 'network' | 'integrations' | 'settings';
+export type Screen = 'today' | 'noah' | 'hubgauge' | 'pipeline' | 'tasks' | 'upcoming-jobs' | 'clients' | 'xero' | 'budgeting' | 'map' | 'plan' | 'memory' | 'automations' | 'integrations' | 'settings';
 
 export type NavItem = {
   id: Screen;
@@ -13,13 +13,6 @@ export type Priority = {
   detail: string;
   signal: string;
   status: 'now' | 'next' | 'watch';
-};
-
-export type SystemNode = {
-  name: string;
-  status: 'online' | 'planned' | 'pending';
-  detail: string;
-  health: number;
 };
 
 export type MemoryItem = {

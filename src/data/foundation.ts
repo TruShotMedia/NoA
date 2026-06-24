@@ -10,7 +10,6 @@ import {
   GitBranch,
   Map,
   MessagesSquare,
-  Network,
   PlugZap,
   Settings,
   ShieldCheck,
@@ -28,8 +27,7 @@ import type {
   MemoryItem,
   NavItem,
   Priority,
-  RoadmapStep,
-  SystemNode
+  RoadmapStep
 } from '../types/noa';
 
 export const navItems: NavItem[] = [
@@ -45,7 +43,6 @@ export const navItems: NavItem[] = [
   { id: 'plan', label: 'Plan', icon: ClipboardList },
   { id: 'memory', label: 'Memory', icon: BrainCircuit },
   { id: 'automations', label: 'Automations', icon: Workflow },
-  { id: 'network', label: 'Network', icon: Network },
   { id: 'integrations', label: 'Integrations', icon: PlugZap },
   { id: 'settings', label: 'Settings', icon: Settings }
 ];
@@ -69,17 +66,6 @@ export const priorities: Priority[] = [
     signal: 'Memory',
     status: 'watch'
   }
-];
-
-export const systemNodes: SystemNode[] = [
-  { name: 'Noah', status: 'online', detail: 'Advisor identity and response layer', health: 88 },
-  { name: 'Memory', status: 'pending', detail: 'Structured and semantic recall', health: 46 },
-  { name: 'Supabase', status: 'planned', detail: 'Database, auth, storage, vector search', health: 34 },
-  { name: 'n8n', status: 'planned', detail: 'Triggers, schedules, workflow execution', health: 38 },
-  { name: 'Calendar', status: 'planned', detail: 'Daily planning and meeting prep', health: 22 },
-  { name: 'Gmail', status: 'planned', detail: 'Inbox summaries and follow-up drafts', health: 18 },
-  { name: 'Notion', status: 'planned', detail: 'Knowledge and task sync', health: 28 },
-  { name: 'Approvals', status: 'online', detail: 'Human-in-the-loop action safety', health: 72 }
 ];
 
 export const memoryItems: MemoryItem[] = [
@@ -113,7 +99,7 @@ export const automations: Automation[] = [
 export const architectureLayers: ArchitectureLayer[] = [
   {
     name: 'Experience layer',
-    purpose: 'Desktop command centre, Noah chat, daily briefing, network view, approvals, and settings.',
+    purpose: 'Desktop command centre, Noah chat, daily briefing, orchestration map, approvals, and settings.',
     owner: 'NoA app',
     nextBuild: 'Turn the current mock UI into live views backed by local settings and Supabase data.'
   },

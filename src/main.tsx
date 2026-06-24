@@ -56,7 +56,6 @@ import {
   navItems,
   priorities,
   roadmapSteps,
-  systemNodes
 } from './data/foundation';
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
@@ -2298,7 +2297,6 @@ function App() {
         {screen === 'plan' && <Plan />}
         {screen === 'memory' && <Memory notes={notes} />}
         {screen === 'automations' && <Automations />}
-        {screen === 'network' && <NetworkView />}
         {screen === 'integrations' && (
           <Integrations
             integrationStatus={integrationStatus}
@@ -9437,36 +9435,6 @@ function statusClass(status: MapNodeStatus) {
   return `status-${status}`;
 }
 
-function NetworkView() {
-  return (
-    <section className="network page-fade">
-      <div className="scanline" />
-      <div className="network-core">
-        <span>NoA</span>
-        <small>v2</small>
-      </div>
-      {systemNodes.map((node, index) => (
-        <div key={node.name} className={`network-node n${index + 1} ${node.status}`}>
-          {node.name}
-        </div>
-      ))}
-      {systemNodes.map((node, index) => (
-        <div key={`${node.name}-line`} className={`pulse-line l${index + 1}`} />
-      ))}
-      <div className="network-panel left">
-        <p className="eyebrow">Topology</p>
-        <h3>One platform, modular systems</h3>
-        <p>NoA becomes useful when memory, automation, integrations, approvals, and Noah share the same context.</p>
-      </div>
-      <div className="network-panel right">
-        <p className="eyebrow">Next layer</p>
-        <h3>Make it live</h3>
-        <p>Memory, workflows, and Noah's reasoning should connect without changing the calm shape of the app.</p>
-      </div>
-    </section>
-  );
-}
-
 function Integrations({
   integrationStatus,
   testResults,
@@ -9950,7 +9918,6 @@ function screenTitle(screen: Screen) {
     plan: 'Build Plan',
     memory: 'Memory',
     automations: 'Automations',
-    network: 'Network Core',
     integrations: 'Integrations',
     settings: 'Settings'
   }[screen];

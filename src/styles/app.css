@@ -448,8 +448,7 @@ h3 {
 .core-card,
 .glass-card,
 .integration-card,
-.automation-card,
-.network-panel {
+.automation-card {
   border-radius: 28px;
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.045));
   box-shadow: inset 0 0 0 1px var(--line), var(--shadow);
@@ -1638,130 +1637,6 @@ h3 {
 
 .map-mode-debug .map-node:not(.status-connected) {
   box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.26), 0 18px 58px rgba(251, 191, 36, 0.08);
-}
-
-.network {
-  position: relative;
-  height: calc(100vh - 122px);
-  overflow: hidden;
-  border-radius: 34px;
-  background: radial-gradient(circle at center, rgba(96, 165, 250, 0.16), transparent 34%), linear-gradient(145deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.025));
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-
-.scanline {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
-  background-size: 44px 44px;
-  opacity: 0.85;
-}
-
-.network-core {
-  position: absolute;
-  z-index: 5;
-  left: 50%;
-  top: 50%;
-  display: grid;
-  width: 154px;
-  height: 154px;
-  place-items: center;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(96, 165, 250, 0.36), rgba(20, 24, 38, 0.82));
-  box-shadow: 0 0 80px rgba(96, 165, 250, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-  text-align: center;
-}
-
-.network-core span {
-  display: block;
-  font-size: 34px;
-  font-weight: 800;
-}
-
-.network-core small {
-  display: block;
-  margin-top: -38px;
-  color: rgba(255, 255, 255, 0.58);
-}
-
-.network-node {
-  position: absolute;
-  z-index: 4;
-  min-width: 96px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.085);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 30px rgba(96, 165, 250, 0.08);
-  color: rgba(255, 255, 255, 0.78);
-  padding: 10px 12px;
-  text-align: center;
-}
-
-.network-node.online {
-  background: rgba(52, 211, 153, 0.13);
-  box-shadow: 0 0 34px rgba(52, 211, 153, 0.18);
-  color: #bbf7d0;
-}
-
-.network-node.planned {
-  background: rgba(96, 165, 250, 0.11);
-  color: #bfdbfe;
-}
-
-.n1 { left: 49%; top: 12%; }
-.n2 { left: 74%; top: 24%; }
-.n3 { left: 80%; top: 48%; }
-.n4 { left: 70%; top: 74%; }
-.n5 { left: 47%; top: 82%; }
-.n6 { left: 24%; top: 73%; }
-.n7 { left: 13%; top: 47%; }
-.n8 { left: 22%; top: 22%; }
-
-.pulse-line {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 2px;
-  height: 270px;
-  transform-origin: top;
-  background: linear-gradient(180deg, rgba(96, 165, 250, 0.48), transparent);
-  opacity: 0.34;
-  animation: pulse 2.8s linear infinite;
-}
-
-.l1 { transform: rotate(0deg); }
-.l2 { transform: rotate(45deg); }
-.l3 { transform: rotate(90deg); }
-.l4 { transform: rotate(135deg); }
-.l5 { transform: rotate(180deg); }
-.l6 { transform: rotate(225deg); }
-.l7 { transform: rotate(270deg); }
-.l8 { transform: rotate(315deg); }
-
-@keyframes pulse {
-  from { filter: brightness(0.72); }
-  50% { filter: brightness(1.65); }
-  to { filter: brightness(0.72); }
-}
-
-.network-panel {
-  position: absolute;
-  z-index: 6;
-  max-width: 320px;
-  color: rgba(255, 255, 255, 0.74);
-  padding: 22px;
-}
-
-.network-panel.left {
-  left: 24px;
-  top: 24px;
-}
-
-.network-panel.right {
-  right: 24px;
-  bottom: 24px;
 }
 
 .hubgauge-page {
