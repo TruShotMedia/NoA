@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import {
   Activity,
   ArrowUpRight,
+  Bell,
   Bot,
   BrainCircuit,
   BarChart3,
@@ -38,6 +39,8 @@ import {
   Save,
   Send,
   ServerCog,
+  Search,
+  Settings,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -2144,56 +2147,30 @@ function App() {
       onTouchEnd={handleMobileMenuTouchEnd}
       onTouchCancel={resetMobileMenuSwipe}
     >
-      <aside className="rail">
-        <div className="brand">
-          <div className="brand-mark">NoA</div>
-          <div>
-            <strong>NoA</strong>
-            <span>Personal command centre</span>
-          </div>
-        </div>
-
-        <nav className="nav-list" aria-label="Primary navigation">
-          <NavGroupLabel label="Workspace" />
-          {navItems.filter((item) => workspaceScreenIds.includes(item.id)).map((item) => (
-            <RailNavItem
-              key={item.id}
-              item={item}
-              screen={screen}
-              setScreen={setScreen}
-              budgetSection={budgetSection}
-              setBudgetSection={setBudgetSection}
-              xeroSection={xeroSection}
-              setXeroSection={setXeroSection}
-            />
-          ))}
-          <NavGroupLabel label="More" />
-          {navItems.filter((item) => !workspaceScreenIds.includes(item.id)).map((item) => (
-            <RailNavItem
-              key={item.id}
-              item={item}
-              screen={screen}
-              setScreen={setScreen}
-              budgetSection={budgetSection}
-              setBudgetSection={setBudgetSection}
-              xeroSection={xeroSection}
-              setXeroSection={setXeroSection}
-            />
-          ))}
-        </nav>
-
-        <div className="rail-status">
-          <span />
-          Private workspace
-        </div>
-      </aside>
-
       <section className="workspace">
         <header className="topbar">
           <button className="mobile-more-trigger" onClick={() => setIsMoreMenuOpen((current) => !current)} aria-label="Open navigation">
             <Menu size={18} />
             Menu
           </button>
+          <div className="desktop-brand">
+            <div className="brand-mark">NoA</div>
+            <div>
+              <strong>NoA</strong>
+              <span>Personal command centre</span>
+            </div>
+          </div>
+          <DesktopTopNav
+            screen={screen}
+            setScreen={setScreen}
+            setBudgetSection={setBudgetSection}
+            setXeroSection={setXeroSection}
+          />
+          <div className="desktop-utility-actions" aria-label="Desktop utilities">
+            <button type="button" aria-label="Search"><Search size={17} /></button>
+            <button type="button" aria-label="Notifications"><Bell size={17} /></button>
+            <button type="button" aria-label="Settings" onClick={() => setScreen('settings')}><Settings size={17} /></button>
+          </div>
           <div className="topbar-title">
             <p className="eyebrow">Noetic Advisor</p>
             <h1>{screenTitle(screen)}</h1>
@@ -2209,6 +2186,13 @@ function App() {
         <ResponsivePageNav
           screen={screen}
           setScreen={setScreen}
+          budgetSection={budgetSection}
+          setBudgetSection={setBudgetSection}
+          xeroSection={xeroSection}
+          setXeroSection={setXeroSection}
+        />
+        <DesktopSubPageNav
+          screen={screen}
           budgetSection={budgetSection}
           setBudgetSection={setBudgetSection}
           xeroSection={xeroSection}
@@ -2437,6 +2421,88 @@ function NoaLockScreen({
 
 function NavGroupLabel({ label }: { label: string }) {
   return <span className="nav-group-label">{label}</span>;
+}
+
+function DesktopTopNav({
+  screen,
+  setScreen,
+  setBudgetSection,
+  setXeroSection
+}: {
+  screen: Screen;
+  setScreen: (screen: Screen) => void;
+  setBudgetSection: (section: BudgetSection) => void;
+  setXeroSection: (section: XeroSection) => void;
+}) {
+  const primaryItems = navItems.filter((item) => workspaceScreenIds.includes(item.id));
+  const secondaryItems = navItems.filter((item) => !workspaceScreenIds.includes(item.id));
+  const activate = (id: Screen) => {
+    if (id === 'budgeting') setBudgetSection('overview');
+    if (id === 'xero') setXeroSection('overview');
+    setScreen(id);
+  };
+
+  return (
+    <nav className="desktop-top-nav" aria-label="Desktop primary navigation">
+      {primaryItems.map((item) => (
+        <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => activate(item.id)}>
+          {item.label}
+        </button>
+      ))}
+      <details className="desktop-more-menu">
+        <summary>
+          More
+          <ChevronRight size={14} />
+        </summary>
+        <div>
+          {secondaryItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button key={item.id} className={screen === item.id ? 'active' : ''} onClick={() => activate(item.id)}>
+                <Icon size={15} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </details>
+    </nav>
+  );
+}
+
+function DesktopSubPageNav({
+  screen,
+  budgetSection,
+  setBudgetSection,
+  xeroSection,
+  setXeroSection
+}: {
+  screen: Screen;
+  budgetSection: BudgetSection;
+  setBudgetSection: (section: BudgetSection) => void;
+  xeroSection: XeroSection;
+  setXeroSection: (section: XeroSection) => void;
+}) {
+  if (screen !== 'budgeting' && screen !== 'xero') return null;
+  const sections = screen === 'budgeting' ? budgetSections : xeroSections;
+  const activeSection = screen === 'budgeting' ? budgetSection : xeroSection;
+  const setSection = screen === 'budgeting'
+    ? (section: BudgetSection | XeroSection) => setBudgetSection(section as BudgetSection)
+    : (section: BudgetSection | XeroSection) => setXeroSection(section as XeroSection);
+
+  return (
+    <nav className="desktop-sub-nav" aria-label={`${screenTitle(screen)} sections`}>
+      {sections.map((section) => {
+        const Icon = section.icon;
+        return (
+          <button key={section.id} className={activeSection === section.id ? 'active' : ''} onClick={() => setSection(section.id)}>
+            <Icon size={15} />
+            <span>{section.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 function RailNavItem({
