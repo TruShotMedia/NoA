@@ -4031,6 +4031,7 @@ function CalendarDayModal({
   onOpen: (job: CalendarJob) => void;
   onEdit: (job: CalendarJob) => void;
 }) {
+  useModalEscape(onClose);
   const firstKey = jobs[0] ? `${jobs[0].sourceKind}-${jobs[0].id}` : '';
   const [selectedId, setSelectedId] = useState(firstKey);
   const selectedJob = jobs.find((job) => `${job.sourceKind}-${job.id}` === selectedId) || jobs[0];
@@ -6102,6 +6103,7 @@ function BudgetEditorModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  useModalEscape(onClose);
   const [draft, setDraft] = useState<Record<string, string | boolean>>(() => budgetDraftFromRow(kind, row));
   const [message, setMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -6168,7 +6170,7 @@ function BudgetEditorModal({
   };
 
   return (
-    <div className="modal-shell">
+    <div className="modal-shell" role="dialog" aria-modal="true" aria-label={modalTitle}>
       <button className="modal-backdrop" aria-label="Close budget editor" onClick={onClose} />
       <article className="notion-modal budget-modal">
         <div className="modal-head">
@@ -6176,7 +6178,7 @@ function BudgetEditorModal({
             <p className="eyebrow">{kindLabel(kind)}</p>
             <h3>{modalTitle}</h3>
           </div>
-          <button onClick={onClose} aria-label="Close budget editor"><X size={18} /></button>
+          <button type="button" className="icon-close" onClick={onClose} aria-label="Close budget editor"><X size={18} /></button>
         </div>
 
         <section className="budget-editor-summary">
@@ -7800,6 +7802,7 @@ function XeroInvoiceDrawer({
   isLoadingDetails: boolean;
   onClose: () => void;
 }) {
+  useModalEscape(onClose);
   const recordLabel = invoice.recordKind === 'bill' ? 'bill' : 'invoice';
   const counterpartyLabel = invoice.counterpartyLabel || (invoice.recordKind === 'bill' ? 'Supplier' : 'Customer');
   const pdfUrl = `/api/xero/invoice-pdf?id=${encodeURIComponent(invoice.id)}`;
@@ -7917,6 +7920,7 @@ function XeroDraftInvoiceModal({
   onClose: () => void;
   onCreated: (invoice: XeroInvoice) => void;
 }) {
+  useModalEscape(onClose);
   const [form, setForm] = useState<DraftInvoiceForm>(() => ({
     contactName: job.client || '',
     reference: job.title || '',
@@ -8319,6 +8323,16 @@ function textIncludes(haystack: string, needle: string) {
   return Boolean(normalizedHaystack && normalizedNeedle && normalizedHaystack.includes(normalizedNeedle));
 }
 
+function useModalEscape(onClose: () => void) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+}
+
 function NotionItemModal({
   mode,
   kind,
@@ -8338,6 +8352,7 @@ function NotionItemModal({
   onSave: (values: Record<string, string>) => Promise<void>;
   onArchive?: () => Promise<void>;
 }) {
+  useModalEscape(onClose);
   const isJob = kind === 'job';
   const jobOptions = availableJobs ?? EMPTY_UPCOMING_JOBS;
   const [values, setValues] = useState<Record<string, string>>(() => getInitialNotionValues(kind, item));

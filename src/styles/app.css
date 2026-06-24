@@ -3540,49 +3540,73 @@ h3 {
   display: grid;
   inset: 0;
   justify-items: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   min-height: 100svh;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
-  padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  padding:
+    max(22px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(22px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+  place-items: center;
   position: fixed;
   touch-action: none;
   z-index: 80;
 }
 
 .modal-backdrop {
-  inset: 0;
-  position: absolute;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(96, 165, 250, 0.14), transparent 34%),
+    rgba(3, 7, 18, 0.68);
+  backdrop-filter: blur(18px) saturate(125%);
   border: 0;
-  background: rgba(3, 7, 18, 0.62);
-  backdrop-filter: blur(16px) saturate(120%);
+  inset: 0;
+  opacity: 1;
+  position: absolute;
+  width: 100%;
+  animation: modalBackdropIn 180ms ease-out both;
 }
 
 .notion-modal {
+  animation: modalCardIn 220ms cubic-bezier(0.2, 0.86, 0.22, 1) both;
+  backdrop-filter: blur(26px) saturate(130%);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(147, 197, 253, 0.14), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.052)),
+    rgba(10, 16, 29, 0.94);
+  border-radius: 26px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.11),
+    0 34px 120px rgba(0, 0, 0, 0.56);
   display: grid;
   gap: 18px;
-  width: min(760px, calc(100vw - 28px));
-  max-height: calc(100vh - 36px);
-  max-height: calc(100svh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  margin: 0;
+  max-height: calc(100dvh - max(44px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 28px));
+  max-height: calc(100svh - max(44px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 28px));
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  padding: 22px;
   position: relative;
   touch-action: pan-y;
-  margin: 0;
-  border-radius: 24px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.045)),
-    rgba(10, 16, 29, 0.88);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.11), 0 32px 110px rgba(0, 0, 0, 0.52);
-  backdrop-filter: var(--glass-blur);
-  padding: 22px;
+  width: min(760px, calc(100vw - 36px));
+  z-index: 81;
 }
 
 .modal-head {
   align-items: flex-start;
+  background: linear-gradient(180deg, rgba(14, 21, 35, 0.98), rgba(14, 21, 35, 0.86));
+  border-radius: 20px 20px 12px 12px;
   display: flex;
-  justify-content: space-between;
   gap: 16px;
+  justify-content: space-between;
+  margin: -22px -22px 0;
+  padding: 22px 22px 14px;
+  position: sticky;
+  top: -22px;
+  z-index: 4;
 }
 
 .modal-head h3 {
@@ -3600,6 +3624,40 @@ h3 {
   height: 38px;
   min-width: 38px;
   place-items: center;
+}
+
+.icon-close:hover {
+  background: rgba(147, 197, 253, 0.16);
+  color: #fff;
+}
+
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .notion-modal,
+  .xero-invoice-drawer {
+    animation: none;
+    transition: none;
+  }
 }
 
 .notion-form-grid {
@@ -3737,7 +3795,16 @@ h3 {
 }
 
 .modal-actions {
+  background: linear-gradient(0deg, rgba(14, 21, 35, 0.98), rgba(14, 21, 35, 0.82));
+  border-radius: 12px 12px 20px 20px;
+  bottom: -22px;
+  display: flex;
+  gap: 10px;
   justify-content: flex-end;
+  margin: 0 -22px -22px;
+  padding: 14px 22px 22px;
+  position: sticky;
+  z-index: 3;
 }
 
 .modal-actions .secondary-action,
@@ -6934,25 +7001,47 @@ h3 {
 }
 
 .xero-drawer-shell {
-  align-items: stretch;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
 }
 
 .xero-invoice-drawer {
-  background: rgba(12, 17, 29, 0.98);
-  border-radius: 26px 0 0 26px;
-  box-shadow: inset 0 0 0 1px var(--line), -24px 0 90px rgba(0, 0, 0, 0.34);
-  display: flex;
-  flex-direction: column;
+  animation: modalCardIn 220ms cubic-bezier(0.2, 0.86, 0.22, 1) both;
+  backdrop-filter: blur(26px) saturate(130%);
+  background:
+    radial-gradient(circle at 86% 0%, rgba(56, 189, 248, 0.14), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05)),
+    rgba(12, 17, 29, 0.96);
+  border-radius: 26px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 0 0 1px var(--line),
+    0 34px 120px rgba(0, 0, 0, 0.56);
+  display: grid;
   gap: 18px;
-  margin-left: auto;
-  max-height: 100dvh;
+  margin: 0;
+  max-height: calc(100dvh - max(44px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 28px));
+  max-height: calc(100svh - max(44px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 28px));
   max-width: 720px;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   position: relative;
-  width: min(720px, calc(100vw - 28px));
+  touch-action: pan-y;
+  width: min(720px, calc(100vw - 36px));
   z-index: 61;
+}
+
+.xero-invoice-drawer .modal-head {
+  margin: -24px -24px 0;
+  padding: 24px 24px 14px;
+  top: -24px;
+}
+
+.xero-invoice-drawer .modal-actions {
+  bottom: -24px;
+  margin: 0 -24px -24px;
+  padding: 14px 24px 24px;
 }
 
 .xero-invoice-status {
@@ -8106,20 +8195,24 @@ h3 {
 
   .modal-shell {
     align-items: center;
-    justify-items: stretch;
-    min-height: 100vh;
+    justify-items: center;
+    min-height: 100dvh;
     min-height: 100svh;
     overflow: hidden;
-    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
   }
 
   .notion-modal {
     border-radius: 20px;
     margin: 0;
-    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     max-height: calc(100svh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     padding: 16px;
-    width: 100%;
+    width: min(100%, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)));
   }
 
   .notion-modal .modal-head {
@@ -8143,10 +8236,10 @@ h3 {
   .calendar-day-modal {
     border-radius: 20px;
     margin: 0;
-    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     max-height: calc(100svh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     padding: 16px 14px calc(20px + env(safe-area-inset-bottom));
-    width: 100%;
+    width: min(100%, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)));
   }
 
   .calendar-day-headline {
@@ -8397,10 +8490,11 @@ h3 {
   }
 
   .xero-invoice-drawer {
-    border-radius: 24px 24px 0 0;
-    margin: auto 0 0;
-    max-height: calc(100dvh - 20px);
-    width: 100%;
+    border-radius: 20px;
+    margin: 0;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100svh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    width: min(100%, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)));
   }
 
   .xero-detail-grid,
