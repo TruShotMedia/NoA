@@ -10840,6 +10840,11 @@ function GroceryListStandalonePage() {
     restartIdleTimer();
   };
 
+  const startScreensaver = () => {
+    setIsSleeping(true);
+    setActiveScreensaverIndex(0);
+  };
+
   const addItem = async () => {
     const cleanedName = itemName.trim();
     if (!cleanedName) {
@@ -10970,6 +10975,10 @@ function GroceryListStandalonePage() {
               <div><span>Saved screens</span><strong>{enabledScreensavers.length}</strong></div>
               <div><span>Last sync</span><strong>{report.fetchedAt ? new Date(report.fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Not synced'}</strong></div>
             </div>
+            <button className="secondary-action" onClick={startScreensaver}>
+              <MonitorSmartphone size={16} />
+              Start screensaver
+            </button>
             <p className="section-copy small">Manage screensavers from NoA Settings to Personalisation.</p>
           </article>
         </section>

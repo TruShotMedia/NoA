@@ -5485,7 +5485,7 @@ h3 {
 }
 
 .grocery-screensaver-overlay {
-  align-items: center;
+  align-items: flex-start;
   background:
     linear-gradient(180deg, rgba(3, 7, 18, 0.54), rgba(3, 7, 18, 0.9)),
     linear-gradient(145deg, rgba(10, 14, 25, 0.98), rgba(10, 14, 25, 0.88));
@@ -5495,13 +5495,14 @@ h3 {
   cursor: pointer;
   display: flex;
   inset: 0;
-  justify-content: center;
+  justify-content: flex-start;
+  padding: max(24px, env(safe-area-inset-top, 0px) + 18px) 24px 24px;
   position: fixed;
   z-index: 1800;
 }
 
 .grocery-screensaver-clock {
-  align-items: center;
+  align-items: flex-start;
   backdrop-filter: blur(18px);
   background: rgba(6, 10, 20, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -5509,8 +5510,9 @@ h3 {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
   display: grid;
   gap: 10px;
+  max-width: min(420px, calc(100vw - 48px));
   padding: 34px 38px;
-  text-align: center;
+  text-align: left;
 }
 
 .grocery-screensaver-clock span {
@@ -5523,7 +5525,7 @@ h3 {
 
 .grocery-screensaver-clock strong {
   color: #fff;
-  font-size: clamp(44px, 8vw, 88px);
+  font-size: clamp(42px, 7vw, 80px);
   line-height: 0.95;
 }
 
@@ -9272,9 +9274,10 @@ h3 {
   }
 
   .grocery-screensaver-clock {
-    margin: 18px;
-    padding: 26px 22px;
-    width: min(100% - 36px, 460px);
+    margin: 0;
+    max-width: min(320px, calc(100vw - 28px));
+    padding: 24px 20px;
+    width: 100%;
   }
 
   .screensaver-grid {
