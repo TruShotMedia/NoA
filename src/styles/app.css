@@ -5284,7 +5284,8 @@ h3 {
 }
 
 .grocery-entry-grid.standalone {
-  grid-template-columns: minmax(220px, 1.1fr) minmax(140px, 0.55fr) minmax(150px, 0.55fr) minmax(170px, 0.6fr) auto;
+  align-items: end;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(120px, 0.45fr) minmax(150px, 0.52fr) minmax(170px, 0.58fr) minmax(130px, auto);
 }
 
 .grocery-entry-grid label,
@@ -5332,6 +5333,7 @@ h3 {
 
 .grocery-layout.standalone {
   align-items: start;
+  grid-template-columns: 1fr;
 }
 
 .grocery-list {
@@ -5422,14 +5424,14 @@ h3 {
 
 .grocery-route-shell {
   min-height: 100svh;
-  padding: 26px;
+  padding: clamp(14px, 2.2vw, 26px);
 }
 
 .grocery-route-inner {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   margin: 0 auto;
-  max-width: 1360px;
+  max-width: 1120px;
 }
 
 .grocery-route-hero {
@@ -5441,13 +5443,16 @@ h3 {
   display: flex;
   gap: 18px;
   justify-content: space-between;
+  min-height: 98px;
+  padding: 20px 22px;
 }
 
 .grocery-route-meta {
-  align-items: flex-end;
-  display: grid;
-  gap: 12px;
-  justify-items: end;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .grocery-route-grid {
@@ -5460,6 +5465,10 @@ h3 {
 .grocery-route-status-card {
   display: grid;
   gap: 14px;
+}
+
+.grocery-route-form-card {
+  overflow: hidden;
 }
 
 .grocery-route-status-list {
@@ -5486,9 +5495,7 @@ h3 {
 
 .grocery-screensaver-overlay {
   align-items: flex-start;
-  background:
-    linear-gradient(180deg, rgba(3, 7, 18, 0.54), rgba(3, 7, 18, 0.9)),
-    linear-gradient(145deg, rgba(10, 14, 25, 0.98), rgba(10, 14, 25, 0.88));
+  background: linear-gradient(145deg, rgba(10, 14, 25, 0.98), rgba(10, 14, 25, 0.88));
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -5504,9 +5511,9 @@ h3 {
 .grocery-screensaver-clock {
   align-items: flex-start;
   backdrop-filter: blur(18px);
-  background: rgba(6, 10, 20, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 32px;
+  background: rgba(6, 10, 20, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
   display: grid;
   gap: 10px;

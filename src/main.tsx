@@ -10899,7 +10899,6 @@ function GroceryListStandalonePage() {
         <article className="glass-card wide grocery-route-hero">
           <div>
             <PanelTitle eyebrow="NoA household extension" title="Grocery List" />
-            <p>Shared house list for tablet use. Add items, clear them, and let the screen fall back into a simple rotating sleep view when the page is idle.</p>
           </div>
           <div className="grocery-route-meta">
             <div className="grocery-summary-pill">
@@ -10910,78 +10909,62 @@ function GroceryListStandalonePage() {
               <RefreshCw size={16} />
               {isLoading ? 'Syncing...' : 'Refresh'}
             </button>
-          </div>
-        </article>
-
-        <section className="grocery-route-grid">
-          <article className="glass-card grocery-route-form-card">
-            <div className="panel-row-head">
-              <PanelTitle eyebrow="Quick add" title="Add an item" />
-              <span>{report.owner.displayName || 'House list'}</span>
-            </div>
-            <div className="grocery-entry-grid standalone">
-              <label>
-                <span>Item</span>
-                <input
-                  value={itemName}
-                  onChange={(event) => setItemName(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void addItem();
-                  }}
-                  placeholder="Milk, bread, bananas..."
-                />
-              </label>
-              <label>
-                <span>Quantity</span>
-                <input
-                  value={quantity}
-                  onChange={(event) => setQuantity(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void addItem();
-                  }}
-                  placeholder="1x, 2L, large..."
-                />
-              </label>
-              <label>
-                <span>Category</span>
-                <select value={category} onChange={(event) => setCategory(event.currentTarget.value)}>
-                  {categories.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Added by</span>
-                <input
-                  value={addedBy}
-                  onChange={(event) => setAddedBy(event.currentTarget.value)}
-                  placeholder="Kitchen, John, House..."
-                />
-              </label>
-              <button className="primary-action" onClick={() => void addItem()} disabled={isSaving}>
-                <Plus size={16} />
-                {isSaving ? 'Adding...' : 'Add item'}
-              </button>
-            </div>
-            {message && <p className="form-message">{message}</p>}
-          </article>
-
-          <article className="glass-card grocery-route-status-card">
-            <div className="panel-row-head">
-              <PanelTitle eyebrow="Sleep mode" title="Screensaver" />
-              <MonitorSmartphone size={20} />
-            </div>
-            <div className="grocery-route-status-list">
-              <div><span>Idle timeout</span><strong>{personalisation.sleepMinutes} min</strong></div>
-              <div><span>Rotation</span><strong>{personalisation.cycleSeconds} sec</strong></div>
-              <div><span>Saved screens</span><strong>{enabledScreensavers.length}</strong></div>
-              <div><span>Last sync</span><strong>{report.fetchedAt ? new Date(report.fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Not synced'}</strong></div>
-            </div>
             <button className="secondary-action" onClick={startScreensaver}>
               <MonitorSmartphone size={16} />
               Start screensaver
             </button>
-            <p className="section-copy small">Manage screensavers from NoA Settings to Personalisation.</p>
-          </article>
-        </section>
+          </div>
+        </article>
+
+        <article className="glass-card wide grocery-route-form-card">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Quick add" title="Add an item" />
+            <span>{report.owner.displayName || 'House list'}</span>
+          </div>
+          <div className="grocery-entry-grid standalone">
+            <label>
+              <span>Item</span>
+              <input
+                value={itemName}
+                onChange={(event) => setItemName(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void addItem();
+                }}
+                placeholder="Milk, bread, bananas..."
+              />
+            </label>
+            <label>
+              <span>Quantity</span>
+              <input
+                value={quantity}
+                onChange={(event) => setQuantity(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void addItem();
+                }}
+                placeholder="1x, 2L, large..."
+              />
+            </label>
+            <label>
+              <span>Category</span>
+              <select value={category} onChange={(event) => setCategory(event.currentTarget.value)}>
+                {categories.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Added by</span>
+              <input
+                value={addedBy}
+                onChange={(event) => setAddedBy(event.currentTarget.value)}
+                placeholder="Kitchen, John, House..."
+              />
+            </label>
+            <button className="primary-action" onClick={() => void addItem()} disabled={isSaving}>
+              <Plus size={16} />
+              {isSaving ? 'Adding...' : 'Add item'}
+            </button>
+          </div>
+          {message && <p className="form-message">{message}</p>}
+        </article>
 
         <section className="grocery-layout standalone">
           <article className="glass-card budget-panel">
@@ -11035,7 +11018,7 @@ function GroceryListStandalonePage() {
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') wakeScreensaver();
           }}
-          style={activeScreensaver ? { backgroundImage: `linear-gradient(180deg, rgba(3, 7, 18, 0.36), rgba(3, 7, 18, 0.86)), url("${activeScreensaver.image}")` } : undefined}
+          style={activeScreensaver ? { backgroundImage: `url("${activeScreensaver.image}")` } : undefined}
         >
           <div className="grocery-screensaver-clock">
             <span>{new Date(now).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span>
