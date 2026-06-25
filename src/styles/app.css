@@ -6714,8 +6714,15 @@ h3 {
   gap: 18px;
 }
 
+.hue-page {
+  display: grid;
+  gap: 18px;
+}
+
 .xero-hero,
+.hue-hero,
 .xero-actions,
+.hue-actions,
 .panel-row-head {
   align-items: center;
   display: flex;
@@ -6723,7 +6730,8 @@ h3 {
   justify-content: space-between;
 }
 
-.xero-actions {
+.xero-actions,
+.hue-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -6771,6 +6779,172 @@ h3 {
   color: var(--muted);
   line-height: 1.5;
   margin: 6px 0 0;
+}
+
+.hue-alert {
+  align-items: flex-start;
+  background: rgba(251, 191, 36, 0.12);
+  border-radius: 22px;
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.18);
+  color: rgba(255, 255, 255, 0.84);
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+}
+
+.hue-alert.ok {
+  background: rgba(52, 211, 153, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.16);
+}
+
+.hue-alert svg {
+  color: #fde68a;
+  flex: 0 0 auto;
+}
+
+.hue-alert.ok svg {
+  color: #bbf7d0;
+}
+
+.hue-alert p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.hue-overview {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
+}
+
+.hue-balance-card,
+.hue-stat-card,
+.hue-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border-radius: 24px;
+  box-shadow: var(--glass-shadow);
+  min-width: 0;
+  padding: 22px;
+}
+
+.hue-balance-card {
+  background:
+    radial-gradient(circle at 75% 16%, rgba(253, 230, 138, 0.22), transparent 34%),
+    linear-gradient(145deg, rgba(96, 165, 250, 0.32), rgba(52, 211, 153, 0.16) 58%, rgba(15, 23, 42, 0.86));
+}
+
+.hue-balance-card > span,
+.hue-stat-card span {
+  color: var(--faint);
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.hue-balance-card strong,
+.hue-stat-card strong {
+  color: #fff;
+  display: block;
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.hue-balance-card p,
+.hue-balance-card small,
+.hue-stat-card p,
+.hue-panel p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+
+.hue-stat-card svg {
+  color: #fde68a;
+  margin-bottom: 14px;
+}
+
+.hue-meter {
+  background: rgba(0, 0, 0, 0.24);
+  border-radius: 999px;
+  height: 12px;
+  margin: 22px 0 10px;
+  overflow: hidden;
+}
+
+.hue-meter i {
+  background: linear-gradient(90deg, #60a5fa, #fde68a, #34d399);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 4px;
+}
+
+.hue-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hue-list {
+  display: grid;
+  gap: 10px;
+}
+
+.hue-row {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr auto;
+  padding: 14px;
+}
+
+.hue-row.unreachable {
+  opacity: 0.62;
+}
+
+.hue-row strong {
+  color: #fff;
+}
+
+.hue-row p {
+  font-size: 13px;
+  margin: 5px 0 12px;
+}
+
+.hue-row input[type='range'] {
+  accent-color: #fde68a;
+  display: block;
+  width: 100%;
+}
+
+.hue-toggle {
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 900;
+  min-width: 64px;
+  padding: 10px 14px;
+}
+
+.hue-toggle.on {
+  background: #fde68a;
+  color: #111827;
+  box-shadow: 0 14px 38px rgba(253, 230, 138, 0.22);
+}
+
+.hue-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .xero-overview {
@@ -7590,6 +7764,8 @@ h3 {
     .today-briefing-card,
     .today-grid,
     .today-analytics-row,
+    .hue-overview,
+    .hue-grid,
     .xero-overview,
     .xero-analytics-grid,
     .xero-intelligence-grid,
@@ -8474,6 +8650,32 @@ h3 {
   .xero-actions {
     align-items: stretch;
     flex-direction: column;
+    width: 100%;
+  }
+
+  .hue-hero,
+  .hue-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hue-actions button,
+  .hue-actions .xero-health {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .hue-overview,
+  .hue-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hue-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .hue-toggle {
     width: 100%;
   }
 
