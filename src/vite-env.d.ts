@@ -434,58 +434,6 @@ interface Window {
       }>;
       warnings: string[];
     }>;
-    getHueLights?: () => Promise<{
-      ok: boolean;
-      mode: 'direct' | 'proxy';
-      fetchedAt: string;
-      message: string;
-      bridge: {
-        name: string;
-        model: string;
-        softwareVersion: string;
-        ipAddress: string;
-      } | null;
-      lights: Array<{
-        id: string;
-        name: string;
-        type: string;
-        modelId: string;
-        manufacturer: string;
-        on: boolean;
-        reachable: boolean;
-        brightness: number;
-        colorTemperature: number | null;
-        hue: number | null;
-        saturation: number | null;
-        lastUpdated: string;
-      }>;
-      groups: Array<{
-        id: string;
-        name: string;
-        type: string;
-        className: string;
-        on: boolean;
-        allOn: boolean;
-        lights: string[];
-        activeLights: number;
-        lightCount: number;
-        brightness: number;
-      }>;
-      totals: {
-        lights: number;
-        rooms: number;
-        activeLights: number;
-      };
-      config: Record<string, unknown>;
-    }>;
-    controlHue?: (payload: {
-      targetType: 'light' | 'group';
-      targetId: string;
-      state: Record<string, unknown>;
-    }) => Promise<{
-      ok: boolean;
-      message: string;
-    }>;
     getBudgetSummary?: () => Promise<{
       ok: boolean;
       message: string;

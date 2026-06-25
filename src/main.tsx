@@ -24,7 +24,6 @@ import {
   Edit3,
   BriefcaseBusiness,
   Kanban,
-  Lightbulb,
   LockKeyhole,
   Mail,
   ListTodo,
@@ -65,7 +64,7 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'hue', 'map'];
+const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
 type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'groceries' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -97,7 +96,7 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
-const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'hue', 'map'];
+const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -121,7 +120,7 @@ type SmartBriefing = {
   firstAction: string;
 };
 
-type IntegrationId = 'openai' | 'supabase' | 'n8n' | 'notion' | 'xero' | 'email' | 'hue';
+type IntegrationId = 'openai' | 'supabase' | 'n8n' | 'notion' | 'xero' | 'email';
 
 type IntegrationStatus = Record<IntegrationId, boolean>;
 
@@ -214,59 +213,6 @@ type IntegrationSettingsReport = {
     id: string;
     fields: IntegrationFieldState[];
   }>;
-};
-
-type HueLight = {
-  id: string;
-  name: string;
-  type: string;
-  modelId: string;
-  manufacturer: string;
-  on: boolean;
-  reachable: boolean;
-  brightness: number;
-  colorTemperature: number | null;
-  hue: number | null;
-  saturation: number | null;
-  lastUpdated: string;
-};
-
-type HueGroup = {
-  id: string;
-  name: string;
-  type: string;
-  className: string;
-  on: boolean;
-  allOn: boolean;
-  lights: string[];
-  activeLights: number;
-  lightCount: number;
-  brightness: number;
-};
-
-type HueReport = {
-  ok: boolean;
-  mode: 'direct' | 'proxy';
-  fetchedAt: string;
-  message: string;
-  bridge: {
-    name: string;
-    model: string;
-    softwareVersion: string;
-    ipAddress: string;
-  } | null;
-  lights: HueLight[];
-  groups: HueGroup[];
-  totals: {
-    lights: number;
-    rooms: number;
-    activeLights: number;
-  };
-  config: {
-    directConfigured?: boolean;
-    proxyConfigured?: boolean;
-    bridgeUrl?: string;
-  };
 };
 
 type VoiceState = 'off' | 'wake' | 'active' | 'thinking' | 'speaking' | 'error';
@@ -812,22 +758,6 @@ const emptyXeroReport: XeroReport = {
   warnings: []
 };
 
-const emptyHueReport: HueReport = {
-  ok: false,
-  mode: 'direct',
-  fetchedAt: '',
-  message: 'Hue has not synced yet.',
-  bridge: null,
-  lights: [],
-  groups: [],
-  totals: {
-    lights: 0,
-    rooms: 0,
-    activeLights: 0
-  },
-  config: {}
-};
-
 const emptyBudgetReport: BudgetReport = {
   ok: false,
   message: '',
@@ -910,8 +840,6 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     updateNotionTaskStatus: (payload) => postJson('/api/notion-task-status', payload),
     manageNotionItem: (payload) => postJson('/api/notion-item', payload),
     getXeroSummary: () => fetch('/api/xero/summary').then((response) => response.json()),
-    getHueLights: () => fetch('/api/hue/lights').then((response) => response.json()),
-    controlHue: (payload) => postJson('/api/hue/control', payload),
     getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
     manageGroceryItem: (payload) => postJson('/api/budget/grocery', payload),
@@ -1065,27 +993,6 @@ const integrationSetups: IntegrationSetup[] = [
       { key: 'BUDGET_EMAIL_FROM', label: 'Resend fallback sender', placeholder: 'Optional fallback: NoA <info@fearlessau.com>' }
     ]
   },
-  {
-    id: 'hue',
-    name: 'Philips Hue',
-    role: 'Controls home lights and rooms from NoA through your Hue Bridge.',
-    statusLabel: 'Bridge setup',
-    credential: 'Vercel env -> Hue bridge URL and generated username, or Hue proxy URL',
-    steps: [
-      'Press the physical button on the Hue Bridge and create a Hue username from the bridge debugger.',
-      'Add HUE_BRIDGE_URL and HUE_USERNAME in Vercel for direct bridge mode.',
-      'If NoA is deployed on Vercel and cannot reach the private 192.168 address, configure HUE_PROXY_URL from a local relay/n8n workflow on your home network.',
-      'Open the Hue page, refresh, then try a single light toggle first.'
-    ],
-    fields: [
-      { key: 'HUE_BRIDGE_URL', label: 'Bridge URL', type: 'url', required: true, placeholder: 'http://192.168.4.34', help: 'Use http for Hue v1 local API where possible; Vercel may not reach private LAN IPs.' },
-      { key: 'HUE_USERNAME', label: 'Hue username', type: 'password', required: true, placeholder: 'Generated by /api bridge registration' },
-      { key: 'HUE_APP_KEY', label: 'Hue app key', type: 'password', placeholder: 'Optional future Hue v2 application key' },
-      { key: 'HUE_ALLOW_SELF_SIGNED', label: 'Allow self-signed cert', placeholder: 'true if using https://192.168.x.x directly' },
-      { key: 'HUE_PROXY_URL', label: 'Remote proxy URL', type: 'url', placeholder: 'Optional n8n/local relay endpoint for Vercel remote access' },
-      { key: 'HUE_PROXY_SECRET', label: 'Proxy secret', type: 'password', placeholder: 'Optional shared secret for the Hue proxy' }
-    ]
-  }
 ];
 
 function App() {
@@ -1115,8 +1022,8 @@ function App() {
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus>(() => {
     const saved = window.localStorage.getItem('noa.integrationStatus');
     return saved
-      ? { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false, hue: false, ...(JSON.parse(saved) as Partial<IntegrationStatus>) }
-      : { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false, hue: false };
+      ? { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false, ...(JSON.parse(saved) as Partial<IntegrationStatus>) }
+      : { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false };
   });
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -1134,8 +1041,6 @@ function App() {
   const [isLoadingHubGauge, setIsLoadingHubGauge] = useState(false);
   const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
   const [isLoadingXero, setIsLoadingXero] = useState(false);
-  const [hueReport, setHueReport] = useState<HueReport>(emptyHueReport);
-  const [isLoadingHue, setIsLoadingHue] = useState(false);
   const [budgetReport, setBudgetReport] = useState<BudgetReport>(emptyBudgetReport);
   const [isLoadingBudget, setIsLoadingBudget] = useState(false);
   const [startupSync, setStartupSync] = useState<StartupSyncState>({
@@ -1175,7 +1080,6 @@ function App() {
   const hubGaugeRequestRef = useRef<Promise<HubGaugePayload> | null>(null);
   const jobsRequestRef = useRef<Promise<NotionJobsReport> | null>(null);
   const xeroRequestRef = useRef<Promise<XeroReport> | null>(null);
-  const hueRequestRef = useRef<Promise<HueReport> | null>(null);
   const budgetRequestRef = useRef<Promise<BudgetReport> | null>(null);
   const lockTimerRef = useRef<number | null>(null);
   const mobileDrawerCloseTimerRef = useRef<number | null>(null);
@@ -1594,26 +1498,6 @@ function App() {
     }
   };
 
-  const loadHueLights = async () => {
-    const getHueLights = window.noa?.getHueLights;
-    if (!getHueLights) return emptyHueReport;
-    if (hueRequestRef.current) return hueRequestRef.current;
-    setIsLoadingHue(true);
-    const request = (async () => {
-      const report = { ...emptyHueReport, ...await getHueLights() as Partial<HueReport> };
-      setHueReport(report);
-      setIntegrationStatus((current) => ({ ...current, hue: Boolean(report.ok) }));
-      return report;
-    })();
-    hueRequestRef.current = request;
-    try {
-      return await request;
-    } finally {
-      hueRequestRef.current = null;
-      setIsLoadingHue(false);
-    }
-  };
-
   const loadBudgetSummary = async () => {
     const getBudgetSummary = window.noa?.getBudgetSummary;
     if (!getBudgetSummary) return emptyBudgetReport;
@@ -1642,14 +1526,13 @@ function App() {
     const syncAtStartup = async () => {
       setStartupSync({
         status: 'syncing',
-        message: 'Syncing Notion, Xero, Hue, and Budgeting...',
+        message: 'Syncing Notion, Xero, and Budgeting...',
         checkedAt: ''
       });
 
-      const [notionResult, xeroResult, hueResult, budgetResult, integrationsResult] = await Promise.allSettled([
+      const [notionResult, xeroResult, budgetResult, integrationsResult] = await Promise.allSettled([
         loadNotionJobs(),
         loadXeroSummary(),
-        loadHueLights(),
         loadBudgetSummary(),
         runIntegrationTests()
       ]);
@@ -1667,12 +1550,6 @@ function App() {
         issues.push('Xero failed');
       } else if (!xeroResult.value.ok) {
         issues.push('Xero needs attention');
-      }
-
-      if (hueResult.status === 'rejected') {
-        issues.push('Hue failed');
-      } else if (!hueResult.value.ok) {
-        issues.push('Hue needs attention');
       }
 
       if (budgetResult.status === 'rejected') {
@@ -1716,9 +1593,6 @@ function App() {
     }
     if ((screen === 'xero' || screen === 'map') && !xeroReport.fetchedAt && !isLoadingXero) {
       void loadXeroSummary();
-    }
-    if ((screen === 'hue' || screen === 'map') && !hueReport.fetchedAt && !isLoadingHue) {
-      void loadHueLights();
     }
     if (screen === 'xero' && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
@@ -2482,24 +2356,15 @@ function App() {
             setSection={setBudgetSection}
           />
         )}
-        {screen === 'hue' && (
-          <HueView
-            report={hueReport}
-            isLoading={isLoadingHue}
-            refreshHue={loadHueLights}
-          />
-        )}
         {screen === 'map' && (
           <MapView
             integrationStatus={integrationStatus}
             testResults={testResults}
             jobsReport={jobsReport}
             xeroReport={xeroReport}
-            hueReport={hueReport}
             budgetReport={budgetReport}
             isLoadingJobs={isLoadingJobs}
             isLoadingXero={isLoadingXero}
-            isLoadingHue={isLoadingHue}
             isLoadingBudget={isLoadingBudget}
             setScreen={setScreen}
             runIntegrationTests={runIntegrationTests}
@@ -9614,189 +9479,6 @@ function Automations() {
   );
 }
 
-function HueView({
-  report,
-  isLoading,
-  refreshHue
-}: {
-  report: HueReport;
-  isLoading: boolean;
-  refreshHue: () => Promise<HueReport>;
-}) {
-  const [updatingId, setUpdatingId] = useState('');
-  const [notice, setNotice] = useState('');
-
-  const updateHueTarget = async (targetType: 'light' | 'group', targetId: string, state: Record<string, unknown>) => {
-    if (!window.noa?.controlHue) {
-      setNotice('Hue control needs the deployed NoA API route or local Vercel dev server.');
-      return;
-    }
-
-    const actionId = `${targetType}:${targetId}`;
-    setUpdatingId(actionId);
-    try {
-      const result = await window.noa.controlHue({ targetType, targetId, state });
-      setNotice(result.message);
-      if (result.ok) await refreshHue();
-    } catch {
-      setNotice('Hue control failed before the bridge responded.');
-    } finally {
-      setUpdatingId('');
-    }
-  };
-
-  const activePercent = report.totals.lights ? Math.round((report.totals.activeLights / report.totals.lights) * 100) : 0;
-
-  return (
-    <section className="hue-page page-fade">
-      <article className="glass-card wide hue-hero">
-        <div>
-          <PanelTitle eyebrow="Smart home" title="Philips Hue" />
-          <p className="section-copy">
-            Control rooms and individual lights from NoA. Bridge credentials stay server-side, and remote access can use a local proxy when Vercel cannot reach your home network.
-          </p>
-        </div>
-        <div className="hue-actions">
-          <div className={`xero-health ${report.ok ? 'online' : ''}`}>
-            <span />
-            {report.ok ? 'Connected' : 'Needs attention'}
-          </div>
-          <button className="secondary-action" onClick={() => void refreshHue()} disabled={isLoading}>
-            <RefreshCw size={17} />
-            {isLoading ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-      </article>
-
-      {(!report.ok || notice) && (
-        <article className={`hue-alert ${report.ok ? 'ok' : ''}`}>
-          <CircleAlert size={20} />
-          <div>
-            <strong>{notice || report.message}</strong>
-            {!report.ok && (
-              <p>
-                If this is deployed on Vercel, the private Hue Bridge address may need a home-network proxy such as n8n or a small local relay.
-              </p>
-            )}
-          </div>
-        </article>
-      )}
-
-      <div className="hue-overview">
-        <article className="hue-balance-card">
-          <span>Bridge</span>
-          <strong>{report.bridge?.name || 'Philips Hue'}</strong>
-          <p>{report.mode === 'proxy' ? 'Proxy mode' : 'Direct bridge mode'}{report.config.bridgeUrl ? ` · ${report.config.bridgeUrl}` : ''}</p>
-          <div className="hue-meter">
-            <i style={{ width: `${activePercent}%` }} />
-          </div>
-          <small>{report.totals.activeLights} of {report.totals.lights} lights currently on</small>
-        </article>
-        <article className="hue-stat-card">
-          <Lightbulb size={22} />
-          <span>Lights</span>
-          <strong>{report.totals.lights}</strong>
-          <p>{report.totals.activeLights} active right now</p>
-        </article>
-        <article className="hue-stat-card">
-          <MonitorSmartphone size={22} />
-          <span>Rooms</span>
-          <strong>{report.totals.rooms || report.groups.length}</strong>
-          <p>{report.groups.length ? 'Room controls available' : 'No Hue rooms returned yet'}</p>
-        </article>
-        <article className="hue-stat-card">
-          <Activity size={22} />
-          <span>Health</span>
-          <strong>{report.ok ? 'Ready' : 'Check'}</strong>
-          <p>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Waiting for first sync'}</p>
-        </article>
-      </div>
-
-      <div className="hue-grid">
-        <article className="hue-panel">
-          <div className="panel-row-head">
-            <div>
-              <h3>Rooms</h3>
-              <p>Control grouped Hue areas first.</p>
-            </div>
-            <span>{report.groups.length} groups</span>
-          </div>
-          <div className="hue-list">
-            {report.groups.length ? report.groups.map((group) => {
-              const actionId = `group:${group.id}`;
-              return (
-                <div className="hue-row" key={group.id}>
-                  <div>
-                    <strong>{group.name}</strong>
-                    <p>{group.activeLights}/{group.lightCount} on · {group.type || 'Group'}</p>
-                    <input
-                      type="range"
-                      min="1"
-                      max="100"
-                      value={group.brightness || 1}
-                      disabled={updatingId === actionId}
-                      onChange={(event) => void updateHueTarget('group', group.id, { brightness: Number(event.target.value), on: true })}
-                    />
-                  </div>
-                  <button
-                    className={`hue-toggle ${group.on ? 'on' : ''}`}
-                    onClick={() => void updateHueTarget('group', group.id, { on: !group.on })}
-                    disabled={updatingId === actionId}
-                  >
-                    {updatingId === actionId ? '...' : group.on ? 'On' : 'Off'}
-                  </button>
-                </div>
-              );
-            }) : (
-              <p className="empty-copy">No Hue rooms returned yet. Refresh after the bridge is connected.</p>
-            )}
-          </div>
-        </article>
-
-        <article className="hue-panel">
-          <div className="panel-row-head">
-            <div>
-              <h3>Lights</h3>
-              <p>Fine-tune individual bulbs and lamps.</p>
-            </div>
-            <span>{report.lights.length} lights</span>
-          </div>
-          <div className="hue-list">
-            {report.lights.length ? report.lights.map((light) => {
-              const actionId = `light:${light.id}`;
-              return (
-                <div className={`hue-row ${!light.reachable ? 'unreachable' : ''}`} key={light.id}>
-                  <div>
-                    <strong>{light.name}</strong>
-                    <p>{light.reachable ? light.type || 'Hue light' : 'Not reachable'} · {light.brightness}% brightness</p>
-                    <input
-                      type="range"
-                      min="1"
-                      max="100"
-                      value={light.brightness || 1}
-                      disabled={!light.reachable || updatingId === actionId}
-                      onChange={(event) => void updateHueTarget('light', light.id, { brightness: Number(event.target.value), on: true })}
-                    />
-                  </div>
-                  <button
-                    className={`hue-toggle ${light.on ? 'on' : ''}`}
-                    onClick={() => void updateHueTarget('light', light.id, { on: !light.on })}
-                    disabled={!light.reachable || updatingId === actionId}
-                  >
-                    {updatingId === actionId ? '...' : light.on ? 'On' : 'Off'}
-                  </button>
-                </div>
-              );
-            }) : (
-              <p className="empty-copy">No Hue lights returned yet. Check the bridge URL and generated username in Integrations.</p>
-            )}
-          </div>
-        </article>
-      </div>
-    </section>
-  );
-}
-
 type MapMode = 'overview' | 'live' | 'debug' | 'focus';
 type MapNodeStatus = 'connected' | 'syncing' | 'idle' | 'error' | 'needs-auth';
 type MapNodeCategory = 'AI / Reasoning' | 'Data Sources' | 'App Backend' | 'Communication' | 'Display Outputs' | 'Automation / Deployment';
@@ -10019,25 +9701,6 @@ const baseMapNodes: IntegrationNode[] = [
     route: 'today'
   },
   {
-    id: 'hue',
-    label: 'Philips Hue',
-    type: 'Display Outputs',
-    domain: 'display',
-    description: 'Smart lighting control for rooms, ambience, and home dashboard scenes.',
-    icon: Lightbulb,
-    status: 'needs-auth',
-    lastSync: 'Not tested',
-    health: 64,
-    metadata: 'Smart lights',
-    data: ['Lights', 'Rooms', 'Brightness', 'Scene-ready state'],
-    features: ['Hue page', 'Home dashboard ambience', 'Future automation scenes'],
-    config: ['HUE_BRIDGE_URL', 'HUE_USERNAME', 'HUE_PROXY_URL'],
-    x: 140,
-    y: 455,
-    integrationId: 'hue',
-    route: 'hue'
-  },
-  {
     id: 'spotify',
     label: 'Spotify',
     type: 'Data Sources',
@@ -10085,8 +9748,6 @@ const mapConnections: IntegrationConnection[] = [
   { source: 'xero', target: 'core', label: 'Finance intelligence', direction: 'in', status: 'connected', animated: true, description: 'Pulls invoices, bills, contacts, balances, and cashflow analytics.' },
   { source: 'core', target: 'vercel', label: 'Runtime dependency', direction: 'dependency', status: 'connected', animated: false, description: 'Uses Vercel deployment and serverless functions for remote access.' },
   { source: 'weather', target: 'core', label: 'Shoot telemetry', direction: 'in', status: 'syncing', animated: true, description: 'Feeds weather signals into shoot-day planning.' },
-  { source: 'core', target: 'hue', label: 'Lighting control', direction: 'out', status: 'needs-auth', animated: false, description: 'Controls Hue lights and rooms from approved NoA actions.' },
-  { source: 'hue', target: 'dashboards', label: 'Home ambience', direction: 'out', status: 'needs-auth', animated: false, description: 'Surfaces current home lighting state in dashboard views.' },
   { source: 'spotify', target: 'core', label: 'Media state', direction: 'in', status: 'idle', animated: false, description: 'Feeds current playback state into display surfaces.' },
   { source: 'core', target: 'dashboards', label: 'Visual output', direction: 'out', status: 'connected', animated: true, description: 'Publishes processed context into desktop, tablet, mobile, and kiosk views.' },
   { source: 'notion', target: 'dashboards', label: 'Job calendar', direction: 'out', status: 'connected', animated: true, description: 'Surfaces upcoming jobs and task calendars as readable dashboards.' },
@@ -10099,11 +9760,9 @@ function MapView({
   testResults,
   jobsReport,
   xeroReport,
-  hueReport,
   budgetReport,
   isLoadingJobs,
   isLoadingXero,
-  isLoadingHue,
   isLoadingBudget,
   setScreen,
   runIntegrationTests
@@ -10112,11 +9771,9 @@ function MapView({
   testResults: IntegrationTestResult[];
   jobsReport: NotionJobsReport;
   xeroReport: XeroReport;
-  hueReport: HueReport;
   budgetReport: BudgetReport;
   isLoadingJobs: boolean;
   isLoadingXero: boolean;
-  isLoadingHue: boolean;
   isLoadingBudget: boolean;
   setScreen: (screen: Screen) => void;
   runIntegrationTests: () => Promise<IntegrationTestResult[]>;
@@ -10139,13 +9796,11 @@ function MapView({
     testResults,
     jobsReport,
     xeroReport,
-    hueReport,
     budgetReport,
     isLoadingJobs,
     isLoadingXero,
-    isLoadingHue,
     isLoadingBudget
-  }), [integrationStatus, testResults, jobsReport, xeroReport, hueReport, budgetReport, isLoadingJobs, isLoadingXero, isLoadingHue, isLoadingBudget]);
+  }), [integrationStatus, testResults, jobsReport, xeroReport, budgetReport, isLoadingJobs, isLoadingXero, isLoadingBudget]);
   const mapConnections = useMemo(() => buildRuntimeMapConnections(mapNodes), [mapNodes]);
   const selectedNode = mapNodes.find((node) => node.id === selectedNodeId) || mapNodes[0];
   const issueNodes = mapNodes.filter((node) => isMapIssue(node));
@@ -10600,22 +10255,18 @@ function buildRuntimeMapNodes({
   testResults,
   jobsReport,
   xeroReport,
-  hueReport,
   budgetReport,
   isLoadingJobs,
   isLoadingXero,
-  isLoadingHue,
   isLoadingBudget
 }: {
   integrationStatus: IntegrationStatus;
   testResults: IntegrationTestResult[];
   jobsReport: NotionJobsReport;
   xeroReport: XeroReport;
-  hueReport: HueReport;
   budgetReport: BudgetReport;
   isLoadingJobs: boolean;
   isLoadingXero: boolean;
-  isLoadingHue: boolean;
   isLoadingBudget: boolean;
 }) {
   const latestResult = (id: IntegrationId) => [...testResults].reverse().find((result) => result.id === id);
@@ -10682,18 +10333,6 @@ function buildRuntimeMapNodes({
         lastSync: formatMapSyncTime(xeroReport.fetchedAt, isLoadingXero ? 'Syncing' : node.lastSync),
         metadata: xeroReport.ok ? `${xeroReport.totals.invoiceCount} invoices / ${xeroReport.totals.billCount} bills` : 'Finance layer',
         error: xeroReport.ok ? undefined : xeroReport.message || latestResult('xero')?.message
-      };
-    }
-
-    if (node.id === 'hue') {
-      const status: MapNodeStatus = isLoadingHue ? 'syncing' : hueReport.ok ? 'connected' : integrationState('hue');
-      return {
-        ...node,
-        status,
-        health: status === 'connected' ? 88 : status === 'syncing' ? 78 : 50,
-        lastSync: formatMapSyncTime(hueReport.fetchedAt, isLoadingHue ? 'Syncing' : node.lastSync),
-        metadata: hueReport.ok ? `${hueReport.totals.activeLights}/${hueReport.totals.lights} lights on` : 'Smart lights',
-        error: hueReport.ok ? undefined : hueReport.message || latestResult('hue')?.message
       };
     }
 
@@ -11227,7 +10866,6 @@ function screenTitle(screen: Screen) {
     clients: 'Clients',
     xero: 'Xero',
     budgeting: 'Budgeting',
-    hue: 'Philips Hue',
     map: 'Map',
     plan: 'Build Plan',
     memory: 'Memory',
