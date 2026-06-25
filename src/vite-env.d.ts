@@ -518,11 +518,53 @@ interface Window {
       message: string;
       item?: unknown;
     }>;
+    getPublicGroceryListSummary?: () => Promise<{
+      ok: boolean;
+      message: string;
+      fetchedAt: string;
+      owner: {
+        email: string;
+        displayName?: string;
+        userId: string;
+      };
+      groceryItems: Array<{
+        id: string;
+        item: string;
+        quantity: string;
+        category: string;
+        addedBy: string;
+        addedByUserId?: string;
+        completed: boolean;
+        completedAt?: string;
+        createdAt?: string;
+        updatedAt?: string;
+      }>;
+      personalisation: {
+        sleepMinutes: number;
+        cycleSeconds: number;
+        screensavers: Array<{
+          id: string;
+          name: string;
+          image: string;
+          enabled: boolean;
+        }>;
+      };
+    }>;
+    managePublicGroceryListItem?: (payload: {
+      action: 'create' | 'update' | 'delete';
+      id?: string;
+      values?: Record<string, unknown>;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      item?: unknown;
+    }>;
     saveBudgetSettings?: (payload: {
       defaultMode?: string;
       categories?: string[];
       catColors?: string[];
       fuelCalculator?: Record<string, unknown>;
+      personalisation?: Record<string, unknown>;
     }) => Promise<{
       ok: boolean;
       message: string;

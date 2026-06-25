@@ -1,6 +1,16 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/grocery-list",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/grocery-list/:path*",
+      "destination": "/index.html"
+    }
+  ],
   "crons": [
     {
       "path": "/api/budget/tenant-email-schedule",

@@ -606,6 +606,28 @@ type GroceryItem = {
   updatedAt?: string;
 };
 
+type GroceryScreensaver = {
+  id: string;
+  name: string;
+  image: string;
+  enabled: boolean;
+};
+
+type GroceryListPersonalisation = {
+  sleepMinutes: number;
+  cycleSeconds: number;
+  screensavers: GroceryScreensaver[];
+};
+
+type PublicGroceryListReport = {
+  ok: boolean;
+  message: string;
+  fetchedAt: string;
+  owner: BudgetOwner;
+  groceryItems: GroceryItem[];
+  personalisation: GroceryListPersonalisation;
+};
+
 type BudgetTenantBillingRow = {
   tenant: BudgetTenant;
   mortgage: BudgetMortgageBill | null;
@@ -631,6 +653,12 @@ type BudgetReport = {
   tenantEmailActivity: BudgetEmailActivity[];
   groceryItems: GroceryItem[];
   settings: Record<string, unknown> | null;
+};
+
+const defaultGroceryListPersonalisation: GroceryListPersonalisation = {
+  sleepMinutes: 5,
+  cycleSeconds: 12,
+  screensavers: []
 };
 
 type BudgetEditorField = {
@@ -806,6 +834,69 @@ const emptyBudgetReport: BudgetReport = {
   settings: null
 };
 
+function normalizeGroceryListPersonalisation(value: unknown): GroceryListPersonalisation {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const screensavers = Array.isArray(source.screensavers) ? source.screensavers : [];
+
+  return {
+    sleepMinutes: clampNumberValue(source.sleepMinutes ?? source.sleep_minutes, 1, 60, 5),
+    cycleSeconds: clampNumberValue(source.cycleSeconds ?? source.cycle_seconds, 5, 120, 12),
+    screensavers: screensavers
+      .map((item, index) => {
+        const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+        const image = String(row.image || row.src || '').trim();
+        if (!image) return null;
+        return {
+          id: String(row.id || `screensaver-${index + 1}`),
+          name: String(row.name || `Screensaver ${index + 1}`).trim() || `Screensaver ${index + 1}`,
+          image,
+          enabled: row.enabled !== false
+        };
+      })
+      .filter((item): item is GroceryScreensaver => Boolean(item))
+  };
+}
+
+function readBudgetGroceryPersonalisation(settings: BudgetReport['settings']): GroceryListPersonalisation {
+  const raw = settings && typeof settings === 'object' ? settings as Record<string, unknown> : {};
+  const rawData = raw.raw_data && typeof raw.raw_data === 'object' ? raw.raw_data as Record<string, unknown> : {};
+  const personalisation = rawData.personalisation && typeof rawData.personalisation === 'object'
+    ? rawData.personalisation as Record<string, unknown>
+    : {};
+  return normalizeGroceryListPersonalisation(personalisation.groceryList || {});
+}
+
+function clampNumberValue(value: unknown, min: number, max: number, fallback: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+async function compressImageFileToDataUrl(file: File, maxDimension = 1600, quality = 0.82) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const next = new Image();
+      next.onload = () => resolve(next);
+      next.onerror = () => reject(new Error(`Could not load ${file.name}.`));
+      next.src = objectUrl;
+    });
+
+    const scale = Math.min(1, maxDimension / Math.max(image.width || 1, image.height || 1));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not prepare image compression.');
+    context.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', quality);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 const jobColumns = ['Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes'];
 
 if (!window.noa) {
@@ -843,6 +934,8 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
     manageGroceryItem: (payload) => postJson('/api/budget/grocery', payload),
+    getPublicGroceryListSummary: () => fetch('/api/grocery-list/summary').then((response) => response.json()),
+    managePublicGroceryListItem: (payload) => postJson('/api/grocery-list/item', payload),
     saveBudgetSettings: (payload) => postJson('/api/budget/settings', payload),
     saveBudgetProfile: (payload) => postJson('/api/budget/profile', payload),
     saveBudgetEmailSettings: (payload) => postJson('/api/budget/email-settings', payload),
@@ -996,6 +1089,10 @@ const integrationSetups: IntegrationSetup[] = [
 ];
 
 function App() {
+  const isPublicGroceryListRoute = typeof window !== 'undefined' && /^\/grocery-list\/?$/.test(window.location.pathname);
+  if (isPublicGroceryListRoute) {
+    return <GroceryListStandalonePage />;
+  }
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
@@ -2381,7 +2478,13 @@ function App() {
             recordIntegrationTestResult={recordIntegrationTestResult}
           />
         )}
-        {screen === 'settings' && <SettingsView integrationStatus={integrationStatus} />}
+        {screen === 'settings' && (
+          <SettingsView
+            integrationStatus={integrationStatus}
+            budgetReport={budgetReport}
+            refreshBudget={loadBudgetSummary}
+          />
+        )}
       </section>
 
       <MobileNav
@@ -10644,38 +10747,508 @@ function Integrations({
   );
 }
 
-function SettingsView({ integrationStatus }: { integrationStatus: IntegrationStatus }) {
+function GroceryListStandalonePage() {
+  const [report, setReport] = useState<PublicGroceryListReport>({
+    ok: false,
+    message: '',
+    fetchedAt: '',
+    owner: { email: 'info@fearlessau.com', userId: '' },
+    groceryItems: [],
+    personalisation: defaultGroceryListPersonalisation
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [itemName, setItemName] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [category, setCategory] = useState('General');
+  const [addedBy, setAddedBy] = useState(() => window.localStorage.getItem('noa.groceryList.addedBy') || '');
+  const [updatingId, setUpdatingId] = useState('');
+  const [isSleeping, setIsSleeping] = useState(false);
+  const [activeScreensaverIndex, setActiveScreensaverIndex] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  const idleTimerRef = useRef<number | null>(null);
+  const activeItems = report.groceryItems.filter((item) => !item.completed);
+  const completedItems = report.groceryItems.filter((item) => item.completed).slice(0, 10);
+  const personalisation = normalizeGroceryListPersonalisation(report.personalisation);
+  const enabledScreensavers = personalisation.screensavers.filter((item) => item.enabled);
+  const activeScreensaver = enabledScreensavers[activeScreensaverIndex % Math.max(enabledScreensavers.length, 1)] || null;
+  const categories = ['General', 'Fresh food', 'Pantry', 'Household', 'Personal', 'Other'];
+
+  const restartIdleTimer = () => {
+    if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = window.setTimeout(() => {
+      setIsSleeping(true);
+      setActiveScreensaverIndex(0);
+    }, personalisation.sleepMinutes * 60 * 1000);
+  };
+
+  const refreshGroceryList = async () => {
+    if (!window.noa?.getPublicGroceryListSummary) return report;
+    setIsLoading(true);
+    const next = await window.noa.getPublicGroceryListSummary();
+    setReport({
+      ...next,
+      owner: next.owner || { email: 'info@fearlessau.com', userId: '' },
+      groceryItems: Array.isArray(next.groceryItems) ? next.groceryItems : [],
+      personalisation: normalizeGroceryListPersonalisation(next.personalisation)
+    });
+    setIsLoading(false);
+    return next;
+  };
+
+  useEffect(() => {
+    void refreshGroceryList();
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('noa.groceryList.addedBy', addedBy);
+  }, [addedBy]);
+
+  useEffect(() => {
+    restartIdleTimer();
+    const handleActivity = () => {
+      if (isSleeping) return;
+      restartIdleTimer();
+    };
+    const events = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach((eventName) => window.addEventListener(eventName, handleActivity, { passive: true }));
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+  }, [isSleeping, personalisation.sleepMinutes]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isSleeping || enabledScreensavers.length <= 1) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveScreensaverIndex((current) => (current + 1) % enabledScreensavers.length);
+    }, personalisation.cycleSeconds * 1000);
+    return () => window.clearInterval(timer);
+  }, [isSleeping, enabledScreensavers.length, personalisation.cycleSeconds]);
+
+  const wakeScreensaver = () => {
+    setIsSleeping(false);
+    restartIdleTimer();
+  };
+
+  const addItem = async () => {
+    const cleanedName = itemName.trim();
+    if (!cleanedName) {
+      setMessage('Add an item name first.');
+      return;
+    }
+    if (!window.noa?.managePublicGroceryListItem) {
+      setMessage('This grocery list needs the cloud API.');
+      return;
+    }
+    setIsSaving(true);
+    setMessage('');
+    const response = await window.noa.managePublicGroceryListItem({
+      action: 'create',
+      values: {
+        item: cleanedName,
+        quantity: quantity.trim(),
+        category,
+        addedBy: addedBy.trim() || report.owner.displayName || 'House'
+      }
+    });
+    setIsSaving(false);
+    setMessage(response.message || (response.ok ? 'Grocery item added.' : 'Could not add grocery item.'));
+    if (response.ok) {
+      setItemName('');
+      setQuantity('');
+      await refreshGroceryList();
+    }
+  };
+
+  const updateItem = async (id: string, values: Record<string, unknown>) => {
+    if (!window.noa?.managePublicGroceryListItem) return;
+    setUpdatingId(id);
+    const response = await window.noa.managePublicGroceryListItem({ action: 'update', id, values });
+    setUpdatingId('');
+    setMessage(response.message || (response.ok ? 'Grocery list updated.' : 'Could not update grocery item.'));
+    if (response.ok) await refreshGroceryList();
+  };
+
+  const deleteItem = async (id: string) => {
+    if (!window.noa?.managePublicGroceryListItem) return;
+    setUpdatingId(id);
+    const response = await window.noa.managePublicGroceryListItem({ action: 'delete', id });
+    setUpdatingId('');
+    setMessage(response.message || (response.ok ? 'Grocery item removed.' : 'Could not remove grocery item.'));
+    if (response.ok) await refreshGroceryList();
+  };
+
+  return (
+    <main className="grocery-route-shell">
+      <section className="grocery-route-inner">
+        <article className="glass-card wide grocery-route-hero">
+          <div>
+            <PanelTitle eyebrow="NoA household extension" title="Grocery List" />
+            <p>Shared house list for tablet use. Add items, clear them, and let the screen fall back into a simple rotating sleep view when the page is idle.</p>
+          </div>
+          <div className="grocery-route-meta">
+            <div className="grocery-summary-pill">
+              <ListTodo size={18} />
+              <span>{activeItems.length} active</span>
+            </div>
+            <button className="secondary-action" onClick={() => void refreshGroceryList()} disabled={isLoading}>
+              <RefreshCw size={16} />
+              {isLoading ? 'Syncing...' : 'Refresh'}
+            </button>
+          </div>
+        </article>
+
+        <section className="grocery-route-grid">
+          <article className="glass-card grocery-route-form-card">
+            <div className="panel-row-head">
+              <PanelTitle eyebrow="Quick add" title="Add an item" />
+              <span>{report.owner.displayName || 'House list'}</span>
+            </div>
+            <div className="grocery-entry-grid standalone">
+              <label>
+                <span>Item</span>
+                <input
+                  value={itemName}
+                  onChange={(event) => setItemName(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void addItem();
+                  }}
+                  placeholder="Milk, bread, bananas..."
+                />
+              </label>
+              <label>
+                <span>Quantity</span>
+                <input
+                  value={quantity}
+                  onChange={(event) => setQuantity(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void addItem();
+                  }}
+                  placeholder="1x, 2L, large..."
+                />
+              </label>
+              <label>
+                <span>Category</span>
+                <select value={category} onChange={(event) => setCategory(event.currentTarget.value)}>
+                  {categories.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Added by</span>
+                <input
+                  value={addedBy}
+                  onChange={(event) => setAddedBy(event.currentTarget.value)}
+                  placeholder="Kitchen, John, House..."
+                />
+              </label>
+              <button className="primary-action" onClick={() => void addItem()} disabled={isSaving}>
+                <Plus size={16} />
+                {isSaving ? 'Adding...' : 'Add item'}
+              </button>
+            </div>
+            {message && <p className="form-message">{message}</p>}
+          </article>
+
+          <article className="glass-card grocery-route-status-card">
+            <div className="panel-row-head">
+              <PanelTitle eyebrow="Sleep mode" title="Screensaver" />
+              <MonitorSmartphone size={20} />
+            </div>
+            <div className="grocery-route-status-list">
+              <div><span>Idle timeout</span><strong>{personalisation.sleepMinutes} min</strong></div>
+              <div><span>Rotation</span><strong>{personalisation.cycleSeconds} sec</strong></div>
+              <div><span>Saved screens</span><strong>{enabledScreensavers.length}</strong></div>
+              <div><span>Last sync</span><strong>{report.fetchedAt ? new Date(report.fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Not synced'}</strong></div>
+            </div>
+            <p className="section-copy small">Manage screensavers from NoA Settings to Personalisation.</p>
+          </article>
+        </section>
+
+        <section className="grocery-layout standalone">
+          <article className="glass-card budget-panel">
+            <div className="panel-row-head">
+              <PanelTitle eyebrow="To buy" title="Active items" />
+              <span>{activeItems.length} item(s)</span>
+            </div>
+            <div className="grocery-list">
+              {activeItems.length === 0 ? (
+                <div className="empty-state">The house grocery list is clear.</div>
+              ) : activeItems.map((item) => (
+                <GroceryItemRow
+                  key={item.id}
+                  item={item}
+                  isUpdating={updatingId === item.id}
+                  onToggle={(completed) => void updateItem(item.id, { completed })}
+                  onDelete={() => void deleteItem(item.id)}
+                />
+              ))}
+            </div>
+          </article>
+
+          <article className="glass-card budget-panel">
+            <div className="panel-row-head">
+              <PanelTitle eyebrow="Just cleared" title="Completed" />
+              <span>{completedItems.length} item(s)</span>
+            </div>
+            <div className="grocery-list compact">
+              {completedItems.length === 0 ? (
+                <div className="empty-state">Completed items will appear here.</div>
+              ) : completedItems.map((item) => (
+                <GroceryItemRow
+                  key={item.id}
+                  item={item}
+                  isUpdating={updatingId === item.id}
+                  onToggle={(completed) => void updateItem(item.id, { completed })}
+                  onDelete={() => void deleteItem(item.id)}
+                />
+              ))}
+            </div>
+          </article>
+        </section>
+      </section>
+
+      {isSleeping && (
+        <div
+          className="grocery-screensaver-overlay"
+          role="button"
+          tabIndex={0}
+          onPointerDown={wakeScreensaver}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') wakeScreensaver();
+          }}
+          style={activeScreensaver ? { backgroundImage: `linear-gradient(180deg, rgba(3, 7, 18, 0.36), rgba(3, 7, 18, 0.86)), url("${activeScreensaver.image}")` } : undefined}
+        >
+          <div className="grocery-screensaver-clock">
+            <span>{new Date(now).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+            <strong>{new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+            <p>{activeScreensaver ? activeScreensaver.name : 'Tap anywhere to wake the list'}</p>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function PersonalisationSettingsPanel({
+  budgetReport,
+  refreshBudget
+}: {
+  budgetReport: BudgetReport;
+  refreshBudget: () => Promise<BudgetReport>;
+}) {
+  const current = readBudgetGroceryPersonalisation(budgetReport.settings);
+  const [sleepMinutes, setSleepMinutes] = useState(String(current.sleepMinutes));
+  const [cycleSeconds, setCycleSeconds] = useState(String(current.cycleSeconds));
+  const [screensavers, setScreensavers] = useState<GroceryScreensaver[]>(current.screensavers);
+  const [message, setMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    const next = readBudgetGroceryPersonalisation(budgetReport.settings);
+    setSleepMinutes(String(next.sleepMinutes));
+    setCycleSeconds(String(next.cycleSeconds));
+    setScreensavers(next.screensavers);
+  }, [budgetReport.settings]);
+
+  const savePersonalisation = async () => {
+    if (!window.noa?.saveBudgetSettings) {
+      setMessage('Personalisation settings are only available through the cloud API.');
+      return;
+    }
+    setIsSaving(true);
+    const response = await window.noa.saveBudgetSettings({
+      personalisation: {
+        groceryList: {
+          sleepMinutes: clampNumberValue(sleepMinutes, 1, 60, 5),
+          cycleSeconds: clampNumberValue(cycleSeconds, 5, 120, 12),
+          screensavers
+        }
+      }
+    });
+    setIsSaving(false);
+    setMessage(response.message || (response.ok ? 'Personalisation saved.' : 'Could not save personalisation.'));
+    if (response.ok) await refreshBudget();
+  };
+
+  const importScreensavers = async (files: FileList | null) => {
+    const fileEntries = Array.from(files || []);
+    if (fileEntries.length === 0) return;
+    setIsUploading(true);
+    try {
+      const imported = await Promise.all(fileEntries.map(async (file) => ({
+        id: crypto.randomUUID(),
+        name: file.name.replace(/\.[^.]+$/, '') || 'Screensaver',
+        image: await compressImageFileToDataUrl(file),
+        enabled: true
+      })));
+      setScreensavers((currentState) => [...currentState, ...imported]);
+      setMessage(`${imported.length} screensaver${imported.length === 1 ? '' : 's'} added. Save to publish them to /grocery-list.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not import those images.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <section className="settings-personalisation">
+      <article className="glass-card wide">
+        <PanelTitle eyebrow="Tablet extension" title="Grocery list screensaver" />
+        <p className="section-copy">
+          Configure the public `/grocery-list` sleep screen. Uploaded images rotate behind the clock and date once the page has been idle for a while.
+        </p>
+      </article>
+
+      <section className="budget-analytics-grid">
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Timing" title="Idle behaviour" />
+            <Clock3 size={20} />
+          </div>
+          <div className="notion-form-grid">
+            <label>
+              <span>Sleep after (minutes)</span>
+              <input type="number" min={1} max={60} value={sleepMinutes} onChange={(event) => setSleepMinutes(event.currentTarget.value)} />
+            </label>
+            <label>
+              <span>Rotate every (seconds)</span>
+              <input type="number" min={5} max={120} value={cycleSeconds} onChange={(event) => setCycleSeconds(event.currentTarget.value)} />
+            </label>
+          </div>
+          <div className="budget-settings-actions">
+            <button className="secondary-action" onClick={() => void savePersonalisation()} disabled={isSaving}>
+              <Save size={16} />
+              {isSaving ? 'Saving...' : 'Save personalisation'}
+            </button>
+          </div>
+        </article>
+
+        <article className="glass-card budget-panel">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Library" title="Screensaver images" />
+            <MonitorSmartphone size={20} />
+          </div>
+          <label className="file-upload-card">
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => {
+                void importScreensavers(event.currentTarget.files);
+                event.currentTarget.value = '';
+              }}
+            />
+            <Plus size={18} />
+            <div>
+              <strong>{isUploading ? 'Preparing images...' : 'Add screensaver images'}</strong>
+              <p>Upload one or more images. NoA compresses them before saving to the system.</p>
+            </div>
+          </label>
+        </article>
+      </section>
+
+      <article className="glass-card wide">
+        <div className="panel-row-head">
+          <PanelTitle eyebrow="Preview library" title="Saved screensavers" />
+          <span>{screensavers.length} item(s)</span>
+        </div>
+        <div className="screensaver-grid">
+          {screensavers.length === 0 ? (
+            <div className="empty-state">No images saved yet. Without images, `/grocery-list` falls back to a dark sleep screen.</div>
+          ) : screensavers.map((item) => (
+            <article key={item.id} className="screensaver-card">
+              <div className="screensaver-preview" style={{ backgroundImage: `url("${item.image}")` }} />
+              <div className="screensaver-card-body">
+                <label>
+                  <span>Name</span>
+                  <input
+                    value={item.name}
+                    onChange={(event) => setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, name: event.currentTarget.value } : entry))}
+                  />
+                </label>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={item.enabled}
+                    onChange={(event) => setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, enabled: event.currentTarget.checked } : entry))}
+                  />
+                  Include in rotation
+                </label>
+              </div>
+              <button className="icon-action danger" onClick={() => setScreensavers((currentState) => currentState.filter((entry) => entry.id !== item.id))} aria-label={`Remove ${item.name}`}>
+                <Trash2 size={16} />
+              </button>
+            </article>
+          ))}
+        </div>
+        {message && <p className="form-message">{message}</p>}
+      </article>
+    </section>
+  );
+}
+
+function SettingsView({
+  integrationStatus,
+  budgetReport,
+  refreshBudget
+}: {
+  integrationStatus: IntegrationStatus;
+  budgetReport: BudgetReport;
+  refreshBudget: () => Promise<BudgetReport>;
+}) {
   const configuredCount = Object.values(integrationStatus).filter(Boolean).length;
+  const [tab, setTab] = useState<'credentials' | 'personalisation'>('credentials');
 
   return (
     <section className="settings page-fade">
-      <article className="glass-card wide">
-        <PanelTitle eyebrow="Connection settings" title="Credential storage" />
-        <p className="section-copy">
-          Do not paste keys into chat. Store production secrets in Vercel environment variables. Live calls run through
-          Vercel API routes, not directly from the frontend.
-        </p>
-        <div className="settings-row">
-          <span>Configured services</span>
-          <strong>{configuredCount} / {integrationSetups.length}</strong>
-        </div>
-        <div className="settings-row">
-          <span>OpenAI key</span>
-          <strong>Vercel / OPENAI_API_KEY</strong>
-        </div>
-        <div className="settings-row">
-          <span>Secret handling</span>
-          <strong>Vercel env first</strong>
+      <article className="glass-card wide settings-tab-card">
+        <PanelTitle eyebrow="System settings" title="Configuration" />
+        <div className="segmented-control settings-tabs">
+          <button className={tab === 'credentials' ? 'active' : ''} onClick={() => setTab('credentials')}>Credentials</button>
+          <button className={tab === 'personalisation' ? 'active' : ''} onClick={() => setTab('personalisation')}>Personalisation</button>
         </div>
       </article>
 
-      <article className="glass-card wide env-guide">
-        <PanelTitle eyebrow="Deployment setup" title="Vercel environment template" />
-        <p className="section-copy">
-          Add these keys in your Vercel project settings for Production, Preview, and Development as needed. Local
-          development can still use `.env.local`.
-        </p>
-        <pre>{`OPENAI_API_KEY=your_openai_key_here
+      {tab === 'credentials' ? (
+        <>
+          <article className="glass-card wide">
+            <PanelTitle eyebrow="Connection settings" title="Credential storage" />
+            <p className="section-copy">
+              Do not paste keys into chat. Store production secrets in Vercel environment variables. Live calls run through
+              Vercel API routes, not directly from the frontend.
+            </p>
+            <div className="settings-row">
+              <span>Configured services</span>
+              <strong>{configuredCount} / {integrationSetups.length}</strong>
+            </div>
+            <div className="settings-row">
+              <span>OpenAI key</span>
+              <strong>Vercel / OPENAI_API_KEY</strong>
+            </div>
+            <div className="settings-row">
+              <span>Secret handling</span>
+              <strong>Vercel env first</strong>
+            </div>
+          </article>
+
+          <article className="glass-card wide env-guide">
+            <PanelTitle eyebrow="Deployment setup" title="Vercel environment template" />
+            <p className="section-copy">
+              Add these keys in your Vercel project settings for Production, Preview, and Development as needed. Local
+              development can still use `.env.local`.
+            </p>
+            <pre>{`OPENAI_API_KEY=your_openai_key_here
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
@@ -10700,18 +11273,22 @@ XERO_CLIENT_SECRET=your_xero_client_secret
 XERO_REFRESH_TOKEN=your_xero_refresh_token
 XERO_TENANT_ID=your_xero_tenant_id_optional
 XERO_REDIRECT_URI=https://no-a.vercel.app/api/xero/callback`}</pre>
-      </article>
+          </article>
 
-      <article className="glass-card wide">
-        <PanelTitle eyebrow="Implementation sequence" title="What we connect first" />
-        <div className="decision-list">
-          <Decision icon={MessageSquareText} title="OpenAI" detail="Use your local key to power Noah from a backend-safe request path." />
-          <Decision icon={Database} title="Supabase" detail="Move local captures into durable memory, events, approvals, and conversations." />
-          <Decision icon={Zap} title="n8n" detail="Accept scheduled and trigger-based events through signed webhooks." />
-          <Decision icon={ArrowUpRight} title="Notion" detail="Start with read-only sync so knowledge enters NoA without risky writes." />
-          <Decision icon={Database} title="Xero" detail="Start with read-only accounting context, then keep invoices and payments approval-gated." />
-        </div>
-      </article>
+          <article className="glass-card wide">
+            <PanelTitle eyebrow="Implementation sequence" title="What we connect first" />
+            <div className="decision-list">
+              <Decision icon={MessageSquareText} title="OpenAI" detail="Use your local key to power Noah from a backend-safe request path." />
+              <Decision icon={Database} title="Supabase" detail="Move local captures into durable memory, events, approvals, and conversations." />
+              <Decision icon={Zap} title="n8n" detail="Accept scheduled and trigger-based events through signed webhooks." />
+              <Decision icon={ArrowUpRight} title="Notion" detail="Start with read-only sync so knowledge enters NoA without risky writes." />
+              <Decision icon={Database} title="Xero" detail="Start with read-only accounting context, then keep invoices and payments approval-gated." />
+            </div>
+          </article>
+        </>
+      ) : (
+        <PersonalisationSettingsPanel budgetReport={budgetReport} refreshBudget={refreshBudget} />
+      )}
     </section>
   );
 }
