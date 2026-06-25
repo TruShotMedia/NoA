@@ -66,6 +66,17 @@ ngrok http 8787
 
 Copy the generated HTTPS URL.
 
+### Static tunnel URL
+
+If your ngrok account is authenticated, ngrok currently gives every account one assigned dev domain. According to ngrok's official docs, that dev domain is automatically assigned, does not change, and does not expire while the account exists.
+
+On the free plan:
+
+- You can use the assigned dev domain.
+- You cannot choose or customize the domain name yourself.
+
+If you want a custom ngrok-branded name or your own domain, you need a paid plan.
+
 ## 4. Update Vercel environment variables
 
 In Vercel, set:
@@ -93,6 +104,28 @@ Open NoA, unlock, then:
 3. Go to `Hue`.
 4. Click `Refresh`.
 5. Toggle one light first.
+
+## 6. Auto-start on Windows sign-in
+
+To start the Hue relay on sign-in:
+
+```text
+Install Hue Relay Startup.bat
+```
+
+To start ngrok on sign-in:
+
+```text
+Install ngrok Startup.bat
+```
+
+The ngrok startup launcher runs:
+
+```powershell
+ngrok http 8787
+```
+
+If your ngrok account is authenticated and using its assigned dev domain, the public URL should remain stable across restarts. If the URL changes anyway, update `HUE_PROXY_URL` in Vercel and redeploy.
 
 ## Notes
 
