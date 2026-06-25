@@ -11166,14 +11166,20 @@ function PersonalisationSettingsPanel({
                   <span>Name</span>
                   <input
                     value={item.name}
-                    onChange={(event) => setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, name: event.currentTarget.value } : entry))}
+                    onChange={(event) => {
+                      const nextName = event.currentTarget.value;
+                      setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, name: nextName } : entry));
+                    }}
                   />
                 </label>
                 <label className="toggle-row">
                   <input
                     type="checkbox"
                     checked={item.enabled}
-                    onChange={(event) => setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, enabled: event.currentTarget.checked } : entry))}
+                    onChange={(event) => {
+                      const nextEnabled = event.currentTarget.checked;
+                      setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, enabled: nextEnabled } : entry));
+                    }}
                   />
                   Include in rotation
                 </label>
