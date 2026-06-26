@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noa-shell-v11';
+const CACHE_NAME = 'noa-shell-v12';
 const SHELL_ASSETS = [
   '/',
   '/grocery-list',

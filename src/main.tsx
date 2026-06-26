@@ -934,9 +934,9 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
     manageGroceryItem: (payload) => postJson('/api/budget/grocery', payload),
-    getPublicGroceryListSummary: () => fetch('/api/grocery-list/summary').then((response) => response.json()),
+    getPublicGroceryListSummary: () => fetch('/api/grocery-list/summary', { cache: 'no-store' }).then((response) => response.json()),
     managePublicGroceryListItem: (payload) => postJson('/api/grocery-list/item', payload),
-    getNoaPersonalisationSettings: () => fetch('/api/grocery-list/settings').then((response) => response.json()),
+    getNoaPersonalisationSettings: () => fetch('/api/grocery-list/settings', { cache: 'no-store' }).then((response) => response.json()),
     saveNoaPersonalisationSettings: (payload) => postJson('/api/grocery-list/settings', payload),
     saveBudgetSettings: (payload) => postJson('/api/budget/settings', payload),
     saveBudgetProfile: (payload) => postJson('/api/budget/profile', payload),
@@ -11047,6 +11047,14 @@ function PersonalisationSettingsPanel({
   const [message, setMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const screensaversRef = useRef<GroceryScreensaver[]>(current.screensavers);
+
+  const setScreensaverList = (next: GroceryScreensaver[] | ((currentState: GroceryScreensaver[]) => GroceryScreensaver[])) => {
+    const resolved = typeof next === 'function' ? next(screensaversRef.current) : next;
+    screensaversRef.current = resolved;
+    setScreensavers(resolved);
+    return resolved;
+  };
 
   useEffect(() => {
     if (!window.noa?.getNoaPersonalisationSettings) return undefined;
@@ -11057,7 +11065,7 @@ function PersonalisationSettingsPanel({
       const next = normalizeGroceryListPersonalisation(response.personalisation?.groceryList || {});
       setSleepMinutes(String(next.sleepMinutes));
       setCycleSeconds(String(next.cycleSeconds));
-      setScreensavers(next.screensavers);
+      setScreensaverList(next.screensavers);
     });
 
     return () => {
@@ -11065,7 +11073,7 @@ function PersonalisationSettingsPanel({
     };
   }, []);
 
-  const savePersonalisation = async () => {
+  const savePersonalisation = async (nextScreensavers = screensaversRef.current, options: { quiet?: boolean } = {}) => {
     if (!window.noa?.saveNoaPersonalisationSettings) {
       setMessage('Personalisation settings are only available through the cloud API.');
       return;
@@ -11075,12 +11083,18 @@ function PersonalisationSettingsPanel({
       groceryList: {
         sleepMinutes: clampNumberValue(sleepMinutes, 1, 60, 5),
         cycleSeconds: clampNumberValue(cycleSeconds, 5, 120, 12),
-        screensavers
+        screensavers: nextScreensavers
       }
     });
     setIsSaving(false);
-    setMessage(response.message || (response.ok ? 'Personalisation saved.' : 'Could not save personalisation.'));
+    if (!options.quiet || !response.ok) {
+      setMessage(response.message || (response.ok ? 'Personalisation saved.' : 'Could not save personalisation.'));
+    }
     if (response.ok) void refreshBudget();
+  };
+
+  const updateScreensaver = (id: string, patch: Partial<GroceryScreensaver>) => {
+    return setScreensaverList((currentState) => currentState.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
   };
 
   const importScreensavers = async (files: FileList | null) => {
@@ -11094,8 +11108,9 @@ function PersonalisationSettingsPanel({
         image: await compressImageFileToDataUrl(file),
         enabled: true
       })));
-      setScreensavers((currentState) => [...currentState, ...imported]);
-      setMessage(`${imported.length} screensaver${imported.length === 1 ? '' : 's'} added. Save to publish them to /grocery-list.`);
+      const nextList = setScreensaverList((currentState) => [...currentState, ...imported]);
+      setMessage(`${imported.length} screensaver${imported.length === 1 ? '' : 's'} added. Saving...`);
+      void savePersonalisation(nextList, { quiet: true });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not import those images.');
     } finally {
@@ -11178,7 +11193,10 @@ function PersonalisationSettingsPanel({
                     value={item.name}
                     onChange={(event) => {
                       const nextName = event.currentTarget.value;
-                      setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, name: nextName } : entry));
+                      updateScreensaver(item.id, { name: nextName });
+                    }}
+                    onBlur={() => {
+                      void savePersonalisation(screensaversRef.current, { quiet: true });
                     }}
                   />
                 </label>
@@ -11188,13 +11206,21 @@ function PersonalisationSettingsPanel({
                     checked={item.enabled}
                     onChange={(event) => {
                       const nextEnabled = event.currentTarget.checked;
-                      setScreensavers((currentState) => currentState.map((entry) => entry.id === item.id ? { ...entry, enabled: nextEnabled } : entry));
+                      const nextList = updateScreensaver(item.id, { enabled: nextEnabled });
+                      void savePersonalisation(nextList, { quiet: true });
                     }}
                   />
                   Include in rotation
                 </label>
               </div>
-              <button className="icon-action danger" onClick={() => setScreensavers((currentState) => currentState.filter((entry) => entry.id !== item.id))} aria-label={`Remove ${item.name}`}>
+              <button
+                className="icon-action danger"
+                onClick={() => {
+                  const nextList = setScreensaverList((currentState) => currentState.filter((entry) => entry.id !== item.id));
+                  void savePersonalisation(nextList, { quiet: true });
+                }}
+                aria-label={`Remove ${item.name}`}
+              >
                 <Trash2 size={16} />
               </button>
             </article>
