@@ -559,6 +559,31 @@ interface Window {
       message: string;
       item?: unknown;
     }>;
+    getNoaPersonalisationSettings?: () => Promise<{
+      ok: boolean;
+      message: string;
+      fetchedAt: string;
+      personalisation: {
+        groceryList: {
+          sleepMinutes: number;
+          cycleSeconds: number;
+          screensavers: Array<{
+            id: string;
+            name: string;
+            image: string;
+            enabled: boolean;
+          }>;
+        };
+      };
+    }>;
+    saveNoaPersonalisationSettings?: (payload: {
+      groceryList?: Record<string, unknown>;
+      personalisation?: Record<string, unknown>;
+    }) => Promise<{
+      ok: boolean;
+      message: string;
+      personalisation?: unknown;
+    }>;
     saveBudgetSettings?: (payload: {
       defaultMode?: string;
       categories?: string[];

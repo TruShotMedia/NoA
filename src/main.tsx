@@ -936,6 +936,8 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     manageGroceryItem: (payload) => postJson('/api/budget/grocery', payload),
     getPublicGroceryListSummary: () => fetch('/api/grocery-list/summary').then((response) => response.json()),
     managePublicGroceryListItem: (payload) => postJson('/api/grocery-list/item', payload),
+    getNoaPersonalisationSettings: () => fetch('/api/personalisation/settings').then((response) => response.json()),
+    saveNoaPersonalisationSettings: (payload) => postJson('/api/personalisation/settings', payload),
     saveBudgetSettings: (payload) => postJson('/api/budget/settings', payload),
     saveBudgetProfile: (payload) => postJson('/api/budget/profile', payload),
     saveBudgetEmailSettings: (payload) => postJson('/api/budget/email-settings', payload),
@@ -11047,30 +11049,38 @@ function PersonalisationSettingsPanel({
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    const next = readBudgetGroceryPersonalisation(budgetReport.settings);
-    setSleepMinutes(String(next.sleepMinutes));
-    setCycleSeconds(String(next.cycleSeconds));
-    setScreensavers(next.screensavers);
-  }, [budgetReport.settings]);
+    if (!window.noa?.getNoaPersonalisationSettings) return undefined;
+    let cancelled = false;
+
+    void window.noa.getNoaPersonalisationSettings().then((response) => {
+      if (cancelled || !response.ok) return;
+      const next = normalizeGroceryListPersonalisation(response.personalisation?.groceryList || {});
+      setSleepMinutes(String(next.sleepMinutes));
+      setCycleSeconds(String(next.cycleSeconds));
+      setScreensavers(next.screensavers);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const savePersonalisation = async () => {
-    if (!window.noa?.saveBudgetSettings) {
+    if (!window.noa?.saveNoaPersonalisationSettings) {
       setMessage('Personalisation settings are only available through the cloud API.');
       return;
     }
     setIsSaving(true);
-    const response = await window.noa.saveBudgetSettings({
-      personalisation: {
-        groceryList: {
-          sleepMinutes: clampNumberValue(sleepMinutes, 1, 60, 5),
-          cycleSeconds: clampNumberValue(cycleSeconds, 5, 120, 12),
-          screensavers
-        }
+    const response = await window.noa.saveNoaPersonalisationSettings({
+      groceryList: {
+        sleepMinutes: clampNumberValue(sleepMinutes, 1, 60, 5),
+        cycleSeconds: clampNumberValue(cycleSeconds, 5, 120, 12),
+        screensavers
       }
     });
     setIsSaving(false);
     setMessage(response.message || (response.ok ? 'Personalisation saved.' : 'Could not save personalisation.'));
-    if (response.ok) await refreshBudget();
+    if (response.ok) void refreshBudget();
   };
 
   const importScreensavers = async (files: FileList | null) => {
