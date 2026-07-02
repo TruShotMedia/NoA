@@ -34,6 +34,7 @@ import {
   Plus,
   PieChart,
   Pause,
+  Paperclip,
   Play,
   ReceiptText,
   RefreshCw,
@@ -64,7 +65,7 @@ import {
 import type { ChatMessage, Screen } from './types/noa';
 import './styles/app.css';
 
-const tabletQuickScreens: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
+const tabletQuickScreens: Screen[] = ['today', 'crm', 'budgeting', 'xero', 'map'];
 type BudgetSection = 'overview' | 'ledger' | 'calendar' | 'property' | 'groceries' | 'fuel' | 'settings' | 'automation';
 type LedgerSection = 'income' | 'expenses' | 'debts' | 'savings' | 'assets' | 'all';
 const budgetSections: Array<{ id: BudgetSection; label: string; detail: string; icon: React.ElementType }> = [
@@ -96,7 +97,7 @@ const xeroSections: Array<{ id: XeroSection; label: string; detail: string; icon
   { id: 'intelligence', label: 'Intelligence', detail: 'NoA cross-checks between Xero and Notion', icon: Sparkles },
   { id: 'drafts', label: 'Drafts', detail: 'Approval-gated draft invoice creation', icon: Save }
 ];
-const workspaceScreenIds: Screen[] = ['today', 'upcoming-jobs', 'pipeline', 'clients', 'budgeting', 'xero', 'map'];
+const workspaceScreenIds: Screen[] = ['today', 'crm', 'budgeting', 'xero', 'map'];
 const NOA_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -1680,14 +1681,14 @@ function App() {
   useEffect(() => {
     if (!isUnlocked) return;
     if (screen === 'tasks') {
-      setScreen('pipeline');
+      setScreen('crm');
       return;
     }
     if (['hubgauge', 'plan', 'automations'].includes(screen as string)) {
       setScreen('today');
       return;
     }
-    if ((screen === 'pipeline' || screen === 'upcoming-jobs' || screen === 'clients' || screen === 'map') && !jobsReport.fetchedAt && !isLoadingJobs) {
+    if ((screen === 'crm' || screen === 'pipeline' || screen === 'upcoming-jobs' || screen === 'clients' || screen === 'map') && !jobsReport.fetchedAt && !isLoadingJobs) {
       void loadNotionJobs();
     }
     if ((screen === 'xero' || screen === 'map') && !xeroReport.fetchedAt && !isLoadingXero) {
@@ -2410,6 +2411,13 @@ function App() {
             notes={notes}
             smartBriefing={smartBriefing}
             isNoahThinking={isNoahThinking}
+          />
+        )}
+        {screen === 'crm' && (
+          <CrmView
+            report={jobsReport}
+            isLoading={isLoadingJobs}
+            refreshJobs={loadNotionJobs}
           />
         )}
         {screen === 'pipeline' && (
@@ -3271,6 +3279,619 @@ function Plan() {
   );
 }
 
+type CrmViewKey = 'dashboard' | 'pipeline' | 'calendar' | 'clients-overview' | `client:${string}`;
+
+function CrmView({
+  report,
+  isLoading,
+  refreshJobs
+}: {
+  report: NotionJobsReport;
+  isLoading: boolean;
+  refreshJobs: () => Promise<NotionJobsReport>;
+}) {
+  const monthKey = brisbaneToday().slice(0, 7);
+  const clientSummaries = useMemo(() => buildClientBudgetSummaries(report, monthKey), [report, monthKey]);
+  const calendarItems = useMemo(() => buildCalendarJobs(report), [report]);
+  const activeTasks = useMemo(() => getAllReportTasks(report).filter((task) => !isCompleteNotionTask(task)), [report]);
+  const activePipelineTasks = useMemo(() => (report.pipelineTasks || []).filter((task) => !isCompleteNotionTask(task)), [report]);
+  const [view, setView] = useState<CrmViewKey>('dashboard');
+  const selectedClientId = view.startsWith('client:') ? view.replace('client:', '') : '';
+  const selectedClient = clientSummaries.find((client) => client.id === selectedClientId) || null;
+
+  return (
+    <section className="page-fade crm-page">
+      <aside className="crm-sidebar" aria-label="CRM navigation">
+        <div className="crm-sidebar-head">
+          <span>CRM</span>
+          <strong>Client command</strong>
+        </div>
+
+        <div className="crm-nav-group">
+          <p>Workspace</p>
+          <button className={view === 'dashboard' ? 'active' : ''} onClick={() => setView('dashboard')}>
+            <PieChart size={16} />
+            Dashboard
+          </button>
+          <button className={view === 'pipeline' ? 'active' : ''} onClick={() => setView('pipeline')}>
+            <Kanban size={16} />
+            Pipeline
+          </button>
+          <button className={view === 'calendar' ? 'active' : ''} onClick={() => setView('calendar')}>
+            <CalendarDays size={16} />
+            Calendar
+          </button>
+        </div>
+
+        <div className="crm-nav-group">
+          <p>Clients</p>
+          <button className={view === 'clients-overview' ? 'active' : ''} onClick={() => setView('clients-overview')}>
+            <UsersRound size={16} />
+            Overview
+          </button>
+          <div className="crm-client-list">
+            {clientSummaries.length === 0 ? (
+              <span className="crm-empty-link">No clients synced</span>
+            ) : clientSummaries.map((client) => (
+              <button
+                className={selectedClientId === client.id ? 'active client' : 'client'}
+                key={client.id}
+                onClick={() => setView(`client:${client.id}`)}
+              >
+                <span>{client.title}</span>
+                <small>{client.jobs.length} jobs</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      </aside>
+
+      <main className="crm-content">
+        {view === 'dashboard' && (
+          <CrmDashboard
+            report={report}
+            isLoading={isLoading}
+            refreshJobs={refreshJobs}
+            clients={clientSummaries}
+            calendarItems={calendarItems}
+            activeTasks={activeTasks}
+            activePipelineTasks={activePipelineTasks}
+            openPipeline={() => setView('pipeline')}
+            openCalendar={() => setView('calendar')}
+            openClients={() => setView('clients-overview')}
+          />
+        )}
+        {view === 'pipeline' && (
+          <CrmPipelineBoard report={report} isLoading={isLoading} refreshJobs={refreshJobs} />
+        )}
+        {view === 'calendar' && (
+          <UpcomingJobsView report={report} isLoading={isLoading} refreshJobs={refreshJobs} displayTitle="Calendar" />
+        )}
+        {view === 'clients-overview' && (
+          <ClientsView report={report} isLoading={isLoading} refreshJobs={refreshJobs} />
+        )}
+        {selectedClient && (
+          <CrmClientDetail client={selectedClient} report={report} isLoading={isLoading} refreshJobs={refreshJobs} />
+        )}
+      </main>
+    </section>
+  );
+}
+
+function CrmDashboard({
+  report,
+  isLoading,
+  refreshJobs,
+  clients,
+  calendarItems,
+  activeTasks,
+  activePipelineTasks,
+  openPipeline,
+  openCalendar,
+  openClients
+}: {
+  report: NotionJobsReport;
+  isLoading: boolean;
+  refreshJobs: () => Promise<NotionJobsReport>;
+  clients: ReturnType<typeof buildClientBudgetSummaries>;
+  calendarItems: CalendarJob[];
+  activeTasks: NotionTask[];
+  activePipelineTasks: NotionTask[];
+  openPipeline: () => void;
+  openCalendar: () => void;
+  openClients: () => void;
+}) {
+  const todayKey = brisbaneToday();
+  const thisWeekItems = calendarItems.filter((job) => isDateWithinDays(job.jobDate, todayKey, 7));
+  const urgentTasks = activeTasks.filter((task) => task.dueState === 'Overdue' || task.dueState === 'Due today' || task.priority === 'High');
+  const monthlyBudget = clients.reduce((sum, client) => sum + client.budget, 0);
+  const johnsCut = clients.reduce((sum, client) => sum + client.johnsCutThisMonth, 0);
+
+  return (
+    <section className="crm-dashboard">
+      <article className="crm-hero-panel">
+        <div>
+          <PanelTitle eyebrow="CRM dashboard" title="Client work, pipeline, and schedule" />
+          <p className="section-copy">
+            A single workspace for client context, linked jobs, and the tasks that move each job forward.
+          </p>
+        </div>
+        <div className="jobs-actions">
+          <div className="jobs-sync">
+            <span>{report.fetchedAt ? `Synced ${new Date(report.fetchedAt).toLocaleString()}` : 'Not synced yet'}</span>
+            <strong>{clients.length} clients</strong>
+          </div>
+          <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
+            {isLoading ? 'Syncing...' : 'Sync CRM'}
+          </button>
+        </div>
+      </article>
+
+      {(report.tasksError || report.upcomingJobsError) && (
+        <article className="glass-card wide jobs-error">
+          <CircleAlert size={20} />
+          <p>{[report.tasksError, report.upcomingJobsError].filter(Boolean).join(' ')}</p>
+        </article>
+      )}
+
+      <section className="crm-overview-grid">
+        <button className="crm-stat-card blue" onClick={openPipeline}>
+          <span>Pipeline</span>
+          <strong>{activePipelineTasks.length}</strong>
+          <small>active tasks across four production statuses</small>
+        </button>
+        <button className="crm-stat-card violet" onClick={openCalendar}>
+          <span>Calendar</span>
+          <strong>{thisWeekItems.length}</strong>
+          <small>scheduled items in the next 7 days</small>
+        </button>
+        <button className="crm-stat-card green" onClick={openClients}>
+          <span>Clients</span>
+          <strong>{clients.length}</strong>
+          <small>{formatMoney(Math.max(0, monthlyBudget - johnsCut), 'AUD')} monthly budget remaining</small>
+        </button>
+        <article className="crm-stat-card amber">
+          <span>Attention</span>
+          <strong>{urgentTasks.length}</strong>
+          <small>high priority, overdue, or due today</small>
+        </article>
+      </section>
+
+      <section className="crm-dashboard-layout">
+        <article className="glass-card wide crm-focus-card">
+          <PanelTitle eyebrow="Next work" title="Priority lane" />
+          <div className="crm-priority-list">
+            {(urgentTasks.length ? urgentTasks.slice(0, 6) : activePipelineTasks.slice(0, 6)).map((task) => (
+              <div className="crm-priority-row" key={task.id}>
+                <span className={`priority-dot priority-${(task.priority || 'none').toLowerCase()}`} />
+                <div>
+                  <strong>{task.title}</strong>
+                  <small>{[task.client || task.jobTitle, task.status, task.dueDate || task.shootDate].filter(Boolean).join(' - ') || 'No linked detail'}</small>
+                </div>
+                <em>{task.priority || task.dueState || 'Task'}</em>
+              </div>
+            ))}
+            {!urgentTasks.length && !activePipelineTasks.length && <p className="empty-state">No active CRM work returned from Notion.</p>}
+          </div>
+        </article>
+
+        <article className="glass-card wide crm-focus-card">
+          <PanelTitle eyebrow="Client budgets" title="This month" />
+          <div className="crm-budget-rings">
+            {clients.slice(0, 5).map((client) => (
+              <button key={client.id} onClick={openClients}>
+                <span>{client.title}</span>
+                <strong>{client.budget ? `${Math.round(client.utilization)}%` : '-'}</strong>
+                <div className="budget-meter"><div style={{ width: `${Math.min(100, Math.max(0, client.utilization))}%` }} /></div>
+                <small>{client.budget ? `${formatMoney(client.remaining, 'AUD')} left` : 'No budget set'}</small>
+              </button>
+            ))}
+            {clients.length === 0 && <p className="empty-state">No client budget data returned yet.</p>}
+          </div>
+        </article>
+      </section>
+    </section>
+  );
+}
+
+function CrmPipelineBoard({
+  report,
+  isLoading,
+  refreshJobs
+}: {
+  report: NotionJobsReport;
+  isLoading: boolean;
+  refreshJobs: () => Promise<NotionJobsReport>;
+}) {
+  const pipelineTasks = report.pipelineTasks?.length ? report.pipelineTasks : report.taskList;
+  const visiblePipelineTasks = pipelineTasks.filter((task) => !isCompleteNotionTask(task) && jobColumns.includes(task.column));
+  const [boardTasks, setBoardTasks] = useState<NotionTask[]>(visiblePipelineTasks);
+  const [draggingTaskId, setDraggingTaskId] = useState('');
+  const [savingTaskId, setSavingTaskId] = useState('');
+  const [pipelineMessage, setPipelineMessage] = useState('');
+  const [editor, setEditor] = useState<{ mode: NotionEditorMode; kind: NotionItemKind; item?: NotionTask | null; initialValues?: Record<string, string> } | null>(null);
+
+  useEffect(() => {
+    setBoardTasks(visiblePipelineTasks);
+  }, [report.fetchedAt, visiblePipelineTasks.length]);
+
+  const tasksByColumn = useMemo(() => {
+    return jobColumns.reduce<Record<string, NotionTask[]>>((groups, column) => {
+      groups[column] = boardTasks.filter((task) => task.column === column);
+      return groups;
+    }, {});
+  }, [boardTasks]);
+
+  const moveTaskToColumn = async (taskId: string, column: string) => {
+    const task = boardTasks.find((item) => item.id === taskId);
+    if (!task || task.column === column || savingTaskId) return;
+
+    const previousTasks = boardTasks;
+    const nextStatus = statusForColumn(column);
+    setPipelineMessage(`Updating ${task.title}...`);
+    setSavingTaskId(taskId);
+    setBoardTasks((current) => current.map((item) => item.id === taskId ? { ...item, column, status: nextStatus } : item));
+
+    const result = await window.noa?.updateNotionTaskStatus?.({ pageId: taskId, column });
+    if (!result?.ok) {
+      setBoardTasks(previousTasks);
+      setPipelineMessage(result?.message || 'Notion did not accept the status update.');
+      setSavingTaskId('');
+      return;
+    }
+
+    if (result.task) {
+      setBoardTasks((current) => current.map((item) => item.id === taskId ? { ...item, ...result.task } : item));
+    }
+    setPipelineMessage(result.message || `Moved ${task.title} to ${column}.`);
+    setSavingTaskId('');
+  };
+
+  const handleTaskSave = async (values: Record<string, string>) => {
+    if (!editor || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({
+      kind: 'task',
+      action: editor.mode === 'create' ? 'create' : 'update',
+      id: editor.item?.id,
+      values
+    });
+    setPipelineMessage(result.message);
+    if (!result.ok) throw new Error(result.message || 'Notion did not save this task.');
+    setEditor(null);
+    await refreshJobs();
+  };
+
+  const handleTaskArchive = async () => {
+    if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({ kind: 'task', action: 'archive', id: editor.item.id });
+    setPipelineMessage(result.message);
+    if (result.ok) {
+      setEditor(null);
+      await refreshJobs();
+    }
+  };
+
+  return (
+    <section className="crm-panel-page">
+      <article className="crm-section-head">
+        <div>
+          <PanelTitle eyebrow="CRM pipeline" title="Production columns" />
+          <p className="section-copy">Drag compact task cards between statuses. Completed and ready-to-post work stays out of this board.</p>
+          {pipelineMessage && <p className="pipeline-message">{pipelineMessage}</p>}
+        </div>
+        <div className="jobs-actions">
+          <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
+            {isLoading ? 'Syncing...' : 'Sync'}
+          </button>
+          <button className="primary-action" onClick={() => setEditor({ mode: 'create', kind: 'task', item: null, initialValues: { status: 'Not Started' } })}>
+            <Plus size={16} />
+            New task
+          </button>
+        </div>
+      </article>
+
+      <section className="crm-pipeline-board">
+        {jobColumns.map((column) => (
+          <article
+            className="crm-pipeline-column"
+            key={column}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              const taskId = event.dataTransfer.getData('text/plain') || draggingTaskId;
+              setDraggingTaskId('');
+              void moveTaskToColumn(taskId, column);
+            }}
+          >
+            <div className="crm-column-head">
+              <h3>{column}</h3>
+              <span>{tasksByColumn[column]?.length ?? 0}</span>
+            </div>
+            <div className="crm-column-stack">
+              {(tasksByColumn[column] || []).length === 0 ? (
+                <p className="empty-state">No tasks here.</p>
+              ) : tasksByColumn[column].map((task) => (
+                <CrmPipelineCard
+                  task={task}
+                  key={task.id}
+                  isDragging={draggingTaskId === task.id}
+                  isSaving={savingTaskId === task.id}
+                  onOpen={() => setEditor({ mode: 'view', kind: 'task', item: task })}
+                  onEdit={() => setEditor({ mode: 'edit', kind: 'task', item: task })}
+                  onDragStart={(taskId) => setDraggingTaskId(taskId)}
+                  onDragEnd={() => setDraggingTaskId('')}
+                />
+              ))}
+            </div>
+          </article>
+        ))}
+      </section>
+
+      {editor && (
+        <NotionItemModal
+          mode={editor.mode}
+          kind="task"
+          item={editor.item}
+          initialValues={editor.initialValues}
+          availableJobs={report.upcomingJobs}
+          onClose={() => setEditor(null)}
+          onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
+          onSave={handleTaskSave}
+          onArchive={editor.item ? handleTaskArchive : undefined}
+        />
+      )}
+    </section>
+  );
+}
+
+function CrmPipelineCard({
+  task,
+  isDragging,
+  isSaving,
+  onOpen,
+  onEdit,
+  onDragStart,
+  onDragEnd
+}: {
+  task: NotionTask;
+  isDragging: boolean;
+  isSaving: boolean;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDragStart: (taskId: string) => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <article
+      className={`crm-pipeline-card priority-${(task.priority || 'none').toLowerCase()} ${isDragging ? 'dragging' : ''} ${isSaving ? 'saving' : ''}`}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', task.id);
+        onDragStart(task.id);
+      }}
+      onDragEnd={onDragEnd}
+    >
+      <button className="crm-pipeline-title" onClick={onOpen} disabled={isSaving}>
+        <span className="priority-dot" />
+        <strong>{task.title}</strong>
+      </button>
+      <div className="crm-card-pills">
+        {task.priority && <span>{task.priority}</span>}
+        {task.status && <span>{normalizeNotionStatusName(task.status)}</span>}
+        {(task.shootDate || task.dueDate) && <span>{task.shootDate || task.dueDate}</span>}
+        {(task.attachments || []).length > 0 && <span aria-label="Has file link"><Paperclip size={12} /></span>}
+      </div>
+      <div className="crm-card-actions">
+        <button onClick={onOpen}>View</button>
+        <button onClick={onEdit} aria-label={`Edit ${task.title}`}><Edit3 size={13} /></button>
+      </div>
+    </article>
+  );
+}
+
+function CrmClientDetail({
+  client,
+  report,
+  isLoading,
+  refreshJobs
+}: {
+  client: ReturnType<typeof buildClientBudgetSummaries>[number];
+  report: NotionJobsReport;
+  isLoading: boolean;
+  refreshJobs: () => Promise<NotionJobsReport>;
+}) {
+  const clientJobs = useMemo(() => getClientJobsForClient(report, client), [report, client.id]);
+  const clientTasks = useMemo(() => getTasksForClient(report, client, clientJobs), [report, client.id, clientJobs.length]);
+  const [selectedJobId, setSelectedJobId] = useState(clientJobs[0]?.id || '');
+  const [editor, setEditor] = useState<{
+    mode: NotionEditorMode;
+    kind: NotionItemKind;
+    item?: NotionTask | NotionUpcomingJob | null;
+    initialValues?: Record<string, string>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!clientJobs.some((job) => job.id === selectedJobId)) {
+      setSelectedJobId(clientJobs[0]?.id || '');
+    }
+  }, [client.id, clientJobs.length, selectedJobId]);
+
+  const selectedJob = clientJobs.find((job) => job.id === selectedJobId) || clientJobs[0] || null;
+  const selectedJobTasks = selectedJob ? getTasksForJob(clientTasks, selectedJob) : clientTasks;
+
+  const handleSave = async (values: Record<string, string>) => {
+    if (!editor || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({
+      kind: editor.kind,
+      action: editor.mode === 'create' ? 'create' : 'update',
+      id: editor.item?.id,
+      values
+    });
+    if (!result.ok) throw new Error(result.message || 'Notion did not save this item.');
+    setEditor(null);
+    await refreshJobs();
+  };
+
+  const handleArchive = async () => {
+    if (!editor?.item?.id || !window.noa?.manageNotionItem) return;
+    const result = await window.noa.manageNotionItem({ kind: editor.kind, action: 'archive', id: editor.item.id });
+    if (!result.ok) {
+      window.alert(result.message);
+      return;
+    }
+    setEditor(null);
+    await refreshJobs();
+  };
+
+  return (
+    <section className="crm-client-detail">
+      <article className="crm-section-head">
+        <div>
+          <PanelTitle eyebrow="Client portal" title={client.title} />
+          <p className="section-copy">{getClientDisplayMeta(client)}</p>
+        </div>
+        <div className="jobs-actions">
+          <button className="secondary-action" onClick={() => void refreshJobs()} disabled={isLoading}>
+            {isLoading ? 'Syncing...' : 'Sync'}
+          </button>
+          <button
+            className="primary-action"
+            onClick={() => setEditor({
+              mode: 'create',
+              kind: 'job',
+              item: null,
+              initialValues: { clientId: client.id, client: client.title }
+            })}
+          >
+            <Plus size={16} />
+            New job
+          </button>
+        </div>
+      </article>
+
+      <section className="crm-client-summary-grid">
+        <article>
+          <span>Monthly budget</span>
+          <strong>{client.budget ? formatMoney(client.budget, 'AUD') : 'Not set'}</strong>
+        </article>
+        <article>
+          <span>John's cut</span>
+          <strong>{formatMoney(client.johnsCutThisMonth, 'AUD')}</strong>
+        </article>
+        <article>
+          <span>Remaining</span>
+          <strong>{client.budget ? formatMoney(client.remaining, 'AUD') : '-'}</strong>
+        </article>
+        <article>
+          <span>Open jobs</span>
+          <strong>{clientJobs.filter((job) => !isCompleteNotionStatus(job.status)).length}</strong>
+        </article>
+      </section>
+
+      <section className="crm-client-workspace">
+        <aside className="crm-client-jobs">
+          <div className="crm-pane-head">
+            <div>
+              <span>Jobs</span>
+              <strong>{clientJobs.length}</strong>
+            </div>
+          </div>
+          <div className="crm-job-list">
+            {clientJobs.length === 0 ? (
+              <p className="empty-state">No jobs linked to this client yet.</p>
+            ) : clientJobs.map((job) => (
+              <button className={selectedJob?.id === job.id ? 'active' : ''} key={job.id} onClick={() => setSelectedJobId(job.id)}>
+                <strong>{job.title}</strong>
+                <span>{[job.status, job.jobDate || job.dueDate].filter(Boolean).join(' - ') || 'No date'}</span>
+                <em>{formatMoney(getJobJohnsCut(job), 'AUD')}</em>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="crm-client-inspector">
+          {selectedJob ? (
+            <>
+              <div className="crm-inspector-head">
+                <div>
+                  <p className="eyebrow">Selected job</p>
+                  <h3>{selectedJob.title}</h3>
+                  <span>{[selectedJob.status, selectedJob.jobDate || selectedJob.dueDate, selectedJob.location].filter(Boolean).join(' - ')}</span>
+                </div>
+                <div className="card-tools">
+                  <button onClick={() => setEditor({ mode: 'view', kind: 'job', item: selectedJob })}>View</button>
+                  <button onClick={() => setEditor({ mode: 'edit', kind: 'job', item: selectedJob })}><Edit3 size={14} /></button>
+                </div>
+              </div>
+
+              <div className="crm-linked-task-head">
+                <div>
+                  <span>Attached tasks</span>
+                  <strong>{selectedJobTasks.length}</strong>
+                </div>
+                <button
+                  className="secondary-action compact"
+                  onClick={() => setEditor({
+                    mode: 'create',
+                    kind: 'task',
+                    item: null,
+                    initialValues: {
+                      jobId: selectedJob.id,
+                      jobTitle: selectedJob.title,
+                      status: 'Not Started'
+                    }
+                  })}
+                >
+                  <Plus size={14} />
+                  New task
+                </button>
+              </div>
+
+              <div className="crm-task-list">
+                {selectedJobTasks.length === 0 ? (
+                  <p className="empty-state">No tasks attached to this job yet.</p>
+                ) : selectedJobTasks.map((task) => (
+                  <article className="crm-task-row" key={task.id}>
+                    <span className={`priority-dot priority-${(task.priority || 'none').toLowerCase()}`} />
+                    <button onClick={() => setEditor({ mode: 'view', kind: 'task', item: task })}>
+                      <strong>{task.title}</strong>
+                      <small>{[task.status, task.dueDate || task.shootDate, task.assignedTo].filter(Boolean).join(' - ')}</small>
+                    </button>
+                    {(task.attachments || []).length > 0 && <Paperclip size={14} />}
+                    <button aria-label={`Edit ${task.title}`} onClick={() => setEditor({ mode: 'edit', kind: 'task', item: task })}>
+                      <Edit3 size={14} />
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : (
+            <article className="glass-card wide">
+              <PanelTitle eyebrow="No job selected" title="Create the first job" />
+              <p className="section-copy">Add a job for this client, then attach tasks to manage the work inside NoA.</p>
+            </article>
+          )}
+        </section>
+      </section>
+
+      {editor && (
+        <NotionItemModal
+          mode={editor.mode}
+          kind={editor.kind}
+          item={editor.item}
+          initialValues={editor.initialValues}
+          availableJobs={report.upcomingJobs}
+          onClose={() => setEditor(null)}
+          onEdit={() => setEditor((current) => current ? { ...current, mode: 'edit' } : current)}
+          onSave={handleSave}
+          onArchive={editor.item ? handleArchive : undefined}
+        />
+      )}
+    </section>
+  );
+}
+
 function PipelineBoard({
   report,
   isLoading,
@@ -3886,11 +4507,13 @@ function ClientsView({
 function UpcomingJobsView({
   report,
   isLoading,
-  refreshJobs
+  refreshJobs,
+  displayTitle = 'Upcoming Jobs'
 }: {
   report: NotionJobsReport;
   isLoading: boolean;
   refreshJobs: () => Promise<NotionJobsReport>;
+  displayTitle?: string;
 }) {
   const jobs = useMemo(() => buildCalendarJobs(report), [report]);
   const dueSoonCount = jobs.filter((job) => ['Overdue', 'Due today', 'Tomorrow', 'Due soon'].includes(job.dueState)).length;
@@ -3932,7 +4555,7 @@ function UpcomingJobsView({
     <section className="page-fade jobs-page">
       <article className="glass-card wide jobs-hero">
         <div>
-          <PanelTitle eyebrow="Notion jobs database" title="Upcoming Jobs" />
+          <PanelTitle eyebrow="Notion jobs database" title={displayTitle} />
           <p className="section-copy">
             Job dates pulled from the new NoA Jobs database plus dated linked tasks.
           </p>
@@ -8454,6 +9077,7 @@ function NotionItemModal({
   mode,
   kind,
   item,
+  initialValues,
   availableJobs,
   onClose,
   onEdit,
@@ -8463,6 +9087,7 @@ function NotionItemModal({
   mode: NotionEditorMode;
   kind: NotionItemKind;
   item?: (NotionTask | NotionJobsReport['upcomingJobs'][number]) | null;
+  initialValues?: Record<string, string>;
   availableJobs?: NotionUpcomingJob[];
   onClose: () => void;
   onEdit: () => void;
@@ -8472,7 +9097,9 @@ function NotionItemModal({
   useModalEscape(onClose);
   const isJob = kind === 'job';
   const jobOptions = availableJobs ?? EMPTY_UPCOMING_JOBS;
-  const [values, setValues] = useState<Record<string, string>>(() => getInitialNotionValues(kind, item));
+  const initialValuesKey = JSON.stringify(initialValues || {});
+  const resolveInitialValues = () => ({ ...getInitialNotionValues(kind, item), ...(initialValues || {}) });
+  const [values, setValues] = useState<Record<string, string>>(resolveInitialValues);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>(() => attachmentDraftsFromValue(values.attachments));
   const [jobSearch, setJobSearch] = useState(() => getTaskJobSearchLabel(getInitialNotionValues(kind, item), jobOptions));
   const [isSaving, setIsSaving] = useState(false);
@@ -8524,13 +9151,13 @@ function NotionItemModal({
   };
 
   useEffect(() => {
-    const nextValues = getInitialNotionValues(kind, item);
+    const nextValues = resolveInitialValues();
     setValues(nextValues);
     setAttachments(attachmentDraftsFromValue(nextValues.attachments));
     setJobSearch(getTaskJobSearchLabel(nextValues, jobOptions));
     setFormMessage('');
     setIsSaving(false);
-  }, [kind, item, mode, jobOptions]);
+  }, [kind, item, mode, jobOptions, initialValuesKey]);
 
   useEffect(() => {
     if (mode === 'edit' || mode === 'create') {
@@ -8992,6 +9619,53 @@ function buildClientBudgetSummaries(report: NotionJobsReport, monthKey: string) 
     });
 }
 
+function getAllReportTasks(report: NotionJobsReport) {
+  return dedupeTasks([
+    ...(report.tasks || []),
+    ...(report.taskList || []),
+    ...(report.pipelineTasks || []),
+    ...(report.calendarTasks || [])
+  ]);
+}
+
+function getClientJobsForClient(report: NotionJobsReport, client: Pick<NotionJobsReport['clients'][number], 'id' | 'title'>) {
+  return (report.upcomingJobs || [])
+    .filter((job) => !job.archived)
+    .filter((job) => job.clientId === client.id || namesLikelyMatch(job.client, client.title))
+    .sort(sortUpcomingJobs);
+}
+
+function getTasksForClient(
+  report: NotionJobsReport,
+  client: Pick<NotionJobsReport['clients'][number], 'id' | 'title'>,
+  clientJobs: NotionUpcomingJob[]
+) {
+  const clientJobIds = new Set(clientJobs.map((job) => job.id));
+  return getAllReportTasks(report)
+    .filter((task) => !task.archived)
+    .filter((task) => (
+      Boolean(task.jobId && clientJobIds.has(task.jobId))
+      || namesLikelyMatch(task.client || '', client.title)
+      || clientJobs.some((job) => namesLikelyMatch(task.jobTitle || '', job.title))
+    ))
+    .sort(sortTodayTasks);
+}
+
+function getTasksForJob(tasks: NotionTask[], job: NotionUpcomingJob) {
+  return tasks
+    .filter((task) => task.jobId === job.id || namesLikelyMatch(task.jobTitle || '', job.title))
+    .sort(sortTodayTasks);
+}
+
+function getClientDisplayMeta(client: ReturnType<typeof buildClientBudgetSummaries>[number]) {
+  return [
+    client.status || 'No status',
+    client.retainer === 'Yes' ? 'Retainer' : '',
+    client.industry?.slice(0, 2).join(', '),
+    `${client.jobs.length} linked job${client.jobs.length === 1 ? '' : 's'}`
+  ].filter(Boolean).join(' - ');
+}
+
 function buildCalendarJobs(report: NotionJobsReport): CalendarJob[] {
   const dedicatedJobs: CalendarJob[] = (report.upcomingJobs || []).map((job) => ({
     ...job,
@@ -9031,6 +9705,13 @@ function buildCalendarJobs(report: NotionJobsReport): CalendarJob[] {
 }
 
 function sortCalendarJobs(a: CalendarJob, b: CalendarJob) {
+  if (a.jobDate && !b.jobDate) return -1;
+  if (!a.jobDate && b.jobDate) return 1;
+  if (a.jobDate && b.jobDate && a.jobDate !== b.jobDate) return a.jobDate.localeCompare(b.jobDate);
+  return priorityWeight(a.priority) - priorityWeight(b.priority);
+}
+
+function sortUpcomingJobs(a: NotionUpcomingJob, b: NotionUpcomingJob) {
   if (a.jobDate && !b.jobDate) return -1;
   if (!a.jobDate && b.jobDate) return 1;
   if (a.jobDate && b.jobDate && a.jobDate !== b.jobDate) return a.jobDate.localeCompare(b.jobDate);
@@ -9231,11 +9912,11 @@ function Today({
           <h2>Today starts with {todayFocus}</h2>
           <p>{todayReason}</p>
           <div className="today-actions">
-            <button className="primary-action" onClick={() => setScreen('upcoming-jobs')}>
+            <button className="primary-action" onClick={() => setScreen('crm')}>
               <BriefcaseBusiness size={16} />
               Open calendar
             </button>
-            <button className="secondary-action" onClick={() => setScreen('pipeline')}>
+            <button className="secondary-action" onClick={() => setScreen('crm')}>
               <ListTodo size={16} />
               Review tasks
             </button>
@@ -9275,7 +9956,7 @@ function Today({
           <PanelTitle eyebrow="Today" title="Scheduled work" />
           <div className="today-list">
             {(todayJobs.length ? todayJobs : nextJobs.slice(0, 3)).map((job) => (
-              <button className="today-job-row" onClick={() => setScreen('upcoming-jobs')} key={`${job.sourceKind}-${job.id}`}>
+              <button className="today-job-row" onClick={() => setScreen('crm')} key={`${job.sourceKind}-${job.id}`}>
                 <span className={`priority-dot priority-${(job.priority || 'none').toLowerCase()}`} />
                 <div>
                   <strong>{job.title}</strong>
@@ -9347,12 +10028,12 @@ function Today({
       </section>
 
       <section className="home-command-strip">
-        <button onClick={() => setScreen('pipeline')}>
+        <button onClick={() => setScreen('crm')}>
           <Kanban size={18} />
           <span>Pipeline</span>
           <strong>{jobsReport.pipelineTasks.filter((task) => !isCompleteNotionTask(task)).length} active</strong>
         </button>
-        <button onClick={() => setScreen('upcoming-jobs')}>
+        <button onClick={() => setScreen('crm')}>
           <BriefcaseBusiness size={18} />
           <span>Next job</span>
           <strong>{nextJobs[0]?.title || 'No dated job'}</strong>
@@ -9686,12 +10367,12 @@ const baseMapNodes: IntegrationNode[] = [
     health: 91,
     metadata: 'Tasks / jobs / clients',
     data: ['Tasks', 'Jobs', 'Clients', 'Pipeline statuses', 'Google Drive links'],
-    features: ['Pipeline', 'Upcoming jobs', 'Clients', 'Today focus'],
+    features: ['CRM', 'Pipeline', 'Calendar', 'Clients', 'Today focus'],
     config: ['NOTION_TOKEN', 'NOTION_TASKS_DATABASE_ID', 'NOTION_JOBS_DATABASE_ID', 'NOTION_CLIENTS_DATABASE_ID'],
     x: 220,
     y: 130,
     integrationId: 'notion',
-    route: 'pipeline'
+    route: 'crm'
   },
   {
     id: 'supabase',
@@ -9744,11 +10425,11 @@ const baseMapNodes: IntegrationNode[] = [
     health: 76,
     metadata: 'Schedule awareness',
     data: ['Events', 'Job reminders', 'Availability windows'],
-    features: ['Today card', 'Upcoming jobs', 'Planning'],
+    features: ['Today card', 'CRM calendar', 'Planning'],
     config: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     x: 835,
     y: 310,
-    route: 'upcoming-jobs'
+    route: 'crm'
   },
   {
     id: 'xero',
@@ -11470,6 +12151,7 @@ function screenTitle(screen: Screen) {
   return {
     today: 'Command Centre',
     noah: 'Noah',
+    crm: 'CRM',
     hubgauge: 'HubGauge',
     pipeline: 'Pipeline',
     tasks: 'Tasks',

@@ -3,6 +3,7 @@ import {
   Bot,
   BrainCircuit,
   CalendarDays,
+  BriefcaseBusiness,
   ClipboardList,
   CreditCard,
   Database,
@@ -14,7 +15,6 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
-  UsersRound,
   WalletCards,
 } from 'lucide-react';
 import type {
@@ -32,9 +32,7 @@ import type {
 export const navItems: NavItem[] = [
   { id: 'today', label: 'Today', icon: Gauge },
   { id: 'noah', label: 'Noah', icon: MessagesSquare },
-  { id: 'pipeline', label: 'Pipeline', icon: ClipboardList },
-  { id: 'upcoming-jobs', label: 'Upcoming Jobs', icon: CalendarDays },
-  { id: 'clients', label: 'Clients', icon: UsersRound },
+  { id: 'crm', label: 'CRM', icon: BriefcaseBusiness },
   { id: 'xero', label: 'Xero', icon: CreditCard },
   { id: 'budgeting', label: 'Budgeting', icon: WalletCards },
   { id: 'map', label: 'Map', icon: Map },
