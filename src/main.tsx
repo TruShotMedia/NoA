@@ -9703,7 +9703,35 @@ function getTasksForClient(
 function getTasksForJob(tasks: NotionTask[], job: NotionUpcomingJob) {
   return tasks
     .filter((task) => task.jobId === job.id || namesLikelyMatch(task.jobTitle || '', job.title))
-    .sort(sortTodayTasks);
+    .filter(shouldShowTaskInJobCrm)
+    .sort(sortJobCrmTasks);
+}
+
+function shouldShowTaskInJobCrm(task: NotionTask) {
+  if (!isCompleteNotionTask(task)) return true;
+  const dateKey = getTaskSortDateKey(task);
+  if (!dateKey) return false;
+  return dateKey >= getTwoMonthsAgoKey();
+}
+
+function sortJobCrmTasks(a: NotionTask, b: NotionTask) {
+  const completeDelta = Number(isCompleteNotionTask(a)) - Number(isCompleteNotionTask(b));
+  if (completeDelta !== 0) return completeDelta;
+
+  const statusDelta = clientJobStatusWeight(a.status) - clientJobStatusWeight(b.status);
+  if (statusDelta !== 0) return statusDelta;
+
+  const aDate = getTaskSortDateKey(a);
+  const bDate = getTaskSortDateKey(b);
+  if (aDate && !bDate) return -1;
+  if (!aDate && bDate) return 1;
+  if (aDate && bDate && aDate !== bDate) return aDate.localeCompare(bDate);
+
+  return priorityWeight(a.priority) - priorityWeight(b.priority) || a.title.localeCompare(b.title);
+}
+
+function getTaskSortDateKey(task: Pick<NotionTask, 'shootDate' | 'dueDate'>) {
+  return task.shootDate || task.dueDate || '';
 }
 
 function getClientDisplayMeta(client: ReturnType<typeof buildClientBudgetSummaries>[number]) {
