@@ -3339,7 +3339,7 @@ function CrmView({
                 onClick={() => setView(`client:${client.id}`)}
               >
                 <span>{client.title}</span>
-                <small>{client.jobs.length} jobs</small>
+                <small>{getClientJobsForClient(report, client).length} jobs</small>
               </button>
             ))}
           </div>
@@ -9632,7 +9632,56 @@ function getClientJobsForClient(report: NotionJobsReport, client: Pick<NotionJob
   return (report.upcomingJobs || [])
     .filter((job) => !job.archived)
     .filter((job) => job.clientId === client.id || namesLikelyMatch(job.client, client.title))
-    .sort(sortUpcomingJobs);
+    .filter(shouldShowJobInClientCrm)
+    .sort(sortClientCrmJobs);
+}
+
+function shouldShowJobInClientCrm(job: NotionUpcomingJob) {
+  if (!isCompleteNotionStatus(job.status)) return true;
+  const dateKey = getJobSortDateKey(job);
+  if (!dateKey) return false;
+  return dateKey >= getTwoMonthsAgoKey();
+}
+
+function sortClientCrmJobs(a: NotionUpcomingJob, b: NotionUpcomingJob) {
+  const statusDelta = clientJobStatusWeight(a.status) - clientJobStatusWeight(b.status);
+  if (statusDelta !== 0) return statusDelta;
+
+  const aDate = getJobSortDateKey(a);
+  const bDate = getJobSortDateKey(b);
+  if (aDate && !bDate) return -1;
+  if (!aDate && bDate) return 1;
+  if (aDate && bDate && aDate !== bDate) return aDate.localeCompare(bDate);
+
+  return priorityWeight(a.priority) - priorityWeight(b.priority) || a.title.localeCompare(b.title);
+}
+
+function clientJobStatusWeight(status: string) {
+  const normalized = normalizeNotionStatusName(status);
+  const weights: Record<string, number> = {
+    'Not Started': 0,
+    'Not started': 0,
+    'In Progress': 1,
+    'In progress': 1,
+    'Ready for Revision': 2,
+    'Ready For Revision': 2,
+    'Final Draft/Notes': 3,
+    'Ready To Post': 4,
+    'Posted / Done': 5,
+    Archived: 6,
+    'Notes/Client Info': 7
+  };
+  return weights[normalized] ?? 8;
+}
+
+function getJobSortDateKey(job: Pick<NotionUpcomingJob, 'jobDate' | 'dueDate' | 'shootDate'>) {
+  return job.jobDate || job.shootDate || job.dueDate || '';
+}
+
+function getTwoMonthsAgoKey() {
+  const today = dateFromKey(brisbaneToday());
+  today.setUTCMonth(today.getUTCMonth() - 2);
+  return today.toISOString().slice(0, 10);
 }
 
 function getTasksForClient(
