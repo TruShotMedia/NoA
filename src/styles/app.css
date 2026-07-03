@@ -8342,7 +8342,11 @@ button.crm-stat-card {
 
   .crm-sidebar {
     display: flex;
+    gap: 14px;
     overflow-x: auto;
+    scrollbar-width: thin;
+    scroll-padding: 12px;
+    scroll-snap-type: x proximity;
   }
 
   .crm-sidebar-head {
@@ -8355,6 +8359,7 @@ button.crm-stat-card {
   .crm-nav-group {
     flex: 0 0 auto;
     min-width: 190px;
+    scroll-snap-align: start;
   }
 
   .crm-client-list {
@@ -8370,6 +8375,12 @@ button.crm-stat-card {
     grid-template-columns: repeat(4, minmax(220px, 1fr));
     overflow-x: auto;
     padding-bottom: 4px;
+    scroll-padding: 4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .crm-pipeline-column {
+    scroll-snap-align: start;
   }
 
   .john-pay-panel {
@@ -8633,6 +8644,268 @@ button.crm-stat-card {
 @media (max-width: 760px) {
   .page-fade {
     gap: 14px;
+  }
+
+  .crm-page {
+    display: grid;
+    gap: 14px;
+  }
+
+  .crm-sidebar {
+    border-radius: 20px;
+    display: grid;
+    gap: 12px;
+    margin: -2px 0 2px;
+    max-height: none;
+    overflow: visible;
+    padding: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 12;
+  }
+
+  .crm-sidebar-head {
+    align-items: center;
+    border-bottom: 0;
+    border-right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0;
+  }
+
+  .crm-sidebar-head strong {
+    font-size: 16px;
+  }
+
+  .crm-sidebar-head span {
+    background: rgba(96, 165, 250, 0.14);
+    border-radius: 999px;
+    color: #bfdbfe;
+    letter-spacing: 0.08em;
+    padding: 6px 9px;
+  }
+
+  .crm-nav-group {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scroll-padding: 2px;
+    scroll-snap-type: x proximity;
+  }
+
+  .crm-nav-group p {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 10px;
+  }
+
+  .crm-nav-group button,
+  .crm-client-list button {
+    border-radius: 999px;
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 10px 12px;
+    scroll-snap-align: start;
+    white-space: nowrap;
+  }
+
+  .crm-client-list {
+    display: flex;
+    flex: 1 0 auto;
+    gap: 8px;
+    max-height: none;
+    overflow-x: auto;
+  }
+
+  .crm-client-list button.client {
+    align-items: center;
+    display: inline-flex;
+    gap: 8px;
+    max-width: min(72vw, 260px);
+    padding-left: 12px;
+  }
+
+  .crm-client-list button.client small {
+    background: rgba(255, 255, 255, 0.09);
+    border-radius: 999px;
+    padding: 4px 7px;
+  }
+
+  .crm-content,
+  .crm-dashboard,
+  .crm-panel-page,
+  .crm-client-detail {
+    gap: 14px;
+  }
+
+  .crm-hero-panel,
+  .crm-section-head {
+    border-radius: 20px;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .crm-overview-grid,
+  .crm-client-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .crm-stat-card,
+  .crm-client-summary-grid article {
+    border-radius: 18px;
+    min-height: 116px;
+    padding: 16px;
+  }
+
+  .crm-stat-card strong,
+  .crm-client-summary-grid strong {
+    font-size: 34px;
+  }
+
+  .crm-dashboard-layout,
+  .crm-client-workspace {
+    gap: 14px;
+    grid-template-columns: 1fr;
+  }
+
+  .crm-focus-card,
+  .crm-client-jobs,
+  .crm-client-inspector {
+    border-radius: 20px;
+    padding: 14px;
+  }
+
+  .crm-pipeline-board {
+    display: flex;
+    gap: 12px;
+    margin-inline: -14px;
+    overflow-x: auto;
+    padding: 0 14px 8px;
+    scroll-padding-inline: 14px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .crm-pipeline-column {
+    flex: 0 0 min(86vw, 340px);
+    min-height: 340px;
+    scroll-snap-align: center;
+  }
+
+  .crm-pipeline-card {
+    border-radius: 15px;
+    padding: 12px;
+  }
+
+  .crm-pipeline-title,
+  .crm-task-row button {
+    min-height: 34px;
+  }
+
+  .crm-card-actions button,
+  .crm-task-row > button:last-child {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  .crm-client-jobs {
+    position: static;
+  }
+
+  .crm-job-list {
+    display: flex;
+    gap: 10px;
+    margin-inline: -14px;
+    overflow-x: auto;
+    padding: 0 14px 4px;
+    scroll-padding-inline: 14px;
+    scroll-snap-type: x proximity;
+  }
+
+  .crm-job-list button {
+    flex: 0 0 min(78vw, 300px);
+    min-height: 108px;
+    scroll-snap-align: start;
+  }
+
+  .crm-inspector-head,
+  .crm-linked-task-head,
+  .crm-pane-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .crm-inspector-head .card-tools,
+  .crm-linked-task-head .secondary-action {
+    width: 100%;
+  }
+
+  .crm-task-row {
+    align-items: flex-start;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 12px;
+  }
+
+  .crm-task-row > button:last-child {
+    grid-column: 3;
+  }
+
+  .crm-task-row > svg {
+    grid-column: 3;
+  }
+
+  .crm-budget-rings button,
+  .crm-priority-row,
+  .crm-task-row {
+    border-radius: 15px;
+  }
+
+  .jobs-calendar {
+    gap: 6px;
+  }
+
+  .calendar-weekday {
+    font-size: 10px;
+    padding: 0 2px;
+    text-align: center;
+  }
+
+  .calendar-day {
+    border-radius: 14px;
+    min-height: 86px;
+    padding: 7px;
+  }
+
+  .calendar-day-head {
+    margin-bottom: 5px;
+  }
+
+  .calendar-day-head strong {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+
+  .calendar-job {
+    border-radius: 10px;
+    padding: 6px;
+  }
+
+  .calendar-job span {
+    font-size: 11px;
+  }
+
+  .calendar-job small {
+    display: none;
+  }
+
+  .calendar-more {
+    font-size: 11px;
+    padding: 6px;
   }
 
   .client-card-grid,
@@ -9780,6 +10053,105 @@ button.crm-stat-card {
   .workspace {
     padding-left: 10px;
     padding-right: 10px;
+  }
+
+  .crm-sidebar {
+    border-radius: 18px;
+    margin-inline: -2px;
+    padding: 10px;
+  }
+
+  .crm-sidebar-head strong {
+    font-size: 15px;
+  }
+
+  .crm-nav-group {
+    gap: 7px;
+  }
+
+  .crm-nav-group button,
+  .crm-client-list button {
+    font-size: 13px;
+    min-height: 40px;
+    padding: 9px 11px;
+  }
+
+  .crm-client-list button.client {
+    max-width: 76vw;
+  }
+
+  .crm-hero-panel,
+  .crm-section-head,
+  .crm-focus-card,
+  .crm-client-jobs,
+  .crm-client-inspector {
+    border-radius: 18px;
+    padding: 12px;
+  }
+
+  .crm-overview-grid,
+  .crm-client-summary-grid,
+  .crm-dashboard-layout,
+  .crm-client-workspace {
+    gap: 10px;
+  }
+
+  .crm-stat-card,
+  .crm-client-summary-grid article {
+    min-height: 104px;
+    padding: 14px;
+  }
+
+  .crm-stat-card strong,
+  .crm-client-summary-grid strong {
+    font-size: 29px;
+  }
+
+  .crm-pipeline-board,
+  .crm-job-list {
+    margin-inline: -10px;
+    padding-inline: 10px;
+    scroll-padding-inline: 10px;
+  }
+
+  .crm-pipeline-column {
+    flex-basis: min(90vw, 320px);
+    min-height: 300px;
+    padding: 12px;
+  }
+
+  .crm-column-head h3,
+  .crm-inspector-head h3 {
+    font-size: 15px;
+  }
+
+  .crm-card-pills span {
+    font-size: 10px;
+    min-height: 24px;
+    padding: 5px 7px;
+  }
+
+  .crm-job-list button {
+    flex-basis: min(84vw, 286px);
+  }
+
+  .crm-task-row {
+    gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .crm-task-row > svg,
+  .crm-task-row > button:last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .crm-card-actions {
+    justify-content: flex-start;
+  }
+
+  .crm-inspector-head .card-tools button {
+    flex: 1 1 0;
   }
 
   .top-actions {
