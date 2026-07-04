@@ -128,6 +128,57 @@ p {
   gap: 16px;
 }
 
+.auth-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-panel label {
+  color: rgba(248, 251, 255, 0.78);
+  display: grid;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 8px;
+  text-align: left;
+}
+
+.auth-panel input {
+  background: rgba(5, 10, 20, 0.58);
+  border: 0;
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: #f8fbff;
+  min-height: 54px;
+  outline: 0;
+  padding: 0 16px;
+  width: 100%;
+}
+
+.auth-panel input:focus {
+  box-shadow: inset 0 0 0 1px rgba(223, 243, 255, 0.34), 0 0 0 4px rgba(96, 165, 250, 0.12);
+}
+
+.auth-badge {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.075);
+  border-radius: 999px;
+  color: rgba(248, 251, 255, 0.72);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 7px;
+  justify-content: center;
+  justify-self: center;
+  max-width: 100%;
+  padding: 8px 12px;
+}
+
+.lockscreen-logout {
+  justify-self: center;
+  min-height: 38px;
+  padding-inline: 16px;
+}
+
 .pin-panel input {
   height: 1px;
   opacity: 0;
@@ -198,6 +249,29 @@ p {
 .lockscreen-submit:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.ghost-action {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.07);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  color: rgba(248, 251, 255, 0.78);
+  display: inline-flex;
+  font-weight: 900;
+  gap: 8px;
+  justify-content: center;
+}
+
+.ghost-action:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: #fff;
+}
+
+.ghost-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .lockscreen-card small {

@@ -143,6 +143,8 @@ interface Window {
     }>;
     getAuthStatus?: () => Promise<{
       ok: boolean;
+      authenticated: boolean;
+      authEmail: string;
       unlocked: boolean;
       locked: boolean;
       expiresIn: number;

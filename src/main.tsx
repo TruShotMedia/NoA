@@ -1149,9 +1149,13 @@ function App() {
   if (isPublicGroceryListRoute) {
     return <GroceryListStandalonePage />;
   }
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
+  const [authError, setAuthError] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [screen, setScreen] = useState<Screen>('today');
   const [budgetSection, setBudgetSection] = useState<BudgetSection>('overview');
@@ -1277,10 +1281,60 @@ function App() {
     }).catch(() => undefined);
   };
 
+  const logoutNoa = async () => {
+    if (lockTimerRef.current) {
+      window.clearTimeout(lockTimerRef.current);
+      lockTimerRef.current = null;
+    }
+    setIsMoreMenuOpen(false);
+    setPinInput('');
+    setPinError('');
+    setAuthPassword('');
+    setAuthError('');
+    setIsUnlocked(false);
+    setIsAuthenticated(false);
+    interruptNoahVoice();
+    await fetch('/api/integrations/settings', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' })
+    }).catch(() => undefined);
+  };
+
   const resetLockTimer = () => {
     if (!isUnlocked) return;
     if (lockTimerRef.current) window.clearTimeout(lockTimerRef.current);
     lockTimerRef.current = window.setTimeout(lockNoa, NOA_LOCK_TIMEOUT_MS);
+  };
+
+  const submitLogin = async () => {
+    if (isUnlocking) return;
+    setIsUnlocking(true);
+    try {
+      const response = await fetch('/api/integrations/settings', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'login', email: authEmail, password: authPassword })
+      });
+      const result = await response.json();
+      if (response.ok && result.ok) {
+        setAuthError('');
+        setPinError('');
+        setAuthPassword('');
+        setIsAuthenticated(true);
+        setAuthEmail(result.authEmail || authEmail);
+        setIsUnlocked(true);
+        return;
+      }
+      setAuthError(result.message || 'NoA could not sign in with those Supabase credentials.');
+      setAuthPassword('');
+    } catch {
+      setAuthError('NoA could not reach the Supabase authorization service. Refresh and try again.');
+    } finally {
+      setIsUnlocking(false);
+    }
   };
 
   const submitPin = async (candidatePin = pinInput) => {
@@ -1297,10 +1351,17 @@ function App() {
       if (response.ok && result.ok) {
         setPinError('');
         setPinInput('');
+        setIsAuthenticated(true);
+        if (result.authEmail) setAuthEmail(result.authEmail);
         setIsUnlocked(true);
         return;
       }
-      setPinError(result.message || 'Incorrect PIN. Try again.');
+      if (result.authRequired || result.authenticated === false) {
+        setIsAuthenticated(false);
+        setAuthError(result.message || 'Sign in with Supabase first.');
+      } else {
+        setPinError(result.message || 'Incorrect PIN. Try again.');
+      }
       setPinInput('');
     } catch {
       setPinError('NoA could not reach the secure authorization service. Refresh and try again.');
@@ -1561,12 +1622,18 @@ function App() {
     const checkSession = async () => {
       try {
         const status = await window.noa?.getAuthStatus?.();
-        if (!cancelled && status?.ok && status.unlocked) {
-          setIsUnlocked(true);
+        if (!cancelled && status?.ok) {
+          setIsAuthenticated(Boolean(status.authenticated));
+          setAuthEmail(status.authEmail || '');
+          setIsUnlocked(Boolean(status.unlocked));
           setPinError('');
+          setAuthError('');
         }
       } catch {
-        if (!cancelled) setIsUnlocked(false);
+        if (!cancelled) {
+          setIsAuthenticated(false);
+          setIsUnlocked(false);
+        }
       }
     };
     void checkSession();
@@ -2381,14 +2448,27 @@ function App() {
   if (!isUnlocked) {
     return (
       <NoaLockScreen
+        isAuthenticated={isAuthenticated}
+        authEmail={authEmail}
+        password={authPassword}
         pin={pinInput}
-        error={pinError}
+        error={isAuthenticated ? pinError : authError}
         isUnlocking={isUnlocking}
+        setEmail={(value) => {
+          setAuthError('');
+          setAuthEmail(value);
+        }}
+        setPassword={(value) => {
+          setAuthError('');
+          setAuthPassword(value);
+        }}
         setPin={(value) => {
           setPinError('');
           setPinInput(value.replace(/\D/g, '').slice(0, 4));
         }}
+        onLogin={submitLogin}
         onSubmit={submitPin}
+        onLogout={logoutNoa}
       />
     );
   }
@@ -2594,17 +2674,31 @@ function App() {
 }
 
 function NoaLockScreen({
+  isAuthenticated,
+  authEmail,
+  password,
   pin,
   error,
   isUnlocking,
+  setEmail,
+  setPassword,
   setPin,
-  onSubmit
+  onLogin,
+  onSubmit,
+  onLogout
 }: {
+  isAuthenticated: boolean;
+  authEmail: string;
+  password: string;
   pin: string;
   error: string;
   isUnlocking: boolean;
+  setEmail: (value: string) => void;
+  setPassword: (value: string) => void;
   setPin: (value: string) => void;
+  onLogin: () => Promise<void>;
   onSubmit: (candidatePin?: string) => Promise<void>;
+  onLogout: () => Promise<void>;
 }) {
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
   const addDigit = (digit: string) => {
@@ -2620,6 +2714,7 @@ function NoaLockScreen({
       className="lockscreen-shell"
       tabIndex={-1}
       onKeyDown={(event) => {
+        if (!isAuthenticated) return;
         if (/^\d$/.test(event.key)) {
           event.preventDefault();
           addDigit(event.key);
@@ -2641,40 +2736,86 @@ function NoaLockScreen({
         <p className="eyebrow">Noetic Advisor</p>
         <h1>NoA is locked</h1>
         <p className="lockscreen-copy">
-          Enter your four digit PIN to access private Notion, Xero, Budgeting, and Noah data.
+          {isAuthenticated
+            ? 'Enter your four digit PIN to access private Notion, Xero, Budgeting, and Noah data.'
+            : 'Sign in with the authorised Supabase user before NoA can unlock private data.'}
         </p>
-        <form
-          className="pin-panel"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onSubmit();
-          }}
-        >
-          <input
-            value={pin}
-            onChange={(event) => setPin(event.currentTarget.value)}
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={4}
-            autoFocus
-            aria-label="NoA PIN"
-          />
-          <div className="pin-dots" aria-hidden="true">
-            {[0, 1, 2, 3].map((index) => <span className={pin.length > index ? 'filled' : ''} key={index} />)}
-          </div>
-          {error && <p className="pin-error">{error}</p>}
-          <div className="pin-keypad">
-            {digits.map((digit) => (
-            <button type="button" onClick={() => addDigit(digit)} disabled={isUnlocking} key={digit}>{digit}</button>
-          ))}
-            <button type="button" onClick={() => setPin(pin.slice(0, -1))} disabled={isUnlocking}>Clear</button>
-          </div>
-          <button type="submit" className="primary-action lockscreen-submit" disabled={pin.length !== 4 || isUnlocking}>
-            <ShieldCheck size={16} />
-            {isUnlocking ? 'Checking...' : 'Unlock NoA'}
-          </button>
-        </form>
-        <small>Auto-locks after 5 minutes idle.</small>
+        {!isAuthenticated ? (
+          <form
+            className="auth-panel"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onLogin();
+            }}
+          >
+            <label>
+              Email
+              <input
+                value={authEmail}
+                onChange={(event) => setEmail(event.currentTarget.value)}
+                type="email"
+                autoComplete="username"
+                placeholder="info@fearlessau.com"
+                autoFocus
+              />
+            </label>
+            <label>
+              Password
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.currentTarget.value)}
+                type="password"
+                autoComplete="current-password"
+                placeholder="Supabase password"
+              />
+            </label>
+            {error && <p className="pin-error">{error}</p>}
+            <button type="submit" className="primary-action lockscreen-submit" disabled={!authEmail || !password || isUnlocking}>
+              <ShieldCheck size={16} />
+              {isUnlocking ? 'Signing in...' : 'Sign in to NoA'}
+            </button>
+          </form>
+        ) : (
+          <form
+            className="pin-panel"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onSubmit();
+            }}
+          >
+            <span className="auth-badge">
+              <Mail size={14} />
+              {authEmail}
+            </span>
+            <input
+              value={pin}
+              onChange={(event) => setPin(event.currentTarget.value)}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              autoFocus
+              aria-label="NoA PIN"
+            />
+            <div className="pin-dots" aria-hidden="true">
+              {[0, 1, 2, 3].map((index) => <span className={pin.length > index ? 'filled' : ''} key={index} />)}
+            </div>
+            {error && <p className="pin-error">{error}</p>}
+            <div className="pin-keypad">
+              {digits.map((digit) => (
+              <button type="button" onClick={() => addDigit(digit)} disabled={isUnlocking} key={digit}>{digit}</button>
+            ))}
+              <button type="button" onClick={() => setPin(pin.slice(0, -1))} disabled={isUnlocking}>Clear</button>
+            </div>
+            <button type="submit" className="primary-action lockscreen-submit" disabled={pin.length !== 4 || isUnlocking}>
+              <ShieldCheck size={16} />
+              {isUnlocking ? 'Checking...' : 'Unlock NoA'}
+            </button>
+            <button type="button" className="ghost-action lockscreen-logout" onClick={() => void onLogout()} disabled={isUnlocking}>
+              Sign out
+            </button>
+          </form>
+        )}
+        <small>{isAuthenticated ? 'Auto-locks after 5 minutes idle. Sign out to require credentials again.' : 'Only authorised Supabase users can continue.'}</small>
       </section>
     </main>
   );
