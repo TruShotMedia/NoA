@@ -611,6 +611,8 @@ type GroceryScreensaver = {
   id: string;
   name: string;
   image: string;
+  imagePath?: string;
+  storageBucket?: string;
   enabled: boolean;
 };
 
@@ -851,10 +853,12 @@ function normalizeGroceryListPersonalisation(value: unknown): GroceryListPersona
           id: String(row.id || `screensaver-${index + 1}`),
           name: String(row.name || `Screensaver ${index + 1}`).trim() || `Screensaver ${index + 1}`,
           image,
+          imagePath: String(row.imagePath || row.image_path || '').trim() || undefined,
+          storageBucket: String(row.storageBucket || row.storage_bucket || '').trim() || undefined,
           enabled: row.enabled !== false
         };
       })
-      .filter((item): item is GroceryScreensaver => Boolean(item))
+      .filter(Boolean) as GroceryScreensaver[]
   };
 }
 

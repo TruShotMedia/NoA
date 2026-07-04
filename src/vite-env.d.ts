@@ -546,6 +546,8 @@ interface Window {
           id: string;
           name: string;
           image: string;
+          imagePath?: string;
+          storageBucket?: string;
           enabled: boolean;
         }>;
       };
@@ -571,6 +573,8 @@ interface Window {
             id: string;
             name: string;
             image: string;
+            imagePath?: string;
+            storageBucket?: string;
             enabled: boolean;
           }>;
         };

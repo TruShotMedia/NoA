@@ -13,6 +13,13 @@ module.exports = async function handler(req, res) {
   if (screensaverId) {
     const image = await getHubGaugeScreensaverImage(screensaverId);
     if (!image) return sendJson(res, 404, { ok: false, message: 'Screensaver image not found.' });
+    if (image.redirectUrl) {
+      res.statusCode = 302;
+      res.setHeader('location', image.redirectUrl);
+      res.setHeader('cache-control', 'private, max-age=300');
+      res.end();
+      return;
+    }
     res.statusCode = 200;
     res.setHeader('content-type', image.contentType || 'image/jpeg');
     res.setHeader('cache-control', 'private, max-age=300');
