@@ -3457,6 +3457,14 @@ function CrmDashboard({
   const urgentTasks = activeTasks.filter((task) => task.dueState === 'Overdue' || task.dueState === 'Due today' || task.priority === 'High');
   const monthlyBudget = clients.reduce((sum, client) => sum + client.budget, 0);
   const johnsCut = clients.reduce((sum, client) => sum + client.johnsCutThisMonth, 0);
+  const pipelineJourney = jobColumns.map((column) => ({
+    column,
+    count: activePipelineTasks.filter((task) => task.column === column).length
+  }));
+  const journeyMax = Math.max(1, ...pipelineJourney.map((item) => item.count));
+  const strongestClients = [...clients]
+    .sort((a, b) => b.johnsCutThisMonth - a.johnsCutThisMonth)
+    .slice(0, 4);
 
   return (
     <section className="crm-dashboard">
@@ -3487,24 +3495,63 @@ function CrmDashboard({
 
       <section className="crm-overview-grid">
         <button className="crm-stat-card blue" onClick={openPipeline}>
-          <span>Pipeline</span>
+          <div className="crm-stat-top"><Kanban size={17} /><span>Pipeline</span></div>
           <strong>{activePipelineTasks.length}</strong>
           <small>active tasks across four production statuses</small>
+          <div className="crm-stat-spark" aria-hidden="true">{pipelineJourney.map((item) => <i key={item.column} style={{ height: `${Math.max(18, (item.count / journeyMax) * 100)}%` }} />)}</div>
         </button>
         <button className="crm-stat-card violet" onClick={openCalendar}>
-          <span>Calendar</span>
+          <div className="crm-stat-top"><CalendarDays size={17} /><span>Calendar</span></div>
           <strong>{thisWeekItems.length}</strong>
           <small>scheduled items in the next 7 days</small>
         </button>
         <button className="crm-stat-card green" onClick={openClients}>
-          <span>Clients</span>
+          <div className="crm-stat-top"><UsersRound size={17} /><span>Clients</span></div>
           <strong>{clients.length}</strong>
           <small>{formatMoney(Math.max(0, monthlyBudget - johnsCut), 'AUD')} monthly budget remaining</small>
         </button>
         <article className="crm-stat-card amber">
-          <span>Attention</span>
+          <div className="crm-stat-top"><CircleAlert size={17} /><span>Attention</span></div>
           <strong>{urgentTasks.length}</strong>
           <small>high priority, overdue, or due today</small>
+        </article>
+      </section>
+
+      <section className="crm-showcase-grid">
+        <article className="glass-card wide crm-journey-card">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Production journey" title="Where work is moving" />
+            <button className="ghost-button" onClick={openPipeline}>Open pipeline</button>
+          </div>
+          <div className="crm-journey-track">
+            {pipelineJourney.map((item, index) => (
+              <div className="crm-journey-step" key={item.column}>
+                <span>{index + 1}</span>
+                <div>
+                  <strong>{item.column}</strong>
+                  <small>{item.count} active</small>
+                  <i style={{ width: `${Math.max(8, (item.count / journeyMax) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="glass-card wide crm-client-pulse-card">
+          <div className="panel-row-head">
+            <PanelTitle eyebrow="Client pulse" title="Monthly budget watch" />
+            <button className="ghost-button" onClick={openClients}>Clients</button>
+          </div>
+          <div className="crm-client-pulse-list">
+            {strongestClients.map((client) => (
+              <div key={client.id}>
+                <span>{client.title}</span>
+                <strong>{formatMoney(client.johnsCutThisMonth, 'AUD')}</strong>
+                <small>{client.budget ? `${Math.round(client.utilization)}% used` : 'No budget set'}</small>
+              </div>
+            ))}
+            {strongestClients.length === 0 && <p className="empty-state">Client budget analytics will appear once Notion returns clients.</p>}
+          </div>
         </article>
       </section>
 
@@ -4993,6 +5040,7 @@ function BudgetingView({
   const tenantWeeklyTotal = sumNumbers(tenantBillingRows.filter((row) => row.tenant.active !== false), (row) => row.totalWeekly);
   const ownerPropertyWeekly = analytics.weeklyMortgage + sumNumbers(mortgageExpenseGroups, (group) => group.weeklyOwner);
   const nextSendDate = getNextCycleDate(emailDraft.cycleDay);
+  const recurringWeeklyPressure = analytics.weeklyExpenses + analytics.weeklyDebt + analytics.weeklyMortgage + analytics.weeklySavings;
 
   useEffect(() => {
     setEmailDraft(normalizeBudgetEmailSettings(report.emailSettings));
@@ -5193,6 +5241,24 @@ function BudgetingView({
         <BudgetMetric icon={ReceiptText} label="Weekly outgoings" value={formatMoney(totals.weeklyExpenses + totals.weeklyDebtRepayments + totals.weeklyMortgageRepayments + totals.weeklyMortgageExpenses + totals.weeklySavings)} detail="expenses, debts, mortgage, savings" />
         <BudgetMetric icon={PieChart} label="Net weekly" value={formatMoney(totals.netWeekly)} detail="after active budget rows" tone={netTone} />
         <BudgetMetric icon={Building2} label="Net worth" value={formatMoney(totals.netWorth)} detail={`${formatMoney(totals.assetValue)} assets minus debts`} />
+      </section>
+
+      <section className="budget-signal-strip">
+        <article>
+          <span>Recurring pressure</span>
+          <strong>{formatMoney(recurringWeeklyPressure)}</strong>
+          <p>Weekly active expenses, debts, mortgage, and savings.</p>
+        </article>
+        <article>
+          <span>Tenant billing</span>
+          <strong>{formatMoney(tenantWeeklyTotal)}</strong>
+          <p>{activeTenantCount} active tenant{activeTenantCount === 1 ? '' : 's'} ready for rent and utility splits.</p>
+        </article>
+        <article>
+          <span>Next automation</span>
+          <strong>{nextSendDate}</strong>
+          <p>Tenant email cycle based on the configured billing day.</p>
+        </article>
       </section>
 
       <section className="budget-command-grid">
@@ -10028,6 +10094,7 @@ function Today({
     { label: 'Finance', value: formatCompactMoney(moneyDue, currency), detail: 'invoices + bills due', tone: moneyDue > 0 ? 'amber' : 'green' }
   ];
   const sevenDayPulse = buildSevenDayPulse(calendarJobs, allTasks, todayKey);
+  const strongestPulse = Math.max(1, ...sevenDayPulse.map((day) => day.total));
 
   return (
     <section className="page-fade today-page">
@@ -10039,6 +10106,11 @@ function Today({
           </div>
           <h2>Today starts with {todayFocus}</h2>
           <p>{todayReason}</p>
+          <div className="today-signal-row">
+            <span><Sparkles size={14} /> Focus selected from live work</span>
+            <span><Clock3 size={14} /> {todayJobs.length ? `${todayJobs.length} today` : 'No fixed work today'}</span>
+            <span><ShieldCheck size={14} /> Private command centre</span>
+          </div>
           <div className="today-actions">
             <button className="primary-action" onClick={() => setScreen('crm')}>
               <BriefcaseBusiness size={16} />
@@ -10063,7 +10135,7 @@ function Today({
             </div>
             <div className="today-hero-chart" aria-label="Seven day workload preview">
               {sevenDayPulse.map((day) => (
-                <i key={day.date} title={`${day.label}: ${day.total}`} style={{ height: `${Math.max(10, day.total * 16)}px` }} />
+                <i key={day.date} title={`${day.label}: ${day.total}`} style={{ height: `${Math.max(10, (day.total / strongestPulse) * 100)}%` }} />
               ))}
             </div>
           </article>
