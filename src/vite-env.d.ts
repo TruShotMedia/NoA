@@ -141,6 +141,12 @@ interface Window {
       platform: string;
       phase: string;
     }>;
+    getAuthStatus?: () => Promise<{
+      ok: boolean;
+      unlocked: boolean;
+      locked: boolean;
+      expiresIn: number;
+    }>;
     testIntegrations: () => Promise<{
       checkedAt: string;
       results: Array<{

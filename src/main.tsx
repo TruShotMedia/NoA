@@ -956,6 +956,7 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
   const postJson = async <T,>(url: string, payload: unknown = {}) => {
     const response = await fetch(url, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload)
     });
@@ -970,17 +971,18 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
       phase: 'Cloud deployment',
       auth: 'pin-cookie'
     }),
+    getAuthStatus: () => postJson('/api/integrations/settings', { action: 'status' }),
     testIntegrations: () => postJson('/api/integrations/test-all'),
-    getIntegrationSettings: () => fetch('/api/integrations/settings').then((response) => response.json()),
+    getIntegrationSettings: () => fetch('/api/integrations/settings', { credentials: 'same-origin' }).then((response) => response.json()),
     saveIntegrationSettings: (payload) => postJson('/api/integrations/settings', payload),
     testIntegration: (payload) => postJson('/api/integrations/test', payload),
     revealIntegrationSetting: (payload) => postJson('/api/integrations/reveal', payload),
-    getHubGauge: () => fetch('/api/hubgauge').then((response) => response.json()),
-    getNotionJobs: () => fetch('/api/notion-jobs').then((response) => response.json()),
+    getHubGauge: () => fetch('/api/hubgauge', { credentials: 'same-origin' }).then((response) => response.json()),
+    getNotionJobs: () => fetch('/api/notion-jobs', { credentials: 'same-origin' }).then((response) => response.json()),
     updateNotionTaskStatus: (payload) => postJson('/api/notion-task-status', payload),
     manageNotionItem: (payload) => postJson('/api/notion-item', payload),
-    getXeroSummary: () => fetch('/api/xero/summary').then((response) => response.json()),
-    getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
+    getXeroSummary: () => fetch('/api/xero/summary', { credentials: 'same-origin' }).then((response) => response.json()),
+    getBudgetSummary: () => fetch('/api/budget/summary', { credentials: 'same-origin' }).then((response) => response.json()),
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
     manageGroceryItem: (payload) => postJson('/api/budget/grocery', payload),
     getPublicGroceryListSummary: (options) => {
@@ -1269,6 +1271,7 @@ function App() {
     interruptNoahVoice();
     void fetch('/api/integrations/settings', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'lock' })
     }).catch(() => undefined);
@@ -1286,6 +1289,7 @@ function App() {
     try {
       const response = await fetch('/api/integrations/settings', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'unlock', pin: candidatePin })
       });
@@ -1299,13 +1303,7 @@ function App() {
       setPinError(result.message || 'Incorrect PIN. Try again.');
       setPinInput('');
     } catch {
-      if (candidatePin === '8726') {
-        setPinError('');
-        setPinInput('');
-        setIsUnlocked(true);
-        return;
-      }
-      setPinError('NoA could not reach the local API. For static preview mode, use the default local preview PIN.');
+      setPinError('NoA could not reach the secure authorization service. Refresh and try again.');
     } finally {
       setIsUnlocking(false);
     }
@@ -1557,6 +1555,25 @@ function App() {
       setIsTestingIntegrations(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkSession = async () => {
+      try {
+        const status = await window.noa?.getAuthStatus?.();
+        if (!cancelled && status?.ok && status.unlocked) {
+          setIsUnlocked(true);
+          setPinError('');
+        }
+      } catch {
+        if (!cancelled) setIsUnlocked(false);
+      }
+    };
+    void checkSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isUnlocked) {

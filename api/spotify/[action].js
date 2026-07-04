@@ -1,4 +1,4 @@
-const { sendJson } = require('../../lib/noa');
+const { requireNoaAuth, sendJson } = require('../../lib/noa');
 
 const SPOTIFY_SCOPES = [
   'user-read-currently-playing',
@@ -7,6 +7,7 @@ const SPOTIFY_SCOPES = [
 
 module.exports = async function handler(req, res) {
   const action = getAction(req);
+  if (!requireNoaAuth(req, res)) return;
 
   if (action === 'start') return startSpotify(req, res);
   if (action === 'callback') return handleSpotifyCallback(req, res);

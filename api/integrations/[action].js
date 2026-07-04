@@ -17,8 +17,9 @@ module.exports = async function handler(req, res) {
   if (req.method === 'POST') {
     const body = await readBody(req);
     req.body = body;
-    if (['unlock', 'lock'].includes(String(body.action || ''))) {
-      return sendJson(res, 200, await handleNoaAuth(req, res));
+    if (['unlock', 'lock', 'status'].includes(String(body.action || ''))) {
+      const result = await handleNoaAuth(req, res);
+      return sendJson(res, result.statusCode || 200, result);
     }
   }
 
