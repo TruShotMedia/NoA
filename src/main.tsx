@@ -25,6 +25,7 @@ import {
   BriefcaseBusiness,
   Kanban,
   LockKeyhole,
+  LogOut,
   Mail,
   ImageIcon,
   ListTodo,
@@ -2703,6 +2704,7 @@ function App() {
             integrationStatus={integrationStatus}
             budgetReport={budgetReport}
             refreshBudget={loadBudgetSummary}
+            onLogout={logoutNoa}
           />
         )}
         {utilityPanel === 'search' && (
@@ -12610,11 +12612,13 @@ function PersonalisationSettingsPanel({
 function SettingsView({
   integrationStatus,
   budgetReport,
-  refreshBudget
+  refreshBudget,
+  onLogout
 }: {
   integrationStatus: IntegrationStatus;
   budgetReport: BudgetReport;
   refreshBudget: () => Promise<BudgetReport>;
+  onLogout: () => Promise<void>;
 }) {
   const configuredCount = Object.values(integrationStatus).filter(Boolean).length;
   const [tab, setTab] = useState<'credentials' | 'personalisation'>('credentials');
@@ -12663,6 +12667,7 @@ OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=marin
 OPENAI_TTS_INSTRUCTIONS=Speak like Noah: natural, warm, calm, and conversational.
+NOA_AUTH_EMAIL=info@fearlessau.com
 NOA_PIN=8726
 NOA_SESSION_SECRET=make_this_a_long_random_secret
 CRON_SECRET=make_this_a_long_random_cron_secret
@@ -12698,6 +12703,19 @@ XERO_REDIRECT_URI=https://no-a.vercel.app/api/xero/callback`}</pre>
       ) : (
         <PersonalisationSettingsPanel budgetReport={budgetReport} refreshBudget={refreshBudget} />
       )}
+
+      <article className="glass-card wide account-security-card">
+        <div>
+          <PanelTitle eyebrow="Account security" title="Signed in access" />
+          <p className="section-copy">
+            Sign out when you want NoA to require the Supabase user credentials again, instead of only the quick PIN unlock.
+          </p>
+        </div>
+        <button type="button" className="danger-action" onClick={() => void onLogout()}>
+          <LogOut size={17} />
+          Log out of NoA
+        </button>
+      </article>
     </section>
   );
 }

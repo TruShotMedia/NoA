@@ -6618,6 +6618,37 @@ button.crm-stat-card {
   gap: 18px;
 }
 
+.account-security-card {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.account-security-card .section-copy {
+  margin-bottom: 0;
+}
+
+.danger-action {
+  align-items: center;
+  background: rgba(251, 113, 133, 0.12);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.2);
+  color: #fecdd3;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 900;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+.danger-action:hover {
+  background: rgba(251, 113, 133, 0.18);
+  color: #fff;
+}
+
 .file-upload-card {
   align-items: center;
   background: rgba(0, 0, 0, 0.18);
@@ -9273,6 +9304,16 @@ button.crm-stat-card {
 @media (max-width: 760px) {
   .page-fade {
     gap: 14px;
+  }
+
+  .account-security-card {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .account-security-card .danger-action {
+    justify-content: center;
+    width: 100%;
   }
 
   .crm-page {
