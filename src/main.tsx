@@ -26,6 +26,7 @@ import {
   Kanban,
   LockKeyhole,
   Mail,
+  ImageIcon,
   ListTodo,
   MessageSquareText,
   Menu,
@@ -871,6 +872,47 @@ function readBudgetGroceryPersonalisation(settings: BudgetReport['settings']): G
   return normalizeGroceryListPersonalisation(personalisation.groceryList || {});
 }
 
+function loadCachedGroceryScreensavers(): GroceryListPersonalisation {
+  try {
+    const saved = window.localStorage.getItem(GROCERY_SCREENSAVER_CACHE_KEY);
+    return normalizeGroceryListPersonalisation(saved ? JSON.parse(saved) : {});
+  } catch {
+    return defaultGroceryListPersonalisation;
+  }
+}
+
+function saveCachedGroceryScreensavers(personalisation: GroceryListPersonalisation) {
+  window.localStorage.setItem(GROCERY_SCREENSAVER_CACHE_KEY, JSON.stringify(personalisation));
+  window.localStorage.setItem(GROCERY_SCREENSAVER_SYNCED_AT_KEY, new Date().toISOString());
+}
+
+async function warmGroceryScreensaverCache(personalisation: GroceryListPersonalisation) {
+  const urls = personalisation.screensavers
+    .filter((item) => item.enabled && /^https?:\/\//i.test(item.image))
+    .map((item) => item.image);
+
+  if (urls.length === 0) return;
+
+  if ('caches' in window) {
+    const cache = await caches.open('noa-grocery-screensavers-v1');
+    await Promise.allSettled(urls.map(async (url) => {
+      const cached = await cache.match(url);
+      if (cached) return;
+      let response = await fetch(url, { mode: 'cors', cache: 'reload' }).catch(() => null);
+      if (!response) response = await fetch(url, { mode: 'no-cors', cache: 'reload' });
+      if (response.ok || response.type === 'opaque') await cache.put(url, response.clone());
+    }));
+    return;
+  }
+
+  await Promise.allSettled(urls.map((url) => new Promise<void>((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve();
+    image.onerror = () => resolve();
+    image.src = url;
+  })));
+}
+
 function clampNumberValue(value: unknown, min: number, max: number, fallback: number) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -903,6 +945,8 @@ async function compressImageFileToDataUrl(file: File, maxDimension = 1600, quali
 }
 
 const jobColumns = ['Not Started', 'In Progress', 'Ready for Revision', 'Final Draft/Notes'];
+const GROCERY_SCREENSAVER_CACHE_KEY = 'noa.groceryList.screensavers.v2';
+const GROCERY_SCREENSAVER_SYNCED_AT_KEY = 'noa.groceryList.screensavers.syncedAt';
 
 if (!window.noa) {
   window.noa = createBrowserNoaClient();
@@ -939,7 +983,10 @@ function createBrowserNoaClient(): NonNullable<Window['noa']> {
     getBudgetSummary: () => fetch('/api/budget/summary').then((response) => response.json()),
     manageBudgetItem: (payload) => postJson('/api/budget/item', payload),
     manageGroceryItem: (payload) => postJson('/api/budget/grocery', payload),
-    getPublicGroceryListSummary: () => fetch('/api/grocery-list/summary', { cache: 'no-store' }).then((response) => response.json()),
+    getPublicGroceryListSummary: (options) => {
+      const params = options?.includePersonalisation ? '?includePersonalisation=1' : '';
+      return fetch(`/api/grocery-list/summary${params}`, { cache: options?.includePersonalisation ? 'no-store' : 'default' }).then((response) => response.json());
+    },
     managePublicGroceryListItem: (payload) => postJson('/api/grocery-list/item', payload),
     getNoaPersonalisationSettings: () => fetch('/api/grocery-list/settings', { cache: 'no-store' }).then((response) => response.json()),
     saveNoaPersonalisationSettings: (payload) => postJson('/api/grocery-list/settings', payload),
@@ -11512,16 +11559,19 @@ function Integrations({
 }
 
 function GroceryListStandalonePage() {
+  const cachedScreensavers = loadCachedGroceryScreensavers();
   const [report, setReport] = useState<PublicGroceryListReport>({
     ok: false,
     message: '',
     fetchedAt: '',
     owner: { email: 'info@fearlessau.com', userId: '' },
     groceryItems: [],
-    personalisation: defaultGroceryListPersonalisation
+    personalisation: cachedScreensavers
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncingScreensavers, setIsSyncingScreensavers] = useState(false);
+  const [screensaverSyncedAt, setScreensaverSyncedAt] = useState(() => window.localStorage.getItem(GROCERY_SCREENSAVER_SYNCED_AT_KEY) || '');
   const [message, setMessage] = useState('');
   const [itemName, setItemName] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -11551,14 +11601,41 @@ function GroceryListStandalonePage() {
     if (!window.noa?.getPublicGroceryListSummary) return report;
     setIsLoading(true);
     const next = await window.noa.getPublicGroceryListSummary();
-    setReport({
+    setReport((current) => ({
       ...next,
       owner: next.owner || { email: 'info@fearlessau.com', userId: '' },
       groceryItems: Array.isArray(next.groceryItems) ? next.groceryItems : [],
-      personalisation: normalizeGroceryListPersonalisation(next.personalisation)
-    });
+      personalisation: next.personalisationIncluded ? normalizeGroceryListPersonalisation(next.personalisation) : current.personalisation
+    }));
     setIsLoading(false);
     return next;
+  };
+
+  const syncScreensavers = async () => {
+    if (!window.noa?.getPublicGroceryListSummary) return report;
+    setIsSyncingScreensavers(true);
+    setMessage('');
+    try {
+      const next = await window.noa.getPublicGroceryListSummary({ includePersonalisation: true });
+      const nextPersonalisation = normalizeGroceryListPersonalisation(next.personalisation);
+      saveCachedGroceryScreensavers(nextPersonalisation);
+      await warmGroceryScreensaverCache(nextPersonalisation);
+      const syncedAt = window.localStorage.getItem(GROCERY_SCREENSAVER_SYNCED_AT_KEY) || new Date().toISOString();
+      setScreensaverSyncedAt(syncedAt);
+      setReport({
+        ...next,
+        owner: next.owner || { email: 'info@fearlessau.com', userId: '' },
+        groceryItems: Array.isArray(next.groceryItems) ? next.groceryItems : [],
+        personalisation: nextPersonalisation
+      });
+      setMessage(`Screensavers synced${nextPersonalisation.screensavers.length ? ` (${nextPersonalisation.screensavers.length})` : ''}.`);
+      return next;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not sync screensavers.');
+      return report;
+    } finally {
+      setIsSyncingScreensavers(false);
+    }
   };
 
   useEffect(() => {
@@ -11673,11 +11750,20 @@ function GroceryListStandalonePage() {
               <RefreshCw size={16} />
               {isLoading ? 'Syncing...' : 'Refresh'}
             </button>
+            <button className="secondary-action" onClick={() => void syncScreensavers()} disabled={isSyncingScreensavers}>
+              <ImageIcon size={16} />
+              {isSyncingScreensavers ? 'Syncing images...' : 'Sync screensavers'}
+            </button>
             <button className="secondary-action" onClick={startScreensaver}>
               <MonitorSmartphone size={16} />
               Start screensaver
             </button>
           </div>
+          {screensaverSyncedAt && (
+            <small className="grocery-screensaver-sync-note">
+              Screensavers synced {new Date(screensaverSyncedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+            </small>
+          )}
         </article>
 
         <article className="glass-card wide grocery-route-form-card">

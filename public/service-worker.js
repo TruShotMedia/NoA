@@ -1,4 +1,5 @@
-const CACHE_NAME = 'noa-shell-v12';
+const CACHE_NAME = 'noa-shell-v13';
+const SCREENSAVER_CACHE_NAME = 'noa-grocery-screensavers-v1';
 const SHELL_ASSETS = [
   '/',
   '/grocery-list',
@@ -17,7 +18,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => ![CACHE_NAME, SCREENSAVER_CACHE_NAME].includes(key)).map((key) => caches.delete(key))))
   );
   self.clients.claim();
 });
@@ -25,6 +26,17 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.includes('/storage/v1/object/public/noa-screensavers/')) {
+    event.respondWith(
+      caches.open(SCREENSAVER_CACHE_NAME).then((cache) => (
+        cache.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+          if (response.ok || response.type === 'opaque') cache.put(event.request, response.clone());
+          return response;
+        }))
+      ))
+    );
+    return;
+  }
   event.respondWith(
     fetch(event.request)
       .then((response) => {

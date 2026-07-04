@@ -13,7 +13,9 @@ module.exports = async function handler(req, res) {
 
   if (action === 'summary') {
     if (req.method !== 'GET') return methodNotAllowed(res);
-    return sendJson(res, 200, await getPublicGroceryListSummary());
+    return sendJson(res, 200, await getPublicGroceryListSummary({
+      includePersonalisation: req.query?.includePersonalisation === '1' || req.query?.includeScreensavers === '1'
+    }));
   }
 
   if (action === 'item') {

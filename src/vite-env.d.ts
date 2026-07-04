@@ -518,7 +518,7 @@ interface Window {
       message: string;
       item?: unknown;
     }>;
-    getPublicGroceryListSummary?: () => Promise<{
+    getPublicGroceryListSummary?: (options?: { includePersonalisation?: boolean }) => Promise<{
       ok: boolean;
       message: string;
       fetchedAt: string;
@@ -551,6 +551,7 @@ interface Window {
           enabled: boolean;
         }>;
       };
+      personalisationIncluded?: boolean;
     }>;
     managePublicGroceryListItem?: (payload: {
       action: 'create' | 'update' | 'delete';
