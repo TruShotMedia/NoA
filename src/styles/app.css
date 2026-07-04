@@ -3726,6 +3726,52 @@ button.crm-stat-card {
   grid-template-columns: minmax(250px, 0.32fr) minmax(0, 1fr);
 }
 
+.crm-client-health-strip {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.crm-client-health-strip article {
+  background:
+    radial-gradient(circle at 92% 8%, rgba(191, 219, 254, 0.1), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.035));
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.crm-client-health-strip span,
+.crm-selected-job-grid span,
+.crm-job-notes span,
+.crm-job-status-group p {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.crm-client-health-strip strong,
+.crm-selected-job-grid strong {
+  color: #fff;
+  display: block;
+  font-size: clamp(20px, 3vw, 28px);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.crm-client-health-strip p,
+.crm-selected-job-grid p,
+.crm-job-notes p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
 .crm-client-jobs,
 .crm-client-inspector {
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
@@ -3751,9 +3797,86 @@ button.crm-stat-card {
   box-shadow: inset 0 0 0 1px rgba(191, 219, 254, 0.18);
 }
 
+.crm-job-status-group {
+  display: grid;
+  gap: 8px;
+}
+
+.crm-job-status-group + .crm-job-status-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 10px;
+}
+
+.crm-job-status-group p {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.crm-job-status-group p span {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #dff3ff;
+  display: inline-flex;
+  font-size: 11px;
+  height: 24px;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 7px;
+}
+
 .crm-job-list em {
   color: #bbf7d0;
   font-style: normal;
+}
+
+.crm-selected-job-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.crm-selected-job-grid article,
+.crm-job-notes {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+  min-width: 0;
+  padding: 13px;
+}
+
+.crm-job-notes {
+  display: grid;
+  gap: 8px;
+}
+
+.crm-job-link-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.crm-job-link-strip a {
+  align-items: center;
+  background: rgba(147, 197, 253, 0.12);
+  border-radius: 999px;
+  color: #dff3ff;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 7px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 8px 11px;
+  text-decoration: none;
+}
+
+.crm-job-link-strip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .crm-task-row {
@@ -8535,6 +8658,7 @@ button.crm-stat-card {
   .crm-dashboard-layout,
   .crm-showcase-grid,
   .crm-client-workspace,
+  .crm-client-health-strip,
   .client-budget-overview {
     grid-template-columns: 1fr;
   }
@@ -8577,6 +8701,7 @@ button.crm-stat-card {
   }
 
   .crm-journey-track,
+  .crm-selected-job-grid,
   .budget-signal-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -8963,7 +9088,9 @@ button.crm-stat-card {
   }
 
   .crm-overview-grid,
-  .crm-client-summary-grid {
+  .crm-client-summary-grid,
+  .crm-client-health-strip,
+  .crm-selected-job-grid {
     grid-template-columns: 1fr;
   }
 
@@ -10312,6 +10439,7 @@ button.crm-stat-card {
 
   .crm-overview-grid,
   .crm-client-summary-grid,
+  .crm-client-health-strip,
   .crm-dashboard-layout,
   .crm-client-workspace {
     gap: 10px;

@@ -3817,6 +3817,13 @@ function CrmClientDetail({
 
   const selectedJob = clientJobs.find((job) => job.id === selectedJobId) || clientJobs[0] || null;
   const selectedJobTasks = selectedJob ? getTasksForJob(clientTasks, selectedJob) : clientTasks;
+  const openJobs = clientJobs.filter((job) => !isCompleteNotionStatus(job.status));
+  const activeTasks = clientTasks.filter((task) => !isCompleteNotionTask(task));
+  const completedRecentTasks = clientTasks.length - activeTasks.length;
+  const jobsByStatus = getClientJobStatusGroups(clientJobs);
+  const selectedJobActiveTasks = selectedJobTasks.filter((task) => !isCompleteNotionTask(task));
+  const selectedJobCompletedTasks = selectedJobTasks.length - selectedJobActiveTasks.length;
+  const selectedJobLinks = selectedJob ? getItemAttachmentLinks(selectedJob) : [];
 
   const handleSave = async (values: Record<string, string>) => {
     if (!editor || !window.noa?.manageNotionItem) return;
@@ -3883,7 +3890,25 @@ function CrmClientDetail({
         </article>
         <article>
           <span>Open jobs</span>
-          <strong>{clientJobs.filter((job) => !isCompleteNotionStatus(job.status)).length}</strong>
+          <strong>{openJobs.length}</strong>
+        </article>
+      </section>
+
+      <section className="crm-client-health-strip">
+        <article>
+          <span>Budget use</span>
+          <strong>{client.budget ? `${Math.round(client.utilization)}%` : 'Not tracking'}</strong>
+          <div className="budget-meter"><div style={{ width: `${Math.min(100, Math.max(0, client.utilization))}%` }} /></div>
+        </article>
+        <article>
+          <span>Active tasks</span>
+          <strong>{activeTasks.length}</strong>
+          <p>{completedRecentTasks} recently completed task{completedRecentTasks === 1 ? '' : 's'} still visible for context.</p>
+        </article>
+        <article>
+          <span>Next job</span>
+          <strong>{openJobs[0]?.title || 'No open jobs'}</strong>
+          <p>{openJobs[0] ? [openJobs[0].status, openJobs[0].jobDate || openJobs[0].dueDate].filter(Boolean).join(' - ') : 'Nothing is currently waiting in the client pipeline.'}</p>
         </article>
       </section>
 
@@ -3898,12 +3923,17 @@ function CrmClientDetail({
           <div className="crm-job-list">
             {clientJobs.length === 0 ? (
               <p className="empty-state">No jobs linked to this client yet.</p>
-            ) : clientJobs.map((job) => (
-              <button className={selectedJob?.id === job.id ? 'active' : ''} key={job.id} onClick={() => setSelectedJobId(job.id)}>
-                <strong>{job.title}</strong>
-                <span>{[job.status, job.jobDate || job.dueDate].filter(Boolean).join(' - ') || 'No date'}</span>
-                <em>{formatMoney(getJobJohnsCut(job), 'AUD')}</em>
-              </button>
+            ) : jobsByStatus.map((group) => (
+              <div className="crm-job-status-group" key={group.status}>
+                <p>{group.status} <span>{group.jobs.length}</span></p>
+                {group.jobs.map((job) => (
+                  <button className={selectedJob?.id === job.id ? 'active' : ''} key={job.id} onClick={() => setSelectedJobId(job.id)}>
+                    <strong>{job.title}</strong>
+                    <span>{[job.jobDate || job.dueDate, job.location].filter(Boolean).join(' - ') || 'No date'}</span>
+                    <em>{formatMoney(getJobJohnsCut(job), 'AUD')}</em>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </aside>
@@ -3922,6 +3952,45 @@ function CrmClientDetail({
                   <button onClick={() => setEditor({ mode: 'edit', kind: 'job', item: selectedJob })}><Edit3 size={14} /></button>
                 </div>
               </div>
+
+              <div className="crm-selected-job-grid">
+                <article>
+                  <span>Status</span>
+                  <strong>{normalizeNotionStatusName(selectedJob.status) || 'No status'}</strong>
+                </article>
+                <article>
+                  <span>John's cut</span>
+                  <strong>{formatMoney(getJobJohnsCut(selectedJob), 'AUD')}</strong>
+                </article>
+                <article>
+                  <span>Tasks</span>
+                  <strong>{selectedJobActiveTasks.length} active</strong>
+                  <p>{selectedJobCompletedTasks} complete/recent</p>
+                </article>
+                <article>
+                  <span>Attachments</span>
+                  <strong>{selectedJobLinks.length}</strong>
+                  <p>{selectedJobLinks.length ? 'Google Drive links attached' : 'No links attached'}</p>
+                </article>
+              </div>
+
+              {selectedJob.description && (
+                <article className="crm-job-notes">
+                  <span>Job notes</span>
+                  <p>{selectedJob.description}</p>
+                </article>
+              )}
+
+              {selectedJobLinks.length > 0 && (
+                <div className="crm-job-link-strip">
+                  {selectedJobLinks.slice(0, 4).map((link, index) => (
+                    <a href={link.url} target="_blank" rel="noreferrer" key={`${link.url}-${index}`}>
+                      <Paperclip size={13} />
+                      <span>{link.name || `Drive link ${index + 1}`}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
 
               <div className="crm-linked-task-head">
                 <div>
@@ -9822,6 +9891,24 @@ function getTasksForJob(tasks: NotionTask[], job: NotionUpcomingJob) {
     .filter((task) => task.jobId === job.id || namesLikelyMatch(task.jobTitle || '', job.title))
     .filter(shouldShowTaskInJobCrm)
     .sort(sortJobCrmTasks);
+}
+
+function getClientJobStatusGroups(jobs: NotionUpcomingJob[]) {
+  const groups = jobs.reduce<Array<{ status: string; jobs: NotionUpcomingJob[] }>>((acc, job) => {
+    const status = normalizeNotionStatusName(job.status) || 'No status';
+    let group = acc.find((item) => item.status === status);
+    if (!group) {
+      group = { status, jobs: [] };
+      acc.push(group);
+    }
+    group.jobs.push(job);
+    return acc;
+  }, []);
+  return groups.sort((a, b) => clientJobStatusWeight(a.status) - clientJobStatusWeight(b.status));
+}
+
+function getItemAttachmentLinks(item: { attachments?: Array<{ name?: string; url?: string }> }) {
+  return (item.attachments || []).filter((attachment) => Boolean(attachment.url));
 }
 
 function shouldShowTaskInJobCrm(task: NotionTask) {
