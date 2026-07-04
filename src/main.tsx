@@ -132,6 +132,32 @@ type StartupSyncState = {
   checkedAt: string;
 };
 
+type UtilityPanel = 'search' | 'notifications' | null;
+
+type UtilityAction = {
+  screen: Screen;
+  budgetSection?: BudgetSection;
+  xeroSection?: XeroSection;
+};
+
+type NoaSearchResult = UtilityAction & {
+  id: string;
+  title: string;
+  detail: string;
+  eyebrow: string;
+  icon: React.ElementType;
+  keywords: string;
+};
+
+type NoaNotification = UtilityAction & {
+  id: string;
+  title: string;
+  detail: string;
+  eyebrow: string;
+  tone: 'danger' | 'warning' | 'info' | 'success';
+  icon: React.ElementType;
+};
+
 type HubGaugePayload = {
   status: 'online' | 'partial' | 'offline';
   deviceName: string;
@@ -1160,6 +1186,8 @@ function App() {
   const [screen, setScreen] = useState<Screen>('today');
   const [budgetSection, setBudgetSection] = useState<BudgetSection>('overview');
   const [xeroSection, setXeroSection] = useState<XeroSection>('overview');
+  const [utilityPanel, setUtilityPanel] = useState<UtilityPanel>(null);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [mobileDrawerDragX, setMobileDrawerDragX] = useState(0);
   const [isMobileDrawerDragging, setIsMobileDrawerDragging] = useState(false);
@@ -1863,6 +1891,35 @@ function App() {
     return buildSyncStatusPill(startupSync, isLoadingJobs || isLoadingXero);
   }, [startupSync, isLoadingJobs, isLoadingXero]);
 
+  const searchResults = useMemo(() => buildNoaSearchResults({
+    jobsReport,
+    xeroReport,
+    budgetReport,
+    notes,
+    integrationStatus,
+    testResults
+  }), [jobsReport, xeroReport, budgetReport, notes, integrationStatus, testResults]);
+
+  const notifications = useMemo(() => buildNoaNotifications({
+    startupSync,
+    jobsReport,
+    xeroReport,
+    budgetReport,
+    integrationStatus,
+    testResults,
+    isLoadingJobs,
+    isLoadingXero,
+    isLoadingBudget
+  }), [startupSync, jobsReport, xeroReport, budgetReport, integrationStatus, testResults, isLoadingJobs, isLoadingXero, isLoadingBudget]);
+
+  const openUtilityAction = (action: UtilityAction) => {
+    if (action.budgetSection) setBudgetSection(action.budgetSection);
+    if (action.xeroSection) setXeroSection(action.xeroSection);
+    setScreen(action.screen);
+    setUtilityPanel(null);
+    setIsMoreMenuOpen(false);
+  };
+
   const submitCommand = async (rawValue: string, options: { speakReply: boolean; interactionMode: InteractionMode }) => {
     const value = rawValue.trim();
     if (!value) return;
@@ -2501,8 +2558,13 @@ function App() {
             setXeroSection={setXeroSection}
           />
           <div className="desktop-utility-actions" aria-label="Desktop utilities">
-            <button type="button" aria-label="Search"><Search size={17} /></button>
-            <button type="button" aria-label="Notifications"><Bell size={17} /></button>
+            <button type="button" className={utilityPanel === 'search' ? 'active' : ''} aria-label="Search" onClick={() => setUtilityPanel('search')}>
+              <Search size={17} />
+            </button>
+            <button type="button" className={utilityPanel === 'notifications' ? 'active' : ''} aria-label="Notifications" onClick={() => setUtilityPanel('notifications')}>
+              <Bell size={17} />
+              {notifications.length > 0 && <span className="utility-badge">{Math.min(9, notifications.length)}</span>}
+            </button>
             <button type="button" aria-label="Settings" onClick={() => setScreen('settings')}><Settings size={17} /></button>
           </div>
           <div className="topbar-title">
@@ -2643,6 +2705,22 @@ function App() {
             refreshBudget={loadBudgetSummary}
           />
         )}
+        {utilityPanel === 'search' && (
+          <NoaSearchPanel
+            query={globalSearchQuery}
+            setQuery={setGlobalSearchQuery}
+            results={searchResults}
+            onOpen={openUtilityAction}
+            onClose={() => setUtilityPanel(null)}
+          />
+        )}
+        {utilityPanel === 'notifications' && (
+          <NoaNotificationsPanel
+            notifications={notifications}
+            onOpen={openUtilityAction}
+            onClose={() => setUtilityPanel(null)}
+          />
+        )}
       </section>
 
       <MobileNav
@@ -2670,6 +2748,138 @@ function App() {
         closeMoreMenu={closeMobileMenu}
       />
     </main>
+  );
+}
+
+function NoaSearchPanel({
+  query,
+  setQuery,
+  results,
+  onOpen,
+  onClose
+}: {
+  query: string;
+  setQuery: (value: string) => void;
+  results: NoaSearchResult[];
+  onOpen: (action: UtilityAction) => void;
+  onClose: () => void;
+}) {
+  useModalEscape(onClose);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const normalizedQuery = normalizeMatchText(query);
+  const visibleResults = (normalizedQuery
+    ? results.filter((result) => normalizeMatchText(`${result.title} ${result.detail} ${result.eyebrow} ${result.keywords}`).includes(normalizedQuery))
+    : results
+  ).slice(0, 18);
+
+  useEffect(() => {
+    window.setTimeout(() => inputRef.current?.focus(), 40);
+  }, []);
+
+  return (
+    <ModalPortal>
+      <div className="utility-modal-shell" role="dialog" aria-modal="true" aria-label="Search NoA">
+        <button className="modal-backdrop" onClick={onClose} aria-label="Close search" />
+        <section className="utility-panel search-panel">
+          <div className="utility-panel-head">
+            <div>
+              <p className="eyebrow">Search</p>
+              <h3>Find anything in NoA</h3>
+            </div>
+            <button className="icon-close" onClick={onClose} aria-label="Close search"><X size={18} /></button>
+          </div>
+          <label className="global-search-input">
+            <Search size={18} />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="Search clients, jobs, tasks, Xero, budget, settings..."
+            />
+          </label>
+          <div className="utility-result-list">
+            {visibleResults.map((result) => {
+              const Icon = result.icon;
+              return (
+                <button type="button" className="utility-result-row" onClick={() => onOpen(result)} key={result.id}>
+                  <span><Icon size={18} /></span>
+                  <div>
+                    <small>{result.eyebrow}</small>
+                    <strong>{result.title}</strong>
+                    <p>{result.detail}</p>
+                  </div>
+                  <ChevronRight size={17} />
+                </button>
+              );
+            })}
+            {visibleResults.length === 0 && (
+              <div className="utility-empty-state">
+                <Search size={24} />
+                <strong>No matching NoA results</strong>
+                <p>Try a client, task, invoice, budget category, or page name.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </ModalPortal>
+  );
+}
+
+function NoaNotificationsPanel({
+  notifications,
+  onOpen,
+  onClose
+}: {
+  notifications: NoaNotification[];
+  onOpen: (action: UtilityAction) => void;
+  onClose: () => void;
+}) {
+  useModalEscape(onClose);
+  const urgentCount = notifications.filter((item) => item.tone === 'danger' || item.tone === 'warning').length;
+
+  return (
+    <ModalPortal>
+      <div className="utility-modal-shell" role="dialog" aria-modal="true" aria-label="NoA notifications">
+        <button className="modal-backdrop" onClick={onClose} aria-label="Close notifications" />
+        <section className="utility-panel notifications-panel">
+          <div className="utility-panel-head">
+            <div>
+              <p className="eyebrow">Notifications</p>
+              <h3>{notifications.length ? `${notifications.length} signals` : 'All clear'}</h3>
+            </div>
+            <button className="icon-close" onClick={onClose} aria-label="Close notifications"><X size={18} /></button>
+          </div>
+          <div className="notification-summary-strip">
+            <span>{urgentCount} urgent</span>
+            <span>{notifications.length - urgentCount} FYI</span>
+          </div>
+          <div className="utility-result-list notification-list">
+            {notifications.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button type="button" className={`notification-row ${item.tone}`} onClick={() => onOpen(item)} key={item.id}>
+                  <span><Icon size={18} /></span>
+                  <div>
+                    <small>{item.eyebrow}</small>
+                    <strong>{item.title}</strong>
+                    <p>{item.detail}</p>
+                  </div>
+                  <ChevronRight size={17} />
+                </button>
+              );
+            })}
+            {notifications.length === 0 && (
+              <div className="utility-empty-state">
+                <CheckCircle2 size={26} />
+                <strong>No live alerts</strong>
+                <p>NoA has no overdue work, failed integrations, or finance warnings to surface right now.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </ModalPortal>
   );
 }
 
@@ -12629,6 +12839,305 @@ function PlugIcon({ status }: { status: string }) {
   if (status === 'online') return <Activity size={20} />;
   if (status === 'planned') return <ArrowUpRight size={20} />;
   return <Database size={20} />;
+}
+
+function buildNoaSearchResults({
+  jobsReport,
+  xeroReport,
+  budgetReport,
+  notes,
+  integrationStatus,
+  testResults
+}: {
+  jobsReport: NotionJobsReport;
+  xeroReport: XeroReport;
+  budgetReport: BudgetReport;
+  notes: CaptureNote[];
+  integrationStatus: IntegrationStatus;
+  testResults: IntegrationTestResult[];
+}): NoaSearchResult[] {
+  const results: NoaSearchResult[] = [];
+  const add = (result: NoaSearchResult) => results.push(result);
+
+  navItems.forEach((item) => add({
+    id: `page-${item.id}`,
+    title: item.label,
+    detail: screenTitle(item.id as Screen),
+    eyebrow: 'Page',
+    icon: item.icon,
+    screen: item.id as Screen,
+    keywords: item.label
+  }));
+
+  budgetSections.forEach((section) => add({
+    id: `budget-${section.id}`,
+    title: section.label,
+    detail: section.detail,
+    eyebrow: 'Budget',
+    icon: section.icon,
+    screen: 'budgeting',
+    budgetSection: section.id,
+    keywords: `budgeting budget ledger ${section.label} ${section.detail}`
+  }));
+
+  xeroSections.forEach((section) => add({
+    id: `xero-${section.id}`,
+    title: section.label,
+    detail: section.detail,
+    eyebrow: 'Xero',
+    icon: section.icon,
+    screen: 'xero',
+    xeroSection: section.id,
+    keywords: `xero finance invoice bill ${section.label} ${section.detail}`
+  }));
+
+  jobsReport.clients.slice(0, 60).forEach((client) => add({
+    id: `client-${client.id}`,
+    title: client.title,
+    detail: [client.status, client.retainer, client.jobCount ? `${client.jobCount} jobs` : 'Client profile'].filter(Boolean).join(' - '),
+    eyebrow: 'Client',
+    icon: UsersRound,
+    screen: 'crm',
+    keywords: `${client.title} ${client.status || ''} ${client.priority || ''} ${(client.industry || []).join(' ')}`
+  }));
+
+  jobsReport.upcomingJobs.slice(0, 80).forEach((job) => add({
+    id: `job-${job.id}`,
+    title: job.title,
+    detail: [job.client, job.status, job.jobDate || job.dueDate, job.location].filter(Boolean).join(' - '),
+    eyebrow: 'Job',
+    icon: BriefcaseBusiness,
+    screen: 'crm',
+    keywords: `${job.title} ${job.client} ${job.status} ${job.priority} ${job.notes || ''} ${job.description || ''}`
+  }));
+
+  dedupeTasks([...jobsReport.pipelineTasks, ...jobsReport.taskList, ...jobsReport.tasks, ...jobsReport.calendarTasks]).slice(0, 120).forEach((task) => add({
+    id: `task-${task.id}`,
+    title: task.title,
+    detail: [task.jobTitle, task.client, task.status, task.dueDate || task.shootDate].filter(Boolean).join(' - '),
+    eyebrow: 'Task',
+    icon: ListTodo,
+    screen: 'crm',
+    keywords: `${task.title} ${task.jobTitle || ''} ${task.client || ''} ${task.status} ${task.priority} ${task.description} ${task.notes || ''}`
+  }));
+
+  [...xeroReport.customerInvoices, ...xeroReport.supplierBills].slice(0, 80).forEach((invoice) => add({
+    id: `xero-${invoice.id}`,
+    title: `${invoice.isBill ? 'Bill' : 'Invoice'} ${invoice.number || invoice.reference || invoice.contact}`,
+    detail: `${invoice.contact} - ${formatMoney(invoice.amountDue, invoice.currencyCode)} due${invoice.dueDate ? ` ${invoice.dueDate}` : ''}`,
+    eyebrow: invoice.isBill ? 'Xero bill' : 'Xero invoice',
+    icon: invoice.isBill ? ReceiptText : CreditCard,
+    screen: 'xero',
+    xeroSection: invoice.isBill ? 'bills' : 'invoices',
+    keywords: `${invoice.number} ${invoice.reference} ${invoice.contact} ${invoice.status} ${invoice.counterpartyLabel}`
+  }));
+
+  Object.entries(budgetReport.tables).forEach(([kind, rows]) => {
+    rows.slice(0, 35).forEach((row) => add({
+      id: `budget-row-${kind}-${row.id || row.local_id || row.name || row.goal_name}`,
+      title: getBudgetRowTitle(row),
+      detail: [formatBudgetKind(kind as BudgetItemKind), row.category || row.asset_type || row.debt_type || row.frequency, formatMoney(Number(row.amount || row.repayment || row.value || row.balance || 0))].filter(Boolean).join(' - '),
+      eyebrow: 'Budget row',
+      icon: budgetIconForKind(kind as BudgetItemKind),
+      screen: 'budgeting',
+      budgetSection: 'ledger',
+      keywords: `${kind} ${getBudgetRowTitle(row)} ${row.category || ''} ${row.notes || ''}`
+    }));
+  });
+
+  notes.slice(0, 25).forEach((note) => add({
+    id: `note-${note.id}`,
+    title: note.text.slice(0, 82),
+    detail: `${formatCategory(note.category)} - ${note.createdAt}`,
+    eyebrow: 'Memory',
+    icon: BrainCircuit,
+    screen: 'memory',
+    keywords: `${note.text} ${note.category}`
+  }));
+
+  testResults.forEach((result) => add({
+    id: `integration-test-${result.id}`,
+    title: `${result.name} ${result.ok ? 'connected' : 'needs attention'}`,
+    detail: result.message,
+    eyebrow: 'Integration health',
+    icon: result.ok ? CheckCircle2 : CircleAlert,
+    screen: 'integrations',
+    keywords: `${result.id} ${result.name} ${result.message} ${integrationStatus[result.id as IntegrationId] ? 'connected' : 'not configured'}`
+  }));
+
+  return results;
+}
+
+function buildNoaNotifications({
+  startupSync,
+  jobsReport,
+  xeroReport,
+  budgetReport,
+  testResults,
+  isLoadingJobs,
+  isLoadingXero,
+  isLoadingBudget
+}: {
+  startupSync: StartupSyncState;
+  jobsReport: NotionJobsReport;
+  xeroReport: XeroReport;
+  budgetReport: BudgetReport;
+  integrationStatus: IntegrationStatus;
+  testResults: IntegrationTestResult[];
+  isLoadingJobs: boolean;
+  isLoadingXero: boolean;
+  isLoadingBudget: boolean;
+}): NoaNotification[] {
+  const todayKey = brisbaneToday();
+  const notifications: NoaNotification[] = [];
+  const tasks = dedupeTasks([...jobsReport.pipelineTasks, ...jobsReport.taskList, ...jobsReport.tasks, ...jobsReport.calendarTasks]);
+  const overdueTasks = tasks.filter((task) => !isCompleteNotionTask(task) && task.dueState === 'Overdue');
+  const urgentTasks = tasks.filter((task) => !isCompleteNotionTask(task) && (task.priority === 'High' || task.dueState === 'Due today'));
+  const todayCalendar = buildCalendarJobs(jobsReport).filter((job) => job.jobDate === todayKey);
+  const failedTests = testResults.filter((result) => !result.ok);
+
+  if (startupSync.status === 'partial') notifications.push({
+    id: 'sync-partial',
+    eyebrow: 'Sync',
+    title: 'Some data did not sync',
+    detail: startupSync.message,
+    tone: 'warning',
+    icon: Cloud,
+    screen: 'map'
+  });
+
+  if (notionHasErrors(jobsReport)) notifications.push({
+    id: 'notion-errors',
+    eyebrow: 'Notion',
+    title: 'Notion returned warnings',
+    detail: [jobsReport.mainJobsError, jobsReport.tasksError, jobsReport.upcomingJobsError].filter(Boolean).join(' '),
+    tone: 'warning',
+    icon: Database,
+    screen: 'integrations'
+  });
+
+  if (overdueTasks.length) notifications.push({
+    id: 'tasks-overdue',
+    eyebrow: 'CRM',
+    title: `${overdueTasks.length} overdue task${overdueTasks.length === 1 ? '' : 's'}`,
+    detail: overdueTasks.slice(0, 3).map((task) => task.title).join(', '),
+    tone: 'danger',
+    icon: CircleAlert,
+    screen: 'crm'
+  });
+
+  if (urgentTasks.length) notifications.push({
+    id: 'tasks-urgent',
+    eyebrow: 'Today',
+    title: `${urgentTasks.length} urgent work item${urgentTasks.length === 1 ? '' : 's'}`,
+    detail: urgentTasks.slice(0, 3).map((task) => task.title).join(', '),
+    tone: 'warning',
+    icon: ListTodo,
+    screen: 'crm'
+  });
+
+  if (todayCalendar.length) notifications.push({
+    id: 'calendar-today',
+    eyebrow: 'Calendar',
+    title: `${todayCalendar.length} item${todayCalendar.length === 1 ? '' : 's'} scheduled today`,
+    detail: todayCalendar.slice(0, 3).map((job) => job.title).join(', '),
+    tone: 'info',
+    icon: CalendarDays,
+    screen: 'crm'
+  });
+
+  if (xeroReport.ok && (xeroReport.totals.overdueCount || xeroReport.totals.overdueBillsCount)) notifications.push({
+    id: 'xero-overdue',
+    eyebrow: 'Xero',
+    title: 'Overdue finance items',
+    detail: `${xeroReport.totals.overdueCount} invoices and ${xeroReport.totals.overdueBillsCount} bills are overdue.`,
+    tone: 'danger',
+    icon: WalletCards,
+    screen: 'xero',
+    xeroSection: 'overview'
+  });
+
+  if (!xeroReport.ok && xeroReport.message && !isLoadingXero) notifications.push({
+    id: 'xero-error',
+    eyebrow: 'Xero',
+    title: 'Xero needs attention',
+    detail: xeroReport.message,
+    tone: 'warning',
+    icon: WalletCards,
+    screen: 'integrations'
+  });
+
+  if (budgetReport.ok && budgetReport.totals.netWeekly < 0) notifications.push({
+    id: 'budget-negative',
+    eyebrow: 'Budget',
+    title: 'Weekly budget is negative',
+    detail: `${formatMoney(Math.abs(budgetReport.totals.netWeekly))} short on the current weekly view.`,
+    tone: 'warning',
+    icon: PieChart,
+    screen: 'budgeting',
+    budgetSection: 'overview'
+  });
+
+  if (!budgetReport.ok && budgetReport.message && !isLoadingBudget) notifications.push({
+    id: 'budget-error',
+    eyebrow: 'Budget',
+    title: 'Budget data needs attention',
+    detail: budgetReport.message,
+    tone: 'warning',
+    icon: Database,
+    screen: 'budgeting',
+    budgetSection: 'settings'
+  });
+
+  failedTests.slice(0, 5).forEach((result) => notifications.push({
+    id: `integration-failed-${result.id}`,
+    eyebrow: 'Integration',
+    title: `${result.name} failed its last test`,
+    detail: result.message,
+    tone: 'warning',
+    icon: CircleAlert,
+    screen: 'integrations'
+  }));
+
+  if ((isLoadingJobs || isLoadingXero || isLoadingBudget) && notifications.length === 0) notifications.push({
+    id: 'sync-active',
+    eyebrow: 'Sync',
+    title: 'NoA is refreshing live data',
+    detail: 'Notion, Xero, or Budgeting is still loading.',
+    tone: 'info',
+    icon: RefreshCw,
+    screen: 'map'
+  });
+
+  return notifications.slice(0, 12);
+}
+
+function budgetIconForKind(kind: BudgetItemKind) {
+  return {
+    income: WalletCards,
+    expenses: ReceiptText,
+    debts: CreditCard,
+    mortgages: Building2,
+    mortgageExpenses: Building2,
+    assets: BarChart3,
+    savings: ShieldCheck
+  }[kind] || Database;
+}
+
+function getBudgetRowTitle(row: BudgetRow) {
+  return row.name || row.goal_name || row.property_address || row.local_id || row.id || 'Budget item';
+}
+
+function formatBudgetKind(kind: BudgetItemKind) {
+  return {
+    income: 'Income',
+    expenses: 'Expense',
+    debts: 'Debt',
+    mortgages: 'Mortgage',
+    mortgageExpenses: 'Mortgage expense',
+    assets: 'Asset',
+    savings: 'Savings'
+  }[kind] || 'Budget';
 }
 
 function screenTitle(screen: Screen) {
