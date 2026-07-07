@@ -1758,7 +1758,7 @@ h3 {
   min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
-  padding: clamp(16px, 3vw, 34px);
+  padding: clamp(10px, 1.8vw, 24px);
 }
 
 .map-display-frame {
@@ -1770,54 +1770,17 @@ h3 {
   box-shadow: var(--glass-shadow);
   backdrop-filter: var(--glass-blur);
   display: grid;
-  gap: clamp(12px, 1.8vw, 20px);
-  height: min(100%, calc(100dvh - clamp(32px, 6vw, 68px)));
+  height: calc(100dvh - clamp(20px, 3.6vw, 48px));
   min-height: 0;
   overflow: hidden;
-  padding: clamp(14px, 2vw, 24px);
+  padding: clamp(10px, 1.4vw, 18px);
   width: min(1800px, 100%);
-}
-
-.map-display-header {
-  align-items: center;
-  display: flex;
-  gap: 18px;
-  justify-content: space-between;
-  min-height: 0;
-}
-
-.map-display-header h1 {
-  color: #fff;
-  font-size: clamp(26px, 4vw, 54px);
-  line-height: 1;
-  margin: 0;
-}
-
-.map-display-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.map-display-meta span {
-  background: rgba(255, 255, 255, 0.075);
-  border-radius: 999px;
-  color: rgba(248, 251, 255, 0.72);
-  font-size: 12px;
-  font-weight: 900;
-  padding: 8px 11px;
-}
-
-.map-display-meta span:nth-child(3) {
-  background: rgba(96, 165, 250, 0.12);
-  color: #bfdbfe;
 }
 
 .map-display-canvas {
   border-radius: clamp(18px, 2.4vw, 28px);
   height: 100%;
-  min-height: 0;
+  min-height: calc(100dvh - clamp(40px, 6vw, 84px));
 }
 
 .map-viewport-inner {

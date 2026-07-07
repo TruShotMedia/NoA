@@ -2765,25 +2765,10 @@ function MapDisplayStandalonePage() {
 
   const mapNodes = useMemo(() => buildPreviewMapNodes(), []);
   const mapConnections = useMemo(() => buildRuntimeMapConnections(mapNodes), [mapNodes]);
-  const health = Math.round(mapNodes.reduce((sum, node) => sum + node.health, 0) / Math.max(1, mapNodes.length));
-  const activePathways = mapConnections.filter((connection) => connection.animated).length;
-  const nextRefresh = useMemo(() => formatTimeOnly(new Date(Date.now() + getMillisecondsUntilNextSixAm()).toISOString()), []);
 
   return (
     <main className="map-display-route">
       <section className="map-display-frame" aria-label="NoA orchestration map display">
-        <div className="map-display-header">
-          <div>
-            <p className="eyebrow">Noetic Advisor</p>
-            <h1>System Map</h1>
-          </div>
-          <div className="map-display-meta">
-            <span>{health}% health</span>
-            <span>{activePathways} live pathways</span>
-            <span>Preview mode</span>
-            <span>Refreshes {nextRefresh}</span>
-          </div>
-        </div>
         <MapDisplayCanvas nodes={mapNodes} connections={mapConnections} />
       </section>
     </main>
