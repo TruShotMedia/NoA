@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noa-shell-v20';
+const CACHE_NAME = 'noa-shell-v21';
 const SCREENSAVER_CACHE_NAME = 'noa-grocery-screensavers-v1';
 const SHELL_ASSETS = [
   '/',

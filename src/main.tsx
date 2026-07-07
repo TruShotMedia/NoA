@@ -2759,8 +2759,21 @@ function App() {
 
 function MapDisplayStandalonePage() {
   useEffect(() => {
+    const updateViewportHeight = () => {
+      document.documentElement.style.setProperty('--map-display-vh', `${window.innerHeight}px`);
+    };
+    updateViewportHeight();
+    const viewportTimers = [120, 600, 1600, 3200].map((delay) => window.setTimeout(updateViewportHeight, delay));
+    window.addEventListener('resize', updateViewportHeight);
+    window.addEventListener('orientationchange', updateViewportHeight);
     const timeout = window.setTimeout(() => window.location.reload(), getMillisecondsUntilNextSixAm());
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearTimeout(timeout);
+      viewportTimers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener('resize', updateViewportHeight);
+      window.removeEventListener('orientationchange', updateViewportHeight);
+      document.documentElement.style.removeProperty('--map-display-vh');
+    };
   }, []);
 
   const mapNodes = useMemo(() => buildPreviewMapNodes(), []);
@@ -2863,10 +2876,25 @@ function MapDisplayCanvas({
   useEffect(() => {
     fitCanvas();
     const canvas = canvasRef.current;
-    if (!canvas || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(() => fitCanvas());
+    const fitTimers = [80, 280, 900, 1800, 3400].map((delay) => window.setTimeout(fitCanvas, delay));
+    const handleResize = () => window.requestAnimationFrame(fitCanvas);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    if (!canvas || typeof ResizeObserver === 'undefined') {
+      return () => {
+        fitTimers.forEach((timer) => window.clearTimeout(timer));
+        window.removeEventListener('resize', handleResize);
+        window.removeEventListener('orientationchange', handleResize);
+      };
+    }
+    const observer = new ResizeObserver(handleResize);
     observer.observe(canvas);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      fitTimers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {

@@ -1755,10 +1755,12 @@ h3 {
     radial-gradient(circle at 84% 78%, rgba(167, 139, 250, 0.16), transparent 32%),
     linear-gradient(135deg, #05070d 0%, #081019 46%, #080a14 100%);
   display: grid;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: var(--map-display-vh, 100vh);
+  min-height: var(--map-display-vh, 100vh);
   overflow: hidden;
-  padding: clamp(10px, 1.8vw, 24px);
+  padding: 14px;
+  padding: min(24px, max(10px, 1.8vw));
+  width: 100vw;
 }
 
 .map-display-frame {
@@ -1766,21 +1768,36 @@ h3 {
     radial-gradient(circle at 90% 0%, rgba(147, 197, 253, 0.14), transparent 34%),
     linear-gradient(145deg, rgba(255, 255, 255, 0.115), rgba(255, 255, 255, 0.038)),
     rgba(8, 13, 24, 0.74);
+  border-radius: 28px;
   border-radius: clamp(22px, 3vw, 34px);
   box-shadow: var(--glass-shadow);
   backdrop-filter: var(--glass-blur);
   display: grid;
-  height: calc(100dvh - clamp(20px, 3.6vw, 48px));
+  grid-template-rows: minmax(0, 1fr);
+  height: calc(var(--map-display-vh, 100vh) - 28px);
   min-height: 0;
   overflow: hidden;
-  padding: clamp(10px, 1.4vw, 18px);
+  padding: 12px;
+  padding: min(18px, max(10px, 1.4vw));
   width: min(1800px, 100%);
 }
 
 .map-display-canvas {
+  border-radius: 22px;
   border-radius: clamp(18px, 2.4vw, 28px);
   height: 100%;
-  min-height: calc(100dvh - clamp(40px, 6vw, 84px));
+  min-height: 0;
+}
+
+@media (min-width: 900px) and (orientation: landscape) {
+  .map-display-route {
+    padding: 10px;
+  }
+
+  .map-display-frame {
+    height: calc(var(--map-display-vh, 100vh) - 20px);
+    padding: 10px;
+  }
 }
 
 .map-viewport-inner {
