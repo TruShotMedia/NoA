@@ -2758,71 +2758,16 @@ function App() {
 }
 
 function MapDisplayStandalonePage() {
-  const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus>(() => {
-    const saved = window.localStorage.getItem('noa.integrationStatus');
-    return saved
-      ? { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false, ...(JSON.parse(saved) as Partial<IntegrationStatus>) }
-      : { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false };
-  });
-  const [testResults, setTestResults] = useState<IntegrationTestResult[]>([]);
-  const [jobsReport, setJobsReport] = useState<NotionJobsReport>(emptyJobsReport);
-  const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
-  const [budgetReport, setBudgetReport] = useState<BudgetReport>(emptyBudgetReport);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
-  const [isLoadingXero, setIsLoadingXero] = useState(true);
-  const [isLoadingBudget, setIsLoadingBudget] = useState(true);
-  const [lastSyncedAt, setLastSyncedAt] = useState('');
-
   useEffect(() => {
-    let cancelled = false;
-    const sync = async () => {
-      const [tests, jobs, xero, budget] = await Promise.allSettled([
-        window.noa?.testIntegrations?.(),
-        window.noa?.getNotionJobs?.(),
-        window.noa?.getXeroSummary?.(),
-        window.noa?.getBudgetSummary?.()
-      ]);
-      if (cancelled) return;
-
-      if (tests.status === 'fulfilled' && tests.value?.results) {
-        setTestResults(tests.value.results);
-        const nextStatus = tests.value.results.reduce((status, result) => {
-          if (result.id in status) status[result.id as IntegrationId] = result.ok;
-          return status;
-        }, { ...integrationStatus });
-        setIntegrationStatus(nextStatus);
-        window.localStorage.setItem('noa.integrationStatus', JSON.stringify(nextStatus));
-      }
-      if (jobs.status === 'fulfilled' && jobs.value) setJobsReport(jobs.value as NotionJobsReport);
-      if (xero.status === 'fulfilled' && xero.value) setXeroReport(xero.value as XeroReport);
-      if (budget.status === 'fulfilled' && budget.value) setBudgetReport(budget.value as BudgetReport);
-      setIsLoadingJobs(false);
-      setIsLoadingXero(false);
-      setIsLoadingBudget(false);
-      setLastSyncedAt(new Date().toISOString());
-    };
-
-    void sync();
-    const interval = window.setInterval(() => void sync(), 5 * 60 * 1000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
+    const timeout = window.setTimeout(() => window.location.reload(), getMillisecondsUntilNextSixAm());
+    return () => window.clearTimeout(timeout);
   }, []);
 
-  const mapNodes = useMemo(() => buildRuntimeMapNodes({
-    integrationStatus,
-    testResults,
-    jobsReport,
-    xeroReport,
-    budgetReport,
-    isLoadingJobs,
-    isLoadingXero,
-    isLoadingBudget
-  }), [integrationStatus, testResults, jobsReport, xeroReport, budgetReport, isLoadingJobs, isLoadingXero, isLoadingBudget]);
+  const mapNodes = useMemo(() => buildPreviewMapNodes(), []);
   const mapConnections = useMemo(() => buildRuntimeMapConnections(mapNodes), [mapNodes]);
   const health = Math.round(mapNodes.reduce((sum, node) => sum + node.health, 0) / Math.max(1, mapNodes.length));
   const activePathways = mapConnections.filter((connection) => connection.animated).length;
+  const nextRefresh = useMemo(() => formatTimeOnly(new Date(Date.now() + getMillisecondsUntilNextSixAm()).toISOString()), []);
 
   return (
     <main className="map-display-route">
@@ -2835,7 +2780,8 @@ function MapDisplayStandalonePage() {
           <div className="map-display-meta">
             <span>{health}% health</span>
             <span>{activePathways} live pathways</span>
-            <span>{lastSyncedAt ? `Synced ${formatTimeOnly(lastSyncedAt)}` : 'Syncing'}</span>
+            <span>Preview mode</span>
+            <span>Refreshes {nextRefresh}</span>
           </div>
         </div>
         <MapDisplayCanvas nodes={mapNodes} connections={mapConnections} />
@@ -3080,6 +3026,30 @@ function MapDisplayCanvas({
       </div>
     </div>
   );
+}
+
+function buildPreviewMapNodes(): IntegrationNode[] {
+  return baseMapNodes.map((node) => {
+    if (node.id === 'core') return { ...node, status: 'connected', health: 98, lastSync: 'Preview layer', metadata: 'Public display' };
+    if (['notion', 'supabase', 'xero', 'dashboards', 'vercel'].includes(node.id)) {
+      return { ...node, status: 'connected', health: Math.max(node.health, 88), lastSync: 'Preview ready' };
+    }
+    if (['weather', 'spotify'].includes(node.id)) {
+      return { ...node, status: 'idle', health: Math.max(node.health, 78), lastSync: 'Standby' };
+    }
+    if (node.id === 'gmail' || node.id === 'calendar') {
+      return { ...node, status: 'needs-auth', health: Math.min(node.health, 62), lastSync: 'Private auth required' };
+    }
+    return { ...node, lastSync: 'Preview ready' };
+  });
+}
+
+function getMillisecondsUntilNextSixAm() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(6, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return next.getTime() - now.getTime();
 }
 
 function NoaSearchPanel({
