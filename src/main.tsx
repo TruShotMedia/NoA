@@ -2842,7 +2842,7 @@ function PipelineDisplayStandalonePage() {
     updateViewportHeight();
     void loadPipeline();
     const viewportTimers = [120, 600, 1600, 3200].map((delay) => window.setTimeout(updateViewportHeight, delay));
-    const syncInterval = window.setInterval(() => void loadPipeline(), 5 * 60 * 1000);
+    const syncInterval = window.setInterval(() => void loadPipeline(), 4 * 60 * 60 * 1000);
     const reloadTimeout = window.setTimeout(() => window.location.reload(), getMillisecondsUntilNextSixAm());
     window.addEventListener('resize', updateViewportHeight);
     window.addEventListener('orientationchange', updateViewportHeight);
