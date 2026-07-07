@@ -1,9 +1,10 @@
-const CACHE_NAME = 'noa-shell-v21';
+const CACHE_NAME = 'noa-shell-v22';
 const SCREENSAVER_CACHE_NAME = 'noa-grocery-screensavers-v1';
 const SHELL_ASSETS = [
   '/',
   '/grocery-list',
   '/map-display',
+  '/pipeline-display',
   '/manifest.webmanifest',
   '/icons/noa-icon-180.png',
   '/icons/noa-icon-192.png',

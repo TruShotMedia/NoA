@@ -659,6 +659,15 @@ type PublicGroceryListReport = {
   personalisation: GroceryListPersonalisation;
 };
 
+type PipelineDisplayReport = {
+  ok: boolean;
+  fetchedAt: string;
+  columns: string[];
+  tasks: Array<Pick<NotionTask, 'id' | 'title' | 'jobTitle' | 'client' | 'status' | 'priority' | 'dueDate' | 'dueState' | 'shootDate' | 'shootState' | 'effortLevel' | 'effortSize' | 'taskTypes' | 'assignedTo' | 'complete' | 'column'> & { attachmentCount?: number }>;
+  message?: string;
+  error?: string;
+};
+
 type BudgetTenantBillingRow = {
   tenant: BudgetTenant;
   mortgage: BudgetMortgageBill | null;
@@ -1177,8 +1186,12 @@ function App() {
     return <GroceryListStandalonePage />;
   }
   const isMapDisplayRoute = typeof window !== 'undefined' && /^\/map-display\/?$/.test(window.location.pathname);
-  if (isMapDisplayRoute) {
+    if (isMapDisplayRoute) {
     return <MapDisplayStandalonePage />;
+  }
+  const isPipelineDisplayRoute = typeof window !== 'undefined' && /^\/pipeline-display\/?$/.test(window.location.pathname);
+  if (isPipelineDisplayRoute) {
+    return <PipelineDisplayStandalonePage />;
   }
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
@@ -2788,6 +2801,126 @@ function MapDisplayStandalonePage() {
   );
 }
 
+function PipelineDisplayStandalonePage() {
+  const [report, setReport] = useState<PipelineDisplayReport>({
+    ok: false,
+    fetchedAt: '',
+    columns: jobColumns,
+    tasks: [],
+    message: 'Loading pipeline...'
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadPipeline = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/notion-jobs?display=pipeline', { cache: 'no-store' });
+      const next = await response.json() as PipelineDisplayReport;
+      setReport({
+        ok: Boolean(next.ok),
+        fetchedAt: next.fetchedAt || new Date().toISOString(),
+        columns: next.columns?.length ? next.columns : jobColumns,
+        tasks: Array.isArray(next.tasks) ? next.tasks : [],
+        message: next.message,
+        error: next.error
+      });
+    } catch (error) {
+      setReport((current) => ({
+        ...current,
+        ok: false,
+        error: error instanceof Error ? error.message : 'Pipeline display could not sync.'
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      document.documentElement.style.setProperty('--pipeline-display-vh', `${window.innerHeight}px`);
+    };
+    updateViewportHeight();
+    void loadPipeline();
+    const viewportTimers = [120, 600, 1600, 3200].map((delay) => window.setTimeout(updateViewportHeight, delay));
+    const syncInterval = window.setInterval(() => void loadPipeline(), 5 * 60 * 1000);
+    const reloadTimeout = window.setTimeout(() => window.location.reload(), getMillisecondsUntilNextSixAm());
+    window.addEventListener('resize', updateViewportHeight);
+    window.addEventListener('orientationchange', updateViewportHeight);
+    return () => {
+      viewportTimers.forEach((timer) => window.clearTimeout(timer));
+      window.clearInterval(syncInterval);
+      window.clearTimeout(reloadTimeout);
+      window.removeEventListener('resize', updateViewportHeight);
+      window.removeEventListener('orientationchange', updateViewportHeight);
+      document.documentElement.style.removeProperty('--pipeline-display-vh');
+    };
+  }, []);
+
+  const columns = report.columns?.length ? report.columns : jobColumns;
+  const visibleTasks = useMemo(() => (
+    (report.tasks || []).filter((task) => !isCompleteNotionTask(task) && columns.includes(task.column))
+  ), [report.tasks, columns]);
+  const tasksByColumn = useMemo(() => (
+    columns.reduce<Record<string, PipelineDisplayReport['tasks']>>((groups, column) => {
+      groups[column] = visibleTasks.filter((task) => task.column === column);
+      return groups;
+    }, {})
+  ), [columns, visibleTasks]);
+  const attentionCount = visibleTasks.filter((task) => task.dueState === 'Overdue' || task.dueState === 'Due today' || task.priority === 'High').length;
+
+  return (
+    <main className="pipeline-display-route">
+      <section className="pipeline-display-frame" aria-label="NoA pipeline display">
+        <header className="pipeline-display-top">
+          <div>
+            <span>Noetic Advisor</span>
+            <h1>Pipeline</h1>
+          </div>
+          <div className="pipeline-display-meta">
+            <span>{visibleTasks.length} active</span>
+            <span>{attentionCount} priority</span>
+            <span>{isLoading ? 'Syncing' : report.fetchedAt ? `Synced ${formatDisplayTime(report.fetchedAt)}` : 'Waiting'}</span>
+          </div>
+        </header>
+
+        {report.error && <p className="pipeline-display-error">{report.error}</p>}
+
+        <section className="pipeline-display-board">
+          {columns.map((column) => (
+            <article className="pipeline-display-column" key={column}>
+              <div className="pipeline-display-column-head">
+                <h2>{column}</h2>
+                <span>{tasksByColumn[column]?.length || 0}</span>
+              </div>
+              <div className="pipeline-display-stack">
+                {(tasksByColumn[column] || []).slice(0, 12).map((task) => (
+                  <article className={`pipeline-display-card priority-${(task.priority || 'none').toLowerCase()}`} key={task.id}>
+                    <div className="pipeline-display-card-title">
+                      <span className="priority-dot" />
+                      <strong>{task.title}</strong>
+                    </div>
+                    <p>{[task.client, task.jobTitle].filter(Boolean).join(' / ') || task.assignedTo || 'No linked job'}</p>
+                    <div className="pipeline-display-pills">
+                      {task.priority && <span>{task.priority}</span>}
+                      {task.status && <span>{normalizeNotionStatusName(task.status)}</span>}
+                      {(task.shootDate || task.dueDate) && <span>{task.shootDate || task.dueDate}</span>}
+                      {(task.attachmentCount || 0) > 0 && <span><Paperclip size={12} /> {task.attachmentCount}</span>}
+                    </div>
+                  </article>
+                ))}
+                {(tasksByColumn[column] || []).length > 12 && (
+                  <p className="pipeline-display-more">+{(tasksByColumn[column] || []).length - 12} more</p>
+                )}
+                {(tasksByColumn[column] || []).length === 0 && <p className="pipeline-display-empty">Clear</p>}
+              </div>
+            </article>
+          ))}
+        </section>
+      </section>
+    </main>
+  );
+}
+
 function MapDisplayCanvas({
   nodes,
   connections
@@ -3063,6 +3196,12 @@ function getMillisecondsUntilNextSixAm() {
   next.setHours(6, 0, 0, 0);
   if (next <= now) next.setDate(next.getDate() + 1);
   return next.getTime() - now.getTime();
+}
+
+function formatDisplayTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'just now';
+  return date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
 }
 
 function NoaSearchPanel({

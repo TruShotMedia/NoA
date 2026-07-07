@@ -40,6 +40,14 @@
     {
       "source": "/map-display/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/pipeline-display",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pipeline-display/:path*",
+      "destination": "/index.html"
     }
   ],
   "crons": [
