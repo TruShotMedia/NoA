@@ -32,6 +32,14 @@
     {
       "source": "/grocery-list/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/map-display",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/map-display/:path*",
+      "destination": "/index.html"
     }
   ],
   "crons": [

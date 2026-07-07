@@ -1176,6 +1176,10 @@ function App() {
   if (isPublicGroceryListRoute) {
     return <GroceryListStandalonePage />;
   }
+  const isMapDisplayRoute = typeof window !== 'undefined' && /^\/map-display\/?$/.test(window.location.pathname);
+  if (isMapDisplayRoute) {
+    return <MapDisplayStandalonePage />;
+  }
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -2750,6 +2754,331 @@ function App() {
         closeMoreMenu={closeMobileMenu}
       />
     </main>
+  );
+}
+
+function MapDisplayStandalonePage() {
+  const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus>(() => {
+    const saved = window.localStorage.getItem('noa.integrationStatus');
+    return saved
+      ? { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false, ...(JSON.parse(saved) as Partial<IntegrationStatus>) }
+      : { openai: false, supabase: false, n8n: false, notion: false, xero: false, email: false };
+  });
+  const [testResults, setTestResults] = useState<IntegrationTestResult[]>([]);
+  const [jobsReport, setJobsReport] = useState<NotionJobsReport>(emptyJobsReport);
+  const [xeroReport, setXeroReport] = useState<XeroReport>(emptyXeroReport);
+  const [budgetReport, setBudgetReport] = useState<BudgetReport>(emptyBudgetReport);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [isLoadingXero, setIsLoadingXero] = useState(true);
+  const [isLoadingBudget, setIsLoadingBudget] = useState(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      const [tests, jobs, xero, budget] = await Promise.allSettled([
+        window.noa?.testIntegrations?.(),
+        window.noa?.getNotionJobs?.(),
+        window.noa?.getXeroSummary?.(),
+        window.noa?.getBudgetSummary?.()
+      ]);
+      if (cancelled) return;
+
+      if (tests.status === 'fulfilled' && tests.value?.results) {
+        setTestResults(tests.value.results);
+        const nextStatus = tests.value.results.reduce((status, result) => {
+          if (result.id in status) status[result.id as IntegrationId] = result.ok;
+          return status;
+        }, { ...integrationStatus });
+        setIntegrationStatus(nextStatus);
+        window.localStorage.setItem('noa.integrationStatus', JSON.stringify(nextStatus));
+      }
+      if (jobs.status === 'fulfilled' && jobs.value) setJobsReport(jobs.value as NotionJobsReport);
+      if (xero.status === 'fulfilled' && xero.value) setXeroReport(xero.value as XeroReport);
+      if (budget.status === 'fulfilled' && budget.value) setBudgetReport(budget.value as BudgetReport);
+      setIsLoadingJobs(false);
+      setIsLoadingXero(false);
+      setIsLoadingBudget(false);
+      setLastSyncedAt(new Date().toISOString());
+    };
+
+    void sync();
+    const interval = window.setInterval(() => void sync(), 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const mapNodes = useMemo(() => buildRuntimeMapNodes({
+    integrationStatus,
+    testResults,
+    jobsReport,
+    xeroReport,
+    budgetReport,
+    isLoadingJobs,
+    isLoadingXero,
+    isLoadingBudget
+  }), [integrationStatus, testResults, jobsReport, xeroReport, budgetReport, isLoadingJobs, isLoadingXero, isLoadingBudget]);
+  const mapConnections = useMemo(() => buildRuntimeMapConnections(mapNodes), [mapNodes]);
+  const health = Math.round(mapNodes.reduce((sum, node) => sum + node.health, 0) / Math.max(1, mapNodes.length));
+  const activePathways = mapConnections.filter((connection) => connection.animated).length;
+
+  return (
+    <main className="map-display-route">
+      <section className="map-display-frame" aria-label="NoA orchestration map display">
+        <div className="map-display-header">
+          <div>
+            <p className="eyebrow">Noetic Advisor</p>
+            <h1>System Map</h1>
+          </div>
+          <div className="map-display-meta">
+            <span>{health}% health</span>
+            <span>{activePathways} live pathways</span>
+            <span>{lastSyncedAt ? `Synced ${formatTimeOnly(lastSyncedAt)}` : 'Syncing'}</span>
+          </div>
+        </div>
+        <MapDisplayCanvas nodes={mapNodes} connections={mapConnections} />
+      </section>
+    </main>
+  );
+}
+
+function MapDisplayCanvas({
+  nodes,
+  connections
+}: {
+  nodes: IntegrationNode[];
+  connections: IntegrationConnection[];
+}) {
+  const [hoveredNodeId, setHoveredNodeId] = useState('');
+  const [hoveredConnectionIndex, setHoveredConnectionIndex] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ distance: number; zoom: number; panX: number; panY: number; centerX: number; centerY: number } | null>(null);
+  const hoveredConnection = hoveredConnectionIndex === null ? null : connections[hoveredConnectionIndex];
+  const hoveredConnectionNodes = hoveredConnection
+    ? {
+        source: nodes.find((node) => node.id === hoveredConnection.source),
+        target: nodes.find((node) => node.id === hoveredConnection.target)
+      }
+    : null;
+  const connectedIds = useMemo(() => {
+    if (!hoveredNodeId) return new Set<string>();
+    return new Set(connections.flatMap((connection) => (
+      connection.source === hoveredNodeId || connection.target === hoveredNodeId
+        ? [connection.source, connection.target]
+        : []
+    )));
+  }, [hoveredNodeId, connections]);
+
+  const getCanvasViewport = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    return { width: canvas.clientWidth, height: canvas.clientHeight };
+  };
+
+  const clampDisplayPan = (nextPan: { x: number; y: number }, nextZoom: number) => {
+    const viewport = getCanvasViewport();
+    if (!viewport) return nextPan;
+    const contentWidth = MAP_CANVAS_WIDTH * nextZoom;
+    const contentHeight = MAP_CANVAS_HEIGHT * nextZoom;
+    const clampAxis = (nextValue: number, viewportSize: number, contentSize: number) => {
+      if (contentSize <= viewportSize - MAP_CANVAS_PADDING * 2) return Math.round((viewportSize - contentSize) / 2);
+      return Math.round(clampValue(nextValue, viewportSize - contentSize - MAP_CANVAS_PADDING, MAP_CANVAS_PADDING));
+    };
+    return {
+      x: clampAxis(nextPan.x, viewport.width, contentWidth),
+      y: clampAxis(nextPan.y, viewport.height, contentHeight)
+    };
+  };
+
+  const fitCanvas = () => {
+    const viewport = getCanvasViewport();
+    if (!viewport) return;
+    const nextZoom = Number(Math.min(
+      1.18,
+      Math.max(
+        MAP_FIT_MIN_ZOOM,
+        Math.min((viewport.width - MAP_CANVAS_PADDING * 2) / MAP_CANVAS_WIDTH, (viewport.height - MAP_CANVAS_PADDING * 2) / MAP_CANVAS_HEIGHT)
+      )
+    ).toFixed(3));
+    setZoom(nextZoom);
+    setPan({
+      x: Math.round((viewport.width - MAP_CANVAS_WIDTH * nextZoom) / 2),
+      y: Math.round((viewport.height - MAP_CANVAS_HEIGHT * nextZoom) / 2)
+    });
+  };
+
+  const zoomCanvasAt = (clientX: number, clientY: number, nextZoom: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clampedZoom = Number(clampValue(nextZoom, MAP_MIN_ZOOM, MAP_MAX_ZOOM).toFixed(3));
+    const originX = clientX - rect.left;
+    const originY = clientY - rect.top;
+    const contentX = (originX - pan.x) / zoom;
+    const contentY = (originY - pan.y) / zoom;
+    setZoom(clampedZoom);
+    setPan(clampDisplayPan({
+      x: originX - contentX * clampedZoom,
+      y: originY - contentY * clampedZoom
+    }, clampedZoom));
+  };
+
+  useEffect(() => {
+    fitCanvas();
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => fitCanvas());
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
+
+  const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('.map-node')) return;
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (pointersRef.current.size === 2) {
+      const [first, second] = Array.from(pointersRef.current.values());
+      pinchRef.current = {
+        distance: getPointDistance(first, second),
+        zoom,
+        panX: pan.x,
+        panY: pan.y,
+        centerX: (first.x + second.x) / 2,
+        centerY: (first.y + second.y) / 2
+      };
+      dragRef.current = null;
+      return;
+    }
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+  };
+
+  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (pointersRef.current.has(event.pointerId)) pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointersRef.current.size >= 2 && pinchRef.current) {
+      const [first, second] = Array.from(pointersRef.current.values());
+      const nextDistance = getPointDistance(first, second);
+      const nextCenter = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+      const nextZoom = Number(clampValue(pinchRef.current.zoom * (nextDistance / pinchRef.current.distance), MAP_MIN_ZOOM, MAP_MAX_ZOOM).toFixed(3));
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const contentX = (pinchRef.current.centerX - (canvasRect?.left || 0) - pinchRef.current.panX) / pinchRef.current.zoom;
+      const contentY = (pinchRef.current.centerY - (canvasRect?.top || 0) - pinchRef.current.panY) / pinchRef.current.zoom;
+      const originX = canvasRect ? nextCenter.x - canvasRect.left : nextCenter.x;
+      const originY = canvasRect ? nextCenter.y - canvasRect.top : nextCenter.y;
+      setZoom(nextZoom);
+      setPan(clampDisplayPan({ x: originX - contentX * nextZoom, y: originY - contentY * nextZoom }, nextZoom));
+      return;
+    }
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setPan(clampDisplayPan({ x: drag.panX + event.clientX - drag.x, y: drag.panY + event.clientY - drag.y }, zoom));
+  };
+
+  const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    pinchRef.current = null;
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+  };
+
+  return (
+    <div
+      ref={canvasRef}
+      className="map-canvas map-display-canvas"
+      onMouseLeave={() => setHoveredNodeId('')}
+      onWheel={(event) => {
+        event.preventDefault();
+        zoomCanvasAt(event.clientX, event.clientY, zoom * Math.exp(-event.deltaY * MAP_WHEEL_SENSITIVITY));
+      }}
+      onPointerDown={beginPan}
+      onPointerMove={movePan}
+      onPointerUp={endPan}
+      onPointerCancel={endPan}
+      onDoubleClick={fitCanvas}
+    >
+      <div className="map-viewport-inner" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+        <svg className="map-connections" viewBox="0 0 1000 620" aria-hidden="true">
+          <defs>
+            <marker id="map-display-arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L0,6 L8,3 z" />
+            </marker>
+            <marker id="map-display-arrow-start" markerWidth="10" markerHeight="10" refX="1" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M8,0 L8,6 L0,3 z" />
+            </marker>
+          </defs>
+          {connections.map((connection, index) => {
+            const source = nodes.find((node) => node.id === connection.source);
+            const target = nodes.find((node) => node.id === connection.target);
+            if (!source || !target) return null;
+            const path = getMapConnectionPath(source, target, index);
+            const isRelated = !hoveredNodeId || connection.source === hoveredNodeId || connection.target === hoveredNodeId;
+            const isHovered = hoveredConnectionIndex === index;
+            return (
+              <g
+                key={`${connection.source}-${connection.target}-${connection.label}`}
+                className={`map-connection ${statusClass(connection.status)} ${isRelated ? 'related' : 'dimmed'} ${isHovered ? 'hovered' : ''}`}
+                onMouseEnter={() => setHoveredConnectionIndex(index)}
+                onMouseLeave={() => setHoveredConnectionIndex(null)}
+              >
+                <path className="map-connection-hit" d={path} />
+                <path
+                  id={`map-display-path-${index}`}
+                  className="map-connection-line"
+                  d={path}
+                  markerEnd={connection.direction !== 'in' ? 'url(#map-display-arrow)' : undefined}
+                  markerStart={connection.direction === 'two-way' || connection.direction === 'in' ? 'url(#map-display-arrow-start)' : undefined}
+                />
+                {connection.animated && isRelated && (
+                  <circle r="4" className="map-flow-dot">
+                    <animateMotion dur={`${3.4 + (index % 4) * 0.35}s`} repeatCount="indefinite">
+                      <mpath href={`#map-display-path-${index}`} />
+                    </animateMotion>
+                  </circle>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+        {hoveredConnection && hoveredConnectionNodes?.source && hoveredConnectionNodes.target && (
+          <div
+            className="map-connection-tooltip"
+            style={{
+              left: `${(hoveredConnectionNodes.source.x + hoveredConnectionNodes.target.x) / 2}px`,
+              top: `${(hoveredConnectionNodes.source.y + hoveredConnectionNodes.target.y) / 2}px`
+            }}
+          >
+            <strong>{hoveredConnection.label}</strong>
+            <span>{hoveredConnection.direction.replace('-', ' ')} / {hoveredConnection.status.replace('-', ' ')}</span>
+            <p>{hoveredConnection.description}</p>
+          </div>
+        )}
+        {nodes.map((node) => {
+          const Icon = node.icon;
+          const isRelated = !hoveredNodeId || connectedIds.has(node.id) || node.id === hoveredNodeId;
+          return (
+            <button
+              key={node.id}
+              className={`map-node ${node.dominant ? 'core' : ''} ${statusClass(node.status)} ${hoveredNodeId === node.id ? 'active' : ''} ${isRelated ? '' : 'dimmed'}`}
+              style={{ left: `${node.x}px`, top: `${node.y}px` }}
+              onMouseEnter={() => setHoveredNodeId(node.id)}
+              onMouseLeave={() => setHoveredNodeId('')}
+            >
+              <span className="map-node-icon"><Icon size={node.dominant ? 28 : 19} /></span>
+              <span className="map-node-copy">
+                <strong>{node.label}</strong>
+                <small>{node.description}</small>
+              </span>
+              <span className={`map-node-status ${statusClass(node.status)}`}>{node.status.replace('-', ' ')}</span>
+              <span className="map-node-meta">{node.lastSync} / {node.metadata}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

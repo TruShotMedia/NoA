@@ -1,8 +1,9 @@
-const CACHE_NAME = 'noa-shell-v17';
+const CACHE_NAME = 'noa-shell-v18';
 const SCREENSAVER_CACHE_NAME = 'noa-grocery-screensavers-v1';
 const SHELL_ASSETS = [
   '/',
   '/grocery-list',
+  '/map-display',
   '/manifest.webmanifest',
   '/icons/noa-icon-180.png',
   '/icons/noa-icon-192.png',
