@@ -34,12 +34,18 @@ The endpoint returns counts only. It does not expose task names, clients, job li
 6. Add a Scriptable widget.
 7. Tap the newly added Scriptable widget.
 8. Set `Script` to `NoA Pipeline`.
-9. Use the circular widget for pure rings, or rectangular for rings plus counts.
+9. Use the circular widget for total active pipeline tasks, or rectangular for one count circle per status.
 10. Tap `Done`.
 
 ## Refresh Behaviour
 
 The widget asks iOS to refresh every 4 hours. iOS may delay widget refreshes depending on battery, network, and system scheduling.
+
+## Widget Layouts
+
+- Circular: one total active task counter.
+- Rectangular: four compact circles, one each for `NS`, `IP`, `RR`, and `FD`.
+- Inline: text-only summary, if iOS offers that placement.
 
 If it looks stale:
 

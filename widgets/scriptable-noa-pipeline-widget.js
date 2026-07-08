@@ -73,7 +73,7 @@ function buildWidget(report) {
   widget.setPadding(isCircular ? 0 : 8, isCircular ? 0 : 8, isCircular ? 0 : 8, isCircular ? 0 : 8);
 
   if (isCircular) {
-    const img = widget.addImage(drawRings(report, 90, true));
+    const img = widget.addImage(drawTotalCircle(report, 90));
     img.imageSize = new Size(58, 58);
     img.centerAlignImage();
     return widget;
@@ -83,19 +83,11 @@ function buildWidget(report) {
     const row = widget.addStack();
     row.layoutHorizontally();
     row.centerAlignContent();
-    const img = row.addImage(drawRings(report, 112, false));
-    img.imageSize = new Size(55, 55);
-    row.addSpacer(8);
-    const textStack = row.addStack();
-    textStack.layoutVertically();
-    const title = textStack.addText(`Pipeline ${report.total || 0}`);
-    title.font = Font.boldSystemFont(12);
-    title.textColor = Color.white();
-    title.lineLimit = 1;
-    const detail = textStack.addText(normaliseCounts(report).map((item) => `${shortLabel(item)} ${item.count}`).join('  '));
-    detail.font = Font.mediumSystemFont(9);
-    detail.textColor = new Color(report.stale ? '#fde68a' : '#b7c3d7');
-    detail.lineLimit = 2;
+    for (const item of normaliseCounts(report)) {
+      const circle = row.addImage(drawStatusCircle(item, report.stale, 72));
+      circle.imageSize = new Size(31, 31);
+      row.addSpacer(4);
+    }
     return widget;
   }
 
@@ -162,6 +154,59 @@ function drawRings(report, size, compact) {
   ctx.setFont(Font.mediumSystemFont(compact ? 6 : 10));
   ctx.setTextColor(new Color(report.stale ? '#fde68a' : '#b7c3d7'));
   ctx.drawTextInRect(report.stale ? 'STALE' : 'CRM', new Rect(0, cy + (compact ? 8 : 17), size, compact ? 10 : 14));
+  return ctx.getImage();
+}
+
+function drawTotalCircle(report, size) {
+  const counts = normaliseCounts(report);
+  const total = Number(report.total || counts.reduce((sum, item) => sum + item.count, 0));
+  const maxCount = Math.max(1, ...counts.map((item) => item.count));
+  const activeCount = counts.filter((item) => item.count > 0).length;
+  const progress = total <= 0 ? 0 : Math.max(0.12, activeCount / STATUS_META.length);
+  const ctx = new DrawContext();
+  ctx.size = new Size(size, size);
+  ctx.opaque = false;
+  ctx.respectScreenScale = true;
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size * 0.38;
+  ctx.setStrokeColor(new Color('#293244', 0.9));
+  ctx.setLineWidth(7);
+  ctx.strokeEllipse(new Rect(cx - radius, cy - radius, radius * 2, radius * 2));
+  drawArc(ctx, cx, cy, radius, -90, -90 + 360 * progress, new Color(report.stale ? '#fde68a' : '#93c5fd'), 7);
+
+  ctx.setTextAlignedCenter();
+  ctx.setTextColor(Color.white());
+  ctx.setFont(Font.boldSystemFont(24));
+  ctx.drawTextInRect(String(total), new Rect(0, cy - 14, size, 30));
+  return ctx.getImage();
+}
+
+function drawStatusCircle(item, isStale, size) {
+  const ctx = new DrawContext();
+  ctx.size = new Size(size, size);
+  ctx.opaque = false;
+  ctx.respectScreenScale = true;
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size * 0.36;
+  const count = Number(item.count || 0);
+  ctx.setFillColor(new Color('#121a2a', 0.82));
+  ctx.fillEllipse(new Rect(cx - radius - 5, cy - radius - 5, (radius + 5) * 2, (radius + 5) * 2));
+  ctx.setStrokeColor(new Color('#2c364a', 0.92));
+  ctx.setLineWidth(5);
+  ctx.strokeEllipse(new Rect(cx - radius, cy - radius, radius * 2, radius * 2));
+  drawArc(ctx, cx, cy, radius, -90, count > 0 ? 270 : -90, new Color(isStale ? '#fde68a' : colorForId(item.id)), 5);
+
+  ctx.setTextAlignedCenter();
+  ctx.setTextColor(Color.white());
+  ctx.setFont(Font.boldSystemFont(22));
+  ctx.drawTextInRect(String(count), new Rect(0, cy - 15, size, 28));
+  ctx.setFont(Font.mediumSystemFont(8));
+  ctx.setTextColor(new Color(isStale ? '#fde68a' : colorForId(item.id)));
+  ctx.drawTextInRect(shortLabel(item), new Rect(0, cy + 10, size, 12));
   return ctx.getImage();
 }
 
